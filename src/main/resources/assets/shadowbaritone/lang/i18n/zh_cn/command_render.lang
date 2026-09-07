@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_render
+
+shadowbaritone.command.render.status.done=完成
+shadowbaritone.command.render.short_desc=修复异常区块显示
+shadowbaritone.command.render.long_desc.1=render 命令可在不重新加载全部区块的情况下修复异常的区块渲染。
+shadowbaritone.command.render.long_desc.usage=用法：
+shadowbaritone.command.render.long_desc.example.default=> render

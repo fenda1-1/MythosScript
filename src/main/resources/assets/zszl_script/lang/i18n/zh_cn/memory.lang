@@ -1,0 +1,25 @@
+# zszl_script i18n module: memory
+gui.memory.tools.title=高级内存工具
+gui.memory.tools.force_gc=强制垃圾回收 (Force GC)
+gui.memory.tools.reload_chunks=模拟重载区块 (F3+A)
+msg.memory.tools.gc_done=[内存工具] 已执行垃圾回收。内存占用从 %s MB -> %s MB。
+msg.memory.tools.reloading_chunks=[内存工具] 正在重载所有区块...
+gui.memory.manager.title=内存管理器 (Ctrl+点击多选)
+gui.memory.manager.create_snapshot=§a创建快照
+gui.memory.manager.compare_selected=§b对比已选
+gui.memory.manager.delete_selected=§c删除已选
+gui.memory.manager.clear_all=§e清空全部
+gui.memory.manager.advanced_tools=高级内存工具...
+gui.memory.manager.snapshot_prefix=快照-
+gui.memory.manager.input_snapshot_name=输入快照名称
+gui.memory.compare.copy_report=§a复制报告
+gui.memory.compare.section.entities=§b--- 实体 (Entities) 变化 (内存 / 数量) ---
+gui.memory.compare.section.tile_entities=§b--- 方块实体 (Tile Entities) 变化 (内存 / 数量) ---
+gui.memory.compare.section.chunks=§b--- 区块 (Chunks) 变化 (内存 / 数量) ---
+gui.memory.compare.section.render_chunks=§b--- 渲染区块 (Render Chunks) 变化 (数量) ---
+gui.memory.compare.no_changes=§7(无变化)
+msg.memory.compare.report_copied=[内存管理器] 对比报告已复制到剪贴板。
+gui.memory.compare.title=对比: %s (%s)  vs  %s (%s)
+gui.memory.compare.jvm_usage=JVM总内存占用: %d MB -> %d MB (%s%d MB)
+gui.memory.compare.report_header=内存对比报告: %s (%s) vs %s (%s)
+gui.memory.compare.jvm_usage_plain=JVM总内存占用: %d MB -> %d MB (%s%d MB)

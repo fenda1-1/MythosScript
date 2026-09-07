@@ -1,0 +1,54 @@
+# zszl_script i18n module: path_runtime
+status.path.paused_gui=§e is suspended (GUI)
+status.path.paused=§e has been suspended
+status.path.stopped=Stopped
+status.path.hunting=§cHunting...
+status.path.delaying=%s | §e Delaying... (%.1fs)
+status.path.wait_next_loop=Waiting for the next cycle...
+status.path.completed_times=Completed (%s times)
+path.common.on=open
+path.common.off=close
+path.common.yes=Yes
+path.common.no=No
+path.loop.info=Loop %s
+path.loop.infinite=unlimited
+path.action.desc.command=Command: %s
+path.action.desc.system_message=System message: %s
+path.action.desc.disconnect=Disconnect current connection
+path.action.desc.delay=Delay: %s ticks
+path.action.desc.key=Button: %s (%s)
+path.action.desc.jump=Jump: %s times, interval %s ticks
+path.action.desc.click=Click [%s]: (%s, %s)
+path.action.desc.window_click=Click on the slot in the container: window=%s, slot=%s, button=%s, type=%s
+path.action.desc.setview=Set viewing angle: (Yaw: %.1f, Pitch: %.1f)
+path.action.desc.right_click_block=Right click block: %s
+path.action.desc.right_click_entity=Right-click entity: %s
+path.action.desc.take_all_items=Pick all
+path.action.desc.drop_filtered_items=Discard filtered items
+path.action.desc.auto_chest_click=Click on the container slot: %s
+path.action.desc.transfer_to_warehouse=Transfer items to warehouse
+path.action.desc.warehouse_auto_deposit=Warehouse management-automatic deposit
+path.action.desc.block_next_gui=Block GUI: %s times, block current GUI: %s
+path.action.desc.hide_current_gui=Hide current GUI
+path.action.desc.show_hidden_gui=Show hidden GUI
+path.action.desc.close_container_window=Close the current container window
+path.action.desc.hunt=Center search monster: radius %.1f, attack %s, distance %.1f
+path.action.desc.use_hotbar_item=Use hotbar items: %s | Match: %s | Method: %s | Local slot: %s | Times: %s | Interval: %s ticks | Cut: %s | After cut: %s | Switch back: %s
+path.action.desc.move_inventory_item_to_hotbar=Backpack items are switched to the shortcut bar: %s | Match: %s | Slot: %s
+path.action.desc.silentuse=Silently use backpack items: %s | Temp slot: %s | Switch: %s | Use: %s | Switch back: %s
+path.action.desc.switch_hotbar_slot=Switch shortcut bar: %s | Use after switching: %s | Delay: %s
+path.action.desc.use_held_item=Using items in hand: Delay %s
+path.action.desc.send_packet.channel=Packet: Channel=%s, Direction=%s
+path.action.desc.send_packet.id=Packet: ID=%s, direction=%s
+path.action.desc.send_packet.unconfigured=Send packets: (not configured)
+path.action.desc.send_packet.direction.c2s=C->S(Send)
+path.action.desc.send_packet.direction.s2c=S->C (receiving simulation)
+path.action.desc.run_sequence=Execution sequence: %s
+path.action.desc.stop_current_sequence=Stop the current execution sequence: %s
+path.action.desc.sequence_control=Sequence control: %s / %s
+path.action.desc.restart_sequence=Restart sequence
+path.action.desc.unknown_action=Unknown action: %s
+path.action.desc.error_action=Incorrect action: %s
+path.category.default=Default classification
+path.category.builtin=built-in path
+path.record.step.desc=Player position: (%.1f, %.1f, %.1f), Box position: (%s, %s, %s)

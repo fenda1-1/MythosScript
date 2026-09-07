@@ -1,0 +1,1455 @@
+{
+  "formatVersion": 2,
+  "settings": [
+    {
+      "key": "allowBreak",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "允许 Baritone 挖掘方块"
+    },
+    {
+      "key": "allowSprint",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "允许冲刺"
+    },
+    {
+      "key": "allowPlace",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "允许放置方块"
+    },
+    {
+      "key": "allowInventory",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "允许自动整理背包到快捷栏"
+    },
+    {
+      "key": "inventoryMoveOnlyIfStationary",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "仅静止时移动背包物品"
+    },
+    {
+      "key": "assumeExternalAutoTool",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "假设外部 AutoTool 接管"
+    },
+    {
+      "key": "autoTool",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "自动选择最佳工具"
+    },
+    {
+      "key": "strictLiquidCheck",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "严格液体相邻检查"
+    },
+    {
+      "key": "allowWaterBucketFall",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "允许水桶落地保命"
+    },
+    {
+      "key": "assumeWalkOnWater",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "假设可在静水上行走"
+    },
+    {
+      "key": "assumeWalkOnLava",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "假设可在岩浆上行走"
+    },
+    {
+      "key": "assumeStep",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "假设拥有自动上台阶能力"
+    },
+    {
+      "key": "routeHeightRange",
+      "defaultValue": "1",
+      "type": "int",
+      "desc": "路线高度范围（1-100整数格；多格上升仅纳入与当前地面连续连接的台阶）"
+    },
+    {
+      "key": "assumeSafeWalk",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "假设拥有安全行走能力"
+    },
+    {
+      "key": "allowJumpAt256",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "允许在Y=256边界跳跃"
+    },
+    {
+      "key": "allowParkourAscend",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "允许跑酷上升"
+    },
+    {
+      "key": "allowDiagonalDescend",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "允许对角下降"
+    },
+    {
+      "key": "allowDiagonalAscend",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "允许对角上升"
+    },
+    {
+      "key": "allowDownward",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "允许脚下挖掘"
+    },
+    {
+      "key": "buildIgnoreExisting",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "建筑时忽略已有方块"
+    },
+    {
+      "key": "buildIgnoreDirection",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "建筑时忽略方向属性"
+    },
+    {
+      "key": "avoidUpdatingFallingBlocks",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "避免触发连锁掉落方块更新"
+    },
+    {
+      "key": "allowVines",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "启用藤蔓相关路径特性"
+    },
+    {
+      "key": "allowWalkOnBottomSlab",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "允许在下半砖行走"
+    },
+    {
+      "key": "parkourMode",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "启用独立跑酷模式（会自动压制 Backfill、跑酷放块和模拟真人路线扰动）"
+    },
+    {
+      "key": "allowFlightPathing",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "飞行寻路：仅使用玩家已有的飞行能力规划直线和绕障路径，不改变游戏模式"
+    },
+    {
+      "key": "flightDirectLine", "defaultValue": "true", "type": "boolean",
+      "desc": "飞行路径优先直线，关闭后增加转向惩罚"
+    },
+    {
+      "key": "flightClearance", "defaultValue": "1", "type": "int",
+      "desc": "飞行碰撞体积向上的安全空间层数"
+    },
+    {
+      "key": "flightEntityCorridor", "defaultValue": "false", "type": "boolean",
+      "desc": "实体通道模式：仅在本地为当前飞行通道添加不可见碰撞墙，减少高速过冲"
+    },
+    {
+      "key": "flightMinAltitude", "defaultValue": "1", "type": "int",
+      "desc": "飞行寻路的最低巡航高度，低于此高度时会先上升"
+    },
+    {
+      "key": "flightMaxAltitude", "defaultValue": "256", "type": "int",
+      "desc": "飞行寻路允许达到的最高高度"
+    },
+    {
+      "key": "flightSpeed", "defaultValue": "0.9", "type": "double",
+      "desc": "飞行移动速度参数"
+    },
+    {
+      "key": "flightAutoDescend", "defaultValue": "true", "type": "boolean",
+      "desc": "到达目标时自动下降"
+    },
+    {
+      "key": "parkourProfile",
+      "defaultValue": "STABLE",
+      "type": "string",
+      "desc": "跑酷模式策略档位（默认 STABLE，优先稳定通关）"
+    },
+    {
+      "key": "parkourDebugRender",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "显示跑酷调试渲染（起跳窗口、落点窗口、阶段与失败原因）"
+    },
+    {
+      "key": "allowParkour",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "允许低层跑酷跳跃"
+    },
+    {
+      "key": "allowParkourPlace",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "允许跑酷放方块（启用 parkourMode 时会被自动忽略）"
+    },
+    {
+      "key": "considerPotionEffects",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "考虑药水效果修正成本"
+    },
+    {
+      "key": "sprintAscends",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "上升时提前冲刺跳"
+    },
+    {
+      "key": "overshootTraverse",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "横移越过目标时自动推进路线，不回头反复修正"
+    },
+    {
+      "key": "adaptivePathingSpeedControl",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "高速寻路时按拐角距离自动减速，避免反复折返"
+    },
+    {
+      "key": "adaptivePathingCornerSpeed",
+      "defaultValue": "0.42",
+      "type": "double",
+      "desc": "高速寻路锐角拐弯时的最大速度（格/tick）"
+    },
+    {
+      "key": "adaptivePathingBrakeAcceleration",
+      "defaultValue": "0.16",
+      "type": "double",
+      "desc": "高速寻路拐弯刹车强度（格/tick²）"
+    },
+    {
+      "key": "pauseMiningForFallingBlocks",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "挖掘后等待掉落方块稳定"
+    },
+    {
+      "key": "avoidance",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "启用避让系统"
+    },
+    {
+      "key": "rightClickContainerOnArrival",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "到达容器后自动右键打开"
+    },
+    {
+      "key": "enterPortal",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "到达地狱门时直接进入"
+    },
+    {
+      "key": "minimumImprovementRepropagation",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "忽略极小改进的重复传播"
+    },
+    {
+      "key": "cutoffAtLoadBoundary",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "在已加载边界截断路径"
+    },
+    {
+      "key": "allowOvershootDiagonalDescend",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "允许冲刺过冲+对角下降"
+    },
+    {
+      "key": "simplifyUnloadedYCoord",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "远距离未加载区简化Y坐标"
+    },
+    {
+      "key": "repackOnAnyBlockChange",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "任意方块变化都重打包区块"
+    },
+    {
+      "key": "slowPath",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "慢速路径调试模式"
+    },
+    {
+      "key": "doBedWaypoints",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "保存床位路标"
+    },
+    {
+      "key": "doDeathWaypoints",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "保存死亡路标"
+    },
+    {
+      "key": "chunkCaching",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "启用区块缓存"
+    },
+    {
+      "key": "pruneRegionsFromRAM",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "保存时清理远距离缓存"
+    },
+    {
+      "key": "backfill",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "行进后回填方块"
+    },
+    {
+      "key": "logAsToast",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "日志以右上角Toast显示"
+    },
+    {
+      "key": "chatDebug",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "调试日志输出到聊天"
+    },
+    {
+      "key": "chatControl",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "允许聊天控制Baritone"
+    },
+    {
+      "key": "chatControlAnyway",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "强制允许聊天控制"
+    },
+    {
+      "key": "renderPath",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "渲染路径"
+    },
+    {
+      "key": "renderPathAsLine",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "路径以线条渲染"
+    },
+    {
+      "key": "renderGoal",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "渲染目标"
+    },
+    {
+      "key": "renderGoalAnimated",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "目标渲染动画"
+    },
+    {
+      "key": "renderSelectionBoxes",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "渲染选择盒"
+    },
+    {
+      "key": "renderGoalIgnoreDepth",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "目标渲染忽略深度"
+    },
+    {
+      "key": "renderGoalXZBeacon",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "XZ目标使用信标光束"
+    },
+    {
+      "key": "renderSelectionBoxesIgnoreDepth",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "选择盒忽略深度"
+    },
+    {
+      "key": "renderPathIgnoreDepth",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "路径渲染忽略深度"
+    },
+    {
+      "key": "fadePath",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "远距离路径淡出"
+    },
+    {
+      "key": "freeLook",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "自由视角移动"
+    },
+    {
+      "key": "blockFreeLook",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "自由视角挖/放方块"
+    },
+    {
+      "key": "elytraFreeLook",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "鞘翅飞行自由视角"
+    },
+    {
+      "key": "smoothLook",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "平滑视角"
+    },
+    {
+      "key": "smoothLookMinTurnSpeed",
+      "defaultValue": "4.0F",
+      "type": "float",
+      "desc": "平滑视角最小转速"
+    },
+    {
+      "key": "smoothLookMaxTurnSpeed",
+      "defaultValue": "18.0F",
+      "type": "float",
+      "desc": "平滑视角最大转速"
+    },
+    {
+      "key": "smoothLookMaxTurnStep",
+      "defaultValue": "24-60",
+      "type": "string",
+      "desc": "平滑视角单tick最大转角"
+    },
+    {
+      "key": "elytraSmoothLook",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "鞘翅平滑视角"
+    },
+    {
+      "key": "remainWithExistingLookDirection",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "尽量保持当前朝向"
+    },
+    {
+      "key": "antiCheatCompatibility",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "反作弊兼容模式"
+    },
+    {
+      "key": "pathThroughCachedOnly",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "仅使用缓存区块寻路"
+    },
+    {
+      "key": "sprintInWater",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "水中允许冲刺"
+    },
+    {
+      "key": "blacklistClosestOnFailure",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "失败后拉黑最近不可达目标"
+    },
+    {
+      "key": "renderCachedChunks",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "渲染缓存区块"
+    },
+    {
+      "key": "prefixControl",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "允许前缀命令控制"
+    },
+    {
+      "key": "shortBaritonePrefix",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "使用短聊天前缀"
+    },
+    {
+      "key": "echoCommands",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "回显运行命令"
+    },
+    {
+      "key": "censorCoordinates",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "隐藏坐标"
+    },
+    {
+      "key": "censorRanCommands",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "隐藏命令参数"
+    },
+    {
+      "key": "itemSaver",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "工具耐久保护"
+    },
+    {
+      "key": "preferSilkTouch",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "优先精准采集工具"
+    },
+    {
+      "key": "walkWhileBreaking",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "挖掘时保持前进"
+    },
+    {
+      "key": "splicePath",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "拼接连续路径段"
+    },
+    {
+      "key": "allowOnlyExposedOres",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "只挖暴露矿"
+    },
+    {
+      "key": "exploreForBlocks",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "未知矿点时随机探索"
+    },
+    {
+      "key": "replantCrops",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "农作物自动补种"
+    },
+    {
+      "key": "replantNetherWart",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "地狱疣自动补种"
+    },
+    {
+      "key": "extendCacheOnThreshold",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "缓存不足时扩展扫描主世界"
+    },
+    {
+      "key": "buildInLayers",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "分层建造"
+    },
+    {
+      "key": "layerOrder",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "层顺序（false底到顶/true顶到底）"
+    },
+    {
+      "key": "skipFailedLayers",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "失败层自动跳过"
+    },
+    {
+      "key": "buildOnlySelection",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "仅建造选中区域"
+    },
+    {
+      "key": "buildRepeatSneaky",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "重复建造时不通知Schematic移动"
+    },
+    {
+      "key": "breakFromAbove",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "允许站在上方挖掘"
+    },
+    {
+      "key": "goalBreakFromAbove",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "挖掘上方模式设定额外目标"
+    },
+    {
+      "key": "mapArtMode",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "地图画模式"
+    },
+    {
+      "key": "okIfWater",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "目标为水时视为可接受"
+    },
+    {
+      "key": "schematicOrientationX",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "Schematic X 轴反向"
+    },
+    {
+      "key": "schematicOrientationY",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "Schematic Y 轴反向"
+    },
+    {
+      "key": "schematicOrientationZ",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "Schematic Z 轴反向"
+    },
+    {
+      "key": "mineScanDroppedItems",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "挖矿时追踪掉落物"
+    },
+    {
+      "key": "distanceTrim",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "修剪远距离错误点"
+    },
+    {
+      "key": "cancelOnGoalInvalidation",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "目标失效时取消当前路径"
+    },
+    {
+      "key": "disconnectOnArrival",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "到达目标后断开连接"
+    },
+    {
+      "key": "legitMine",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "合法挖矿模式"
+    },
+    {
+      "key": "legitMineIncludeDiagonals",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "合法挖矿包含对角可见推断"
+    },
+    {
+      "key": "forceInternalMining",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "强制双块内部挖矿优化"
+    },
+    {
+      "key": "internalMiningAirException",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "内部挖矿空气例外"
+    },
+    {
+      "key": "disableCompletionCheck",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "禁用探索完成检查"
+    },
+    {
+      "key": "renderSelection",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "渲染选区"
+    },
+    {
+      "key": "renderSelectionIgnoreDepth",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "选区渲染忽略深度"
+    },
+    {
+      "key": "renderSelectionCorners",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "渲染选区角点"
+    },
+    {
+      "key": "useSwordToMine",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "允许用剑挖掘"
+    },
+    {
+      "key": "desktopNotifications",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "桌面通知总开关"
+    },
+    {
+      "key": "notificationOnPathComplete",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "路径完成通知"
+    },
+    {
+      "key": "notificationOnFarmFail",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "农场失败通知"
+    },
+    {
+      "key": "notificationOnBuildFinished",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "建造完成通知"
+    },
+    {
+      "key": "notificationOnExploreFinished",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "探索完成通知"
+    },
+    {
+      "key": "notificationOnMineFail",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "挖矿失败通知"
+    },
+    {
+      "key": "elytraConserveFireworks",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "下降时节省烟花"
+    },
+    {
+      "key": "elytraRenderRaytraces",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "渲染鞘翅射线"
+    },
+    {
+      "key": "elytraRenderHitboxRaytraces",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "渲染鞘翅碰撞盒射线"
+    },
+    {
+      "key": "elytraRenderSimulation",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "渲染鞘翅模拟最佳路径"
+    },
+    {
+      "key": "elytraAutoJump",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "地面自动起跳开翅"
+    },
+    {
+      "key": "elytraPredictTerrain",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "下界预测地形"
+    },
+    {
+      "key": "elytraAutoSwap",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "鞘翅耐久低时自动更换"
+    },
+    {
+      "key": "elytraAllowEmergencyLand",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "允许紧急降落"
+    },
+    {
+      "key": "elytraAllowLandOnNetherFortress",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "允许在下界堡垒降落"
+    },
+    {
+      "key": "elytraTermsAccepted",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "已接受鞘翅条款"
+    },
+    {
+      "key": "ticksBetweenInventoryMoves",
+      "defaultValue": "1",
+      "type": "int",
+      "desc": "背包搬运间隔（tick）"
+    },
+    {
+      "key": "blockPlacementPenalty",
+      "defaultValue": "20D",
+      "type": "double",
+      "desc": "放置方块惩罚"
+    },
+    {
+      "key": "blockBreakAdditionalPenalty",
+      "defaultValue": "2D",
+      "type": "double",
+      "desc": "额外破坏惩罚"
+    },
+    {
+      "key": "jumpPenalty",
+      "defaultValue": "2D",
+      "type": "double",
+      "desc": "跳跃惩罚"
+    },
+    {
+      "key": "walkOnWaterOnePenalty",
+      "defaultValue": "3D",
+      "type": "double",
+      "desc": "行走水面惩罚"
+    },
+    {
+      "key": "allowBreakAnyway",
+      "defaultValue": "[]",
+      "type": "list",
+      "desc": "即使禁挖时也允许挖的方块列表"
+    },
+    {
+      "key": "acceptableThrowawayItems",
+      "defaultValue": "[dirt,cobblestone,netherrack,stone]",
+      "type": "list",
+      "desc": "可作为垫脚块的物品列表"
+    },
+    {
+      "key": "blocksToAvoid",
+      "defaultValue": "[]",
+      "type": "list",
+      "desc": "需要避开的方块列表"
+    },
+    {
+      "key": "blockingBlocks",
+      "defaultValue": "[tripwire,cocoa,skull,end_rod,ladder,vine,cauldron,iron_door,iron_trapdoor]",
+      "type": "list",
+      "desc": "阻挡方块列表（会按不可通过处理）"
+    },
+    {
+      "key": "interactionBlocks",
+      "defaultValue": "[oak_door,spruce_door,birch_door,jungle_door,acacia_door,dark_oak_door,oak_fence_gate,spruce_fence_gate,birch_fence_gate,jungle_fence_gate,acacia_fence_gate,dark_oak_fence_gate,trapdoor]",
+      "type": "list",
+      "desc": "需要交互方块列表（会尝试右键交互后通过）"
+    },
+    {
+      "key": "dangerousBlocks",
+      "defaultValue": "[flowing_lava,lava,magma,cactus,fire,end_portal,web]",
+      "type": "list",
+      "desc": "危险方块列表（会影响危险地形判定与部分移动规划）"
+    },
+    {
+      "key": "blocksToDisallowBreaking",
+      "defaultValue": "[]",
+      "type": "list",
+      "desc": "禁止破坏的方块列表"
+    },
+    {
+      "key": "blocksToAvoidBreaking",
+      "defaultValue": "[crafting_table,furnace,lit_furnace,chest,trapped_chest,standing_sign,wall_sign]",
+      "type": "list",
+      "desc": "尽量不破坏方块列表"
+    },
+    {
+      "key": "avoidBreakingMultiplier",
+      "defaultValue": "0.1",
+      "type": "double",
+      "desc": "避免挖掘倍率"
+    },
+    {
+      "key": "buildIgnoreBlocks",
+      "defaultValue": "[]",
+      "type": "list",
+      "desc": "建筑时按空气处理方块"
+    },
+    {
+      "key": "buildSkipBlocks",
+      "defaultValue": "[]",
+      "type": "list",
+      "desc": "建筑时无条件视为正确方块"
+    },
+    {
+      "key": "buildValidSubstitutes",
+      "defaultValue": "{}",
+      "type": "map",
+      "desc": "建筑可接受替代方块映射"
+    },
+    {
+      "key": "buildSubstitutes",
+      "defaultValue": "{}",
+      "type": "map",
+      "desc": "建筑替换方块映射"
+    },
+    {
+      "key": "okIfAir",
+      "defaultValue": "[]",
+      "type": "list",
+      "desc": "目标块可为空气的方块列表"
+    },
+    {
+      "key": "buildIgnoreProperties",
+      "defaultValue": "[]",
+      "type": "list",
+      "desc": "建筑忽略属性名列表"
+    },
+    {
+      "key": "rightClickSpeed",
+      "defaultValue": "4",
+      "type": "int",
+      "desc": "右键间隔tick"
+    },
+    {
+      "key": "blockReachDistance",
+      "defaultValue": "4.5f",
+      "type": "float",
+      "desc": "方块触及距离"
+    },
+    {
+      "key": "randomLooking",
+      "defaultValue": "0.01d",
+      "type": "double",
+      "desc": "每tick随机视角幅度"
+    },
+    {
+      "key": "costHeuristic",
+      "defaultValue": "3.563",
+      "type": "double",
+      "desc": "A*启发代价"
+    },
+    {
+      "key": "pathingMaxChunkBorderFetch",
+      "defaultValue": "50",
+      "type": "int",
+      "desc": "区块边界抓取上限"
+    },
+    {
+      "key": "backtrackCostFavoringCoefficient",
+      "defaultValue": "0.5",
+      "type": "double",
+      "desc": "回溯偏好系数"
+    },
+    {
+      "key": "mobSpawnerAvoidanceCoefficient",
+      "defaultValue": "2.0",
+      "type": "double",
+      "desc": "刷怪笼避让系数"
+    },
+    {
+      "key": "mobSpawnerAvoidanceRadius",
+      "defaultValue": "16",
+      "type": "int",
+      "desc": "刷怪笼避让半径"
+    },
+    {
+      "key": "mobAvoidanceCoefficient",
+      "defaultValue": "1.5",
+      "type": "double",
+      "desc": "生物避让系数"
+    },
+    {
+      "key": "mobAvoidanceRadius",
+      "defaultValue": "8",
+      "type": "int",
+      "desc": "生物避让半径"
+    },
+    {
+      "key": "maxCostIncrease",
+      "defaultValue": "10D",
+      "type": "double",
+      "desc": "执行期最大允许代价上升"
+    },
+    {
+      "key": "costVerificationLookahead",
+      "defaultValue": "5",
+      "type": "int",
+      "desc": "代价校验前瞻步数"
+    },
+    {
+      "key": "pathCutoffFactor",
+      "defaultValue": "0.9",
+      "type": "double",
+      "desc": "路径静态截断比例"
+    },
+    {
+      "key": "pathCutoffMinimumLength",
+      "defaultValue": "30",
+      "type": "int",
+      "desc": "静态截断最小路径长度"
+    },
+    {
+      "key": "planningTickLookahead",
+      "defaultValue": "150",
+      "type": "int",
+      "desc": "规划前瞻tick"
+    },
+    {
+      "key": "pathingMapDefaultSize",
+      "defaultValue": "1024",
+      "type": "int",
+      "desc": "路径哈希表初始容量"
+    },
+    {
+      "key": "pathingMapLoadFactor",
+      "defaultValue": "0.75f",
+      "type": "float",
+      "desc": "路径哈希表装载因子"
+    },
+    {
+      "key": "maxFallHeightNoWater",
+      "defaultValue": "3",
+      "type": "int",
+      "desc": "无水桶最大下落高度"
+    },
+    {
+      "key": "maxFallHeightBucket",
+      "defaultValue": "20",
+      "type": "int",
+      "desc": "有水桶最大下落高度"
+    },
+    {
+      "key": "movementTimeoutTicks",
+      "defaultValue": "100",
+      "type": "int",
+      "desc": "动作超时tick"
+    },
+    {
+      "key": "primaryTimeoutMS",
+      "defaultValue": "500L",
+      "type": "long",
+      "desc": "主路径超时毫秒"
+    },
+    {
+      "key": "failureTimeoutMS",
+      "defaultValue": "2000L",
+      "type": "long",
+      "desc": "失败超时毫秒"
+    },
+    {
+      "key": "planAheadPrimaryTimeoutMS",
+      "defaultValue": "4000L",
+      "type": "long",
+      "desc": "预规划主超时毫秒"
+    },
+    {
+      "key": "planAheadFailureTimeoutMS",
+      "defaultValue": "5000L",
+      "type": "long",
+      "desc": "预规划失败超时毫秒"
+    },
+    {
+      "key": "slowPathTimeDelayMS",
+      "defaultValue": "100L",
+      "type": "long",
+      "desc": "慢速路径每节点延迟毫秒"
+    },
+    {
+      "key": "slowPathTimeoutMS",
+      "defaultValue": "40000L",
+      "type": "long",
+      "desc": "慢速路径超时毫秒"
+    },
+    {
+      "key": "chunkPackerQueueMaxSize",
+      "defaultValue": "2000",
+      "type": "int",
+      "desc": "区块打包队列上限"
+    },
+    {
+      "key": "toastTimer",
+      "defaultValue": "5000L",
+      "type": "long",
+      "desc": "Toast显示时长"
+    },
+    {
+      "key": "pathRenderLineWidthPixels",
+      "defaultValue": "5F",
+      "type": "float",
+      "desc": "路径线宽"
+    },
+    {
+      "key": "goalRenderLineWidthPixels",
+      "defaultValue": "3F",
+      "type": "float",
+      "desc": "目标线宽"
+    },
+    {
+      "key": "cachedChunksOpacity",
+      "defaultValue": "0.5f",
+      "type": "float",
+      "desc": "缓存区块透明度"
+    },
+    {
+      "key": "prefix",
+      "defaultValue": "!",
+      "type": "string",
+      "desc": "命令前缀"
+    },
+    {
+      "key": "itemSaverThreshold",
+      "defaultValue": "10",
+      "type": "int",
+      "desc": "耐久保护阈值"
+    },
+    {
+      "key": "maxPathHistoryLength",
+      "defaultValue": "300",
+      "type": "int",
+      "desc": "路径历史上限"
+    },
+    {
+      "key": "pathHistoryCutoffAmount",
+      "defaultValue": "50",
+      "type": "int",
+      "desc": "历史截断数量"
+    },
+    {
+      "key": "mineGoalUpdateInterval",
+      "defaultValue": "5",
+      "type": "int",
+      "desc": "矿点更新间隔"
+    },
+    {
+      "key": "maxCachedWorldScanCount",
+      "defaultValue": "10",
+      "type": "int",
+      "desc": "缓存扫描最大目标数"
+    },
+    {
+      "key": "minYLevelWhileMining",
+      "defaultValue": "0",
+      "type": "int",
+      "desc": "挖矿最小Y"
+    },
+    {
+      "key": "maxYLevelWhileMining",
+      "defaultValue": "255",
+      "type": "int",
+      "desc": "挖矿最大Y"
+    },
+    {
+      "key": "allowOnlyExposedOresDistance",
+      "defaultValue": "1",
+      "type": "int",
+      "desc": "暴露矿搜索距离"
+    },
+    {
+      "key": "worldExploringChunkOffset",
+      "defaultValue": "0",
+      "type": "int",
+      "desc": "探索区块偏移"
+    },
+    {
+      "key": "exploreChunkSetMinimumSize",
+      "defaultValue": "10",
+      "type": "int",
+      "desc": "探索最小区块集"
+    },
+    {
+      "key": "exploreMaintainY",
+      "defaultValue": "64",
+      "type": "int",
+      "desc": "探索保持Y（-1禁用）"
+    },
+    {
+      "key": "layerHeight",
+      "defaultValue": "1",
+      "type": "int",
+      "desc": "建筑层高度"
+    },
+    {
+      "key": "startAtLayer",
+      "defaultValue": "0",
+      "type": "int",
+      "desc": "建筑起始层"
+    },
+    {
+      "key": "buildRepeat",
+      "defaultValue": "0,0,0",
+      "type": "vec3i",
+      "desc": "重复建造偏移(x,y,z)"
+    },
+    {
+      "key": "buildRepeatCount",
+      "defaultValue": "-1",
+      "type": "int",
+      "desc": "重复次数（-1无限）"
+    },
+    {
+      "key": "incorrectSize",
+      "defaultValue": "100",
+      "type": "int",
+      "desc": "错误块集合上限"
+    },
+    {
+      "key": "breakCorrectBlockPenaltyMultiplier",
+      "defaultValue": "10d",
+      "type": "double",
+      "desc": "破坏正确方块惩罚倍率"
+    },
+    {
+      "key": "schematicFallbackExtension",
+      "defaultValue": "schematic",
+      "type": "string",
+      "desc": "默认Schematic扩展名"
+    },
+    {
+      "key": "builderTickScanRadius",
+      "defaultValue": "5",
+      "type": "int",
+      "desc": "建造扫描半径"
+    },
+    {
+      "key": "mineDropLoiterDurationMSThanksLouca",
+      "defaultValue": "250L",
+      "type": "long",
+      "desc": "挖矿掉落等待毫秒"
+    },
+    {
+      "key": "axisHeight",
+      "defaultValue": "120",
+      "type": "int",
+      "desc": "axis指令目标Y"
+    },
+    {
+      "key": "legitMineYLevel",
+      "defaultValue": "11",
+      "type": "int",
+      "desc": "合法挖矿Y"
+    },
+    {
+      "key": "followOffsetDistance",
+      "defaultValue": "0D",
+      "type": "double",
+      "desc": "跟随偏移距离"
+    },
+    {
+      "key": "followOffsetDirection",
+      "defaultValue": "0F",
+      "type": "float",
+      "desc": "跟随偏移方向（度）"
+    },
+    {
+      "key": "followRadius",
+      "defaultValue": "3",
+      "type": "int",
+      "desc": "生物跟随半径"
+    },
+    {
+      "key": "cachedChunksExpirySeconds",
+      "defaultValue": "-1L",
+      "type": "long",
+      "desc": "缓存过期秒数（-1禁用）"
+    },
+    {
+      "key": "yLevelBoxSize",
+      "defaultValue": "15D",
+      "type": "double",
+      "desc": "GoalYLevel盒子尺寸"
+    },
+    {
+      "key": "colorCurrentPath",
+      "defaultValue": "RED",
+      "type": "color",
+      "desc": "当前路径颜色"
+    },
+    {
+      "key": "colorNextPath",
+      "defaultValue": "MAGENTA",
+      "type": "color",
+      "desc": "下一段路径颜色"
+    },
+    {
+      "key": "colorBlocksToBreak",
+      "defaultValue": "RED",
+      "type": "color",
+      "desc": "待破坏方块颜色"
+    },
+    {
+      "key": "colorBlocksToPlace",
+      "defaultValue": "GREEN",
+      "type": "color",
+      "desc": "待放置方块颜色"
+    },
+    {
+      "key": "colorBlocksToWalkInto",
+      "defaultValue": "MAGENTA",
+      "type": "color",
+      "desc": "待进入方块颜色"
+    },
+    {
+      "key": "colorBestPathSoFar",
+      "defaultValue": "BLUE",
+      "type": "color",
+      "desc": "当前最优路径颜色"
+    },
+    {
+      "key": "colorMostRecentConsidered",
+      "defaultValue": "CYAN",
+      "type": "color",
+      "desc": "最近评估路径颜色"
+    },
+    {
+      "key": "colorGoalBox",
+      "defaultValue": "GREEN",
+      "type": "color",
+      "desc": "目标盒子颜色"
+    },
+    {
+      "key": "colorInvertedGoalBox",
+      "defaultValue": "RED",
+      "type": "color",
+      "desc": "反向目标盒子颜色"
+    },
+    {
+      "key": "colorSelection",
+      "defaultValue": "CYAN",
+      "type": "color",
+      "desc": "选区颜色"
+    },
+    {
+      "key": "colorSelectionPos1",
+      "defaultValue": "BLACK",
+      "type": "color",
+      "desc": "选区点1颜色"
+    },
+    {
+      "key": "colorSelectionPos2",
+      "defaultValue": "ORANGE",
+      "type": "color",
+      "desc": "选区点2颜色"
+    },
+    {
+      "key": "selectionOpacity",
+      "defaultValue": "0.5f",
+      "type": "float",
+      "desc": "选区透明度"
+    },
+    {
+      "key": "selectionLineWidth",
+      "defaultValue": "2F",
+      "type": "float",
+      "desc": "选区线宽"
+    },
+    {
+      "key": "elytraSimulationTicks",
+      "defaultValue": "20",
+      "type": "int",
+      "desc": "鞘翅模拟tick数"
+    },
+    {
+      "key": "elytraPitchRange",
+      "defaultValue": "25",
+      "type": "int",
+      "desc": "鞘翅俯仰容差"
+    },
+    {
+      "key": "elytraFireworkSpeed",
+      "defaultValue": "1.2",
+      "type": "double",
+      "desc": "自动烟花触发速度"
+    },
+    {
+      "key": "elytraFireworkSetbackUseDelay",
+      "defaultValue": "15",
+      "type": "int",
+      "desc": "回弹后烟花延迟tick"
+    },
+    {
+      "key": "elytraMinimumAvoidance",
+      "defaultValue": "0.2",
+      "type": "double",
+      "desc": "鞘翅最小避障补偿"
+    },
+    {
+      "key": "elytraNetherSeed",
+      "defaultValue": "146008555100680L",
+      "type": "long",
+      "desc": "下界鞘翅寻路种子"
+    },
+    {
+      "key": "elytraMinimumDurability",
+      "defaultValue": "5",
+      "type": "int",
+      "desc": "自动换鞘翅最低耐久"
+    },
+    {
+      "key": "elytraMinFireworksBeforeLanding",
+      "defaultValue": "5",
+      "type": "int",
+      "desc": "低烟花提前降落阈值"
+    },
+    {
+      "key": "elytraTimeBetweenCacheCullSecs",
+      "defaultValue": "180",
+      "type": "long",
+      "desc": "鞘翅缓存清理间隔秒"
+    },
+    {
+      "key": "elytraCacheCullDistance",
+      "defaultValue": "5000",
+      "type": "int",
+      "desc": "鞘翅缓存清理距离"
+    }
+  ]
+}

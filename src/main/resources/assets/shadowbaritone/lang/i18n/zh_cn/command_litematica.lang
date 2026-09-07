@@ -1,0 +1,8 @@
+# ShadowBaritone module: command_litematica
+
+shadowbaritone.command.litematica.error.valid_index=请输入有效索引。
+shadowbaritone.command.litematica.short_desc=建造当前加载的蓝图
+shadowbaritone.command.litematica.long_desc.1=建造当前在 Litematica 中打开的蓝图。
+shadowbaritone.command.litematica.long_desc.usage=用法：
+shadowbaritone.command.litematica.long_desc.example.default=> litematica
+shadowbaritone.command.litematica.long_desc.example.index=> litematica <#>

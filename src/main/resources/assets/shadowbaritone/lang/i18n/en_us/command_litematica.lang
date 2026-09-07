@@ -1,0 +1,8 @@
+# ShadowBaritone module: command_litematica
+
+shadowbaritone.command.litematica.error.valid_index=Please enter a valid index.
+shadowbaritone.command.litematica.short_desc=Build the currently loaded schematic
+shadowbaritone.command.litematica.long_desc.1=Build the schematic currently open in Litematica.
+shadowbaritone.command.litematica.long_desc.usage=Usage:
+shadowbaritone.command.litematica.long_desc.example.default=> litematica
+shadowbaritone.command.litematica.long_desc.example.index=> litematica <#>

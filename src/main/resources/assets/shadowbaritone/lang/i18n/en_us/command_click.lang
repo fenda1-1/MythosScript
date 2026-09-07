@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_click
+
+shadowbaritone.command.click.status.opened=Click GUI opened
+shadowbaritone.command.click.short_desc=Open the Click GUI
+shadowbaritone.command.click.long_desc.1=Open the Click GUI.
+shadowbaritone.command.click.long_desc.usage=Usage:
+shadowbaritone.command.click.long_desc.example.default=> click

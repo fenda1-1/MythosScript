@@ -1,0 +1,37 @@
+# zszl_script i18n module: auto_pickup
+gui.autopickup.manager.title=Automatic Pickup Rule Manager
+gui.autopickup.manager.empty=There are no rules yet, click "Add Rule" to create one
+gui.autopickup.manager.add=§aNew rules
+gui.autopickup.manager.edit=§eEdit
+gui.autopickup.manager.delete=§cDelete
+gui.autopickup.manager.toggle=Activate/deactivate
+gui.autopickup.manager.save_close=§aSave and close
+gui.autopickup.manager.toggle_on=§aactivation
+gui.autopickup.manager.toggle_off=§c deactivated
+gui.autopickup.manager.rule=%s §f%d. %s §7(radius: %.0f) -> §e%s
+gui.autopickup.edit.title=Edit automatic picking rules
+gui.autopickup.rule_name=Rule name:
+gui.autopickup.center_xy=Center point X / Y:
+gui.autopickup.center_zr=Center point Z / radius:
+gui.autopickup.delay=Post-pickup delay (seconds):
+gui.autopickup.btn.enabled=Rule switch: %s
+gui.autopickup.btn.select_seq=§eClick to select subsequent sequences...
+gui.autopickup.btn.get_coords=Get the current coordinates as the center point
+gui.autopickup.btn.stop_on_exit=Stop after leaving range: %s
+gui.pickup.title=§f Get settings (unit: Ticks, 20 ticks = 1 second)
+gui.pickup.initial_delay=Initial delay:
+gui.pickup.items_per_batch=Number of clicks per batch:
+gui.pickup.batch_interval=Batch interval:
+msg.pickup.saved=§a[Arena] Fetch settings saved!
+msg.pickup.invalid_number=§c[Arena] The entered number format is incorrect!
+gui.autopickup.tip.add=§aNew rule§r
+gui.autopickup.tip.add.1=§7 creates a new auto-pickup area.
+gui.autopickup.tip.edit=§eEditing Rules§r
+gui.autopickup.tip.edit.1=§7 Modify the name, area and subsequent operations of the selected rule.
+gui.autopickup.tip.delete=§cDelete Rule§r
+gui.autopickup.tip.delete.1=§7Permanently deletes the selected rule.
+gui.autopickup.tip.toggle=§b activate/deactivate §r
+gui.autopickup.tip.toggle.1=§7 switches the on/off state of the selected rule.
+gui.autopickup.tip.toggle.2=§7 can have multiple rules active at the same time.
+gui.autopickup.tip.save=§aSave and close§r
+gui.autopickup.tip.save.1=§7 writes all changes to the configuration file and returns to the main menu.

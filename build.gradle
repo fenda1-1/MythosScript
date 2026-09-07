@@ -1,0 +1,429 @@
+// ForgeGradle 5+ for Forge 1.12.2, compatible with modern Gradle versions
+buildscript {
+    repositories {
+        maven { url = 'https://maven.minecraftforge.net/' }
+        maven { url 'https://maven.aliyun.com/repository/public/' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.1.+', changing: true
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle'
+apply plugin: 'eclipse'
+apply plugin: 'maven-publish'
+
+version = 'v1.0.7'
+group = 'com.zszl.script'
+archivesBaseName = 'MythosScript'
+def generatedMixinResourcesDir = file("$buildDir/generated/mixin")
+def generatedMixinRefMap = new File(generatedMixinResourcesDir, 'mixins.shadowbaritone.refmap.json')
+def generatedMixinTsrg = file("$buildDir/tmp/compileJava/mixins.shadowbaritone.tsrg")
+def forgeMcpToSrg = file("$buildDir/createMcpToSrg/output.tsrg")
+def embeddedJarSignatureExcludes = [
+        'META-INF/*.SF',
+        'META-INF/*.RSA',
+        'META-INF/*.DSA',
+        'META-INF/SIG-*'
+]
+
+sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
+
+tasks.withType(JavaCompile) {
+    options.encoding = "UTF-8"
+}
+
+tasks.named('compileJava', JavaCompile).configure { task ->
+    dependsOn 'createMcpToSrg'
+    doFirst {
+        generatedMixinResourcesDir.mkdirs()
+        generatedMixinTsrg.parentFile.mkdirs()
+    }
+    options.compilerArgs += [
+            "-AdefaultObfuscationEnv=searge",
+            "-AoutRefMapFile=${generatedMixinRefMap.absolutePath.replace('\\', '/')}",
+            "-AoutTsrgFile=${generatedMixinTsrg.absolutePath.replace('\\', '/')}",
+            "-AreobfTsrgFile=${forgeMcpToSrg.absolutePath.replace('\\', '/')}",
+            "-AmappingTypes=tsrg"
+    ]
+}
+
+repositories {
+    maven { url = 'https://maven.minecraftforge.net/' }
+    maven { url 'https://maven.aliyun.com/repository/public/' }
+    maven { url 'https://babbaj.github.io/maven/' }
+    mavenCentral() // 添加 mavenCentral 以获取 ProGuard
+}
+
+// ==================================================
+// 1. ProGuard 依赖配置
+// ==================================================
+configurations {
+    embed
+    implementation.extendsFrom(embed)
+    // 为 ProGuard 创建一个专门的配置
+    proguard
+}
+
+dependencies {
+    // Build against the latest 1.12.2 Forge toolchain available to this project.
+    // Older 1.12.2 runtime compatibility is handled in code where helper signatures differ.
+    minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2860'
+    testImplementation 'junit:junit:4.13.2'
+    embed 'org.jsoup:jsoup:1.15.3'
+    embed 'com.vladsch.flexmark:flexmark:0.62.2'
+    embed 'com.google.guava:guava:31.1-jre'
+    embed 'com.belerweb:pinyin4j:2.5.1'
+    embed 'it.unimi.dsi:fastutil:8.5.12'
+    embed 'org.apache.commons:commons-lang3:3.12.0'
+    embed 'commons-io:commons-io:2.11.0'
+    embed 'dev.babbaj:nether-pathfinder:1.3.0'
+    embed 'com.github.luben:zstd-jni:1.5.6-3'
+    embed 'io.airlift:aircompressor:0.27'
+    embed 'org.tukaani:xz:1.9'
+    embed 'org.brotli:dec:0.1.2'
+    embed 'com.aayushatharva.brotli4j:brotli4j:1.16.0'
+    ['windows-x86_64', 'windows-aarch64', 'linux-x86_64', 'linux-aarch64',
+     'osx-x86_64', 'osx-aarch64'].each { platform ->
+        embed "com.aayushatharva.brotli4j:native-${platform}:1.16.0"
+    }
+
+    // 统一使用 TwelveMonkeys（纯 Java），避免与其他 webp 实现的 SPI 冲突
+    def tmVersion = '3.12.0'
+    embed "com.twelvemonkeys.imageio:imageio-core:${tmVersion}"
+    embed "com.twelvemonkeys.imageio:imageio-webp:${tmVersion}"
+    embed "com.twelvemonkeys.common:common-lang:${tmVersion}"
+    embed "com.twelvemonkeys.common:common-io:${tmVersion}"
+    embed "com.twelvemonkeys.common:common-image:${tmVersion}"
+
+    // Official mixin-0.8.5 contains ModLauncher launch classes compiled for Java 16
+    // (for example org.spongepowered.asm.launch.MixinLaunchPlugin, class version 60),
+    // which breaks Forge 1.12.2 + Java 8 environments during classpath scanning.
+    // Use a locally patched 0.8.5 runtime jar with the ModLauncher-only classes and
+    // service entries stripped, while keeping the actual 0.8.5 LaunchWrapper runtime.
+    def embeddedMixinJar = file('vendor/mixin-0.8.5-java8.jar')
+    def mixinProcessorVersion = '0.8.5'
+
+    embed files(embeddedMixinJar)
+    annotationProcessor "org.spongepowered:mixin:${mixinProcessorVersion}:processor"
+
+    // 添加 ProGuard 的核心库作为构建工具依赖
+    proguard 'com.guardsquare:proguard-base:7.8.1'
+}
+
+minecraft {
+    mappings channel: 'snapshot', version: '20171003-1.12'
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                zszl_script {
+                    source sourceSets.main
+                }
+            }
+        }
+        server {
+            workingDirectory project.file('run/server')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                zszl_script {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
+}
+
+sourceSets {
+    main {
+        java { srcDirs = ['src/main/java'] }
+        resources {
+            srcDirs = ['src/main/resources']
+            exclude '**/*.bak'
+        }
+        output.dir(generatedMixinResourcesDir, builtBy: 'compileJava')
+    }
+}
+
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    embeddedJarSignatureExcludes.each { pattern ->
+        exclude pattern
+    }
+    manifest {
+        attributes([
+            "Specification-Title": "MythosScript",
+            "Specification-Vendor": "fenda",
+            "Specification-Version": "v1.0.7",
+            "Implementation-Title": "我的世界脚本",
+            "Implementation-Version": "${version}",
+            "Implementation-Vendor" :"fenda",
+            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+            "FMLCorePlugin": "com.zszl.zszlScriptMod.mixin.ZszlScriptCorePlugin",
+            "FMLCorePluginContainsFMLMod": "true",
+            "ForceLoadAsMod": "true"
+        ])
+    }
+    from {
+        configurations.embed.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    // Java 8 Forge scans embedded classes, including multi-release module descriptors.
+    exclude 'module-info.class', 'META-INF/versions/**'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifact jar
+        }
+    }
+    repositories {
+        maven {
+            url = "file://${project.projectDir}/zszl_script"
+        }
+    }
+}
+
+// ==================================================
+// 2. 标准的 ProGuard 混淆任务
+// ==================================================
+task proguard(type: JavaExec) {
+    // Standalone packaging must also use runtime SRG names, not development MCP names.
+    dependsOn 'reobfJar'
+    // 设置 ProGuard 的 classpath
+    classpath = configurations.proguard
+    workingDir = project.buildDir
+
+    // ProGuard 的主类
+    main = 'proguard.ProGuard'
+
+    // 定义输入、输出和配置文件路径
+    def inputJar = "${project.buildDir}/libs/${project.archivesBaseName}-${project.version}.jar"
+    def outputJar = "${project.buildDir}/libs/${project.archivesBaseName}-${project.version}-obf.jar"
+    def configFile = "${project.buildDir}/proguard.pro"
+
+    // 在执行前动态生成 ProGuard 配置文件
+    doFirst {
+        def libraryJarLines = []
+        def addLibraryJar = { File file, String filter = null ->
+            if (file != null && file.exists()) {
+                def normalizedPath = file.absolutePath.replace('\\', '/')
+                libraryJarLines << "-libraryjars \"${normalizedPath}\"${filter ?: ''}"
+                return true
+            }
+            return false
+        }
+        def addJavaRuntimeLibraries = {
+            def javaHomeCandidates = [
+                    System.getProperty('java.home'),
+                    System.getenv('JAVA8_HOME'),
+                    System.getenv('JDK8_HOME'),
+                    System.getenv('JAVA_HOME'),
+                    'C:/Program Files/Java/jdk1.8.0_202',
+                    'C:/Program Files/Java/jre1.8.0_202'
+            ].findAll { it != null && it.toString().trim().length() > 0 }
+
+            for (def candidate : javaHomeCandidates) {
+                File javaHomeDir = file(candidate)
+                if (addLibraryJar(new File(javaHomeDir, 'lib/rt.jar'))) {
+                    return
+                }
+                if (addLibraryJar(new File(javaHomeDir, 'jre/lib/rt.jar'))) {
+                    return
+                }
+            }
+
+            File currentJavaHome = file(System.getProperty('java.home'))
+            File jmodsDir = new File(currentJavaHome, 'jmods')
+            if (jmodsDir.isDirectory()) {
+                File[] jmods = jmodsDir.listFiles({ File dir, String name -> name.endsWith('.jmod') } as FilenameFilter)
+                if (jmods != null && jmods.length > 0) {
+                    jmods.sort { it.name }.each {
+                        addLibraryJar(it, '(!**.jar;!module-info.class)')
+                    }
+                    return
+                }
+            }
+
+            throw new GradleException("Unable to locate Java runtime libraries for ProGuard. Set JAVA8_HOME/JDK8_HOME to a JDK 8 install, or run Gradle with a JDK that has jmods.")
+        }
+
+        addJavaRuntimeLibraries()
+        def normalizedInputJar = inputJar.replace('\\', '/')
+        def normalizedOutputJar = outputJar.replace('\\', '/')
+
+        // 获取所有其他的运行时依赖
+        def otherLibraryJars = configurations.runtimeClasspath.files.collect {
+            "-libraryjars \"${it.absolutePath.replace('\\', '/')}\""
+        }.join('\n')
+
+        // 将 Java 运行库和其他库合并
+        def allLibraryJars = (libraryJarLines + [otherLibraryJars]).findAll { it != null && it.length() > 0 }.join('\n')
+
+        // 生成 proguard.pro 文件内容
+        new File(configFile).withWriter('UTF-8') { writer ->
+            writer.writeLine "### ProGuard Configuration for ${project.archivesBaseName} ###"
+            writer.writeLine ""
+            writer.writeLine "### Input / Output Jars ###"
+            writer.writeLine "-injars \"${normalizedInputJar}\""
+            writer.writeLine "-outjars \"${normalizedOutputJar}\""
+            writer.writeLine ""
+            writer.writeLine "### Library Jars (Dependencies) ###"
+            writer.writeLine allLibraryJars // 使用合并后的库列表
+            writer.writeLine ""
+            
+            // ==================== 最终成功配置 ====================
+            writer.writeLine "### ProGuard Options (Final Production Build) ###"
+            writer.writeLine "-ignorewarnings"
+            writer.writeLine "-dontwarn"
+            writer.writeLine "-dontnote"
+            // 关闭优化：当前 shadowbaritone 在优化后会出现 VerifyError / IllegalAccessError
+            // 保留混淆与重打包，但禁用字节码优化，优先保证运行稳定性。
+            writer.writeLine "-dontoptimize"
+            // Windows 和部分启动器环境对大小写类名兼容很差，
+            // 否则可能出现 cE / ce 这类类名碰撞，导致 NoClassDefFoundError。
+            writer.writeLine "-dontusemixedcaseclassnames"
+            writer.writeLine "-allowaccessmodification"
+            writer.writeLine "-repackageclasses 'com.zszl.obf'" // 将所有类移动到一个新的、无意义的包中
+            // 关闭激进重载，避免在旧环境/大小写不敏感文件系统上产生不可预期的类名冲突。
+            writer.writeLine ""
+            writer.writeLine "### Keep Rules for Forge Mod ###"
+            writer.writeLine "# Keep the main mod class and its members"
+            writer.writeLine "-keep public class com.zszl.zszlScriptMod.zszlScriptMod { *; }"
+            writer.writeLine "# Keep classes annotated with @Mod"
+            writer.writeLine "-keep @net.minecraftforge.fml.common.Mod class *"
+            writer.writeLine "# Keep methods annotated with @EventHandler"
+            writer.writeLine "-keepclassmembers class * { @net.minecraftforge.fml.common.Mod\$EventHandler <methods>; }"
+            writer.writeLine "# Keep methods annotated with @SubscribeEvent"
+            writer.writeLine "-keepclassmembers class * { @net.minecraftforge.fml.common.eventhandler.SubscribeEvent <methods>; }"
+            writer.writeLine "# Keep GUI handlers"
+            writer.writeLine "-keep public class * implements net.minecraftforge.fml.common.network.IGuiHandler { *; }"
+            writer.writeLine ""
+            writer.writeLine "### Keep Rules for Data Classes and Reflection ###"
+            writer.writeLine "# Keep all GUI classes"
+            writer.writeLine "# Some GUI screens inherit through custom base classes such as ThemedGuiScreen,"
+            writer.writeLine "# so keeping only direct GuiScreen subclasses can drop valid runtime targets."
+            writer.writeLine "-keep public class com.zszl.zszlScriptMod.gui.** { *; }"
+            writer.writeLine "# This bridge must remain in GuiScreen's runtime package to call protected input methods."
+            writer.writeLine "-keep class net.minecraft.client.gui.EmbeddedGuiScreenInputBridge { *; }"
+            writer.writeLine ""
+            writer.writeLine "### Keep all Enums and their special methods ###"
+            writer.writeLine "-keepclassmembers enum * { public static **[] values(); public static ** valueOf(java.lang.String); }"
+            writer.writeLine "-keep enum com.zszl.zszlScriptMod.** { *; }"
+            writer.writeLine ""
+            writer.writeLine "# Keep config packages and data structures"
+            writer.writeLine "-keep public class com.zszl.zszlScriptMod.config.** { *; }"
+            // ShadowBaritone's un-obfuscated flight lifecycle bridge calls this directly.
+            writer.writeLine "-keep class com.zszl.zszlScriptMod.handlers.FlyHandler { *; }"
+            writer.writeLine "-keep public class com.zszl.zszlScriptMod.gui.packet.PacketSequence { *; }"
+            writer.writeLine "-keep public class com.zszl.zszlScriptMod.handlers.AutoEquipHandler\$ConfigWrapper { *; }"
+            writer.writeLine "-keep public class com.zszl.zszlScriptMod.handlers.AutoExperienceHandler\$ConfigData { *; }"
+            writer.writeLine "-keep public class com.zszl.zszlScriptMod.system.** { *; }"
+            writer.writeLine "-keep public class com.zszl.zszlScriptMod.system.dungeon.** { *; }"
+            writer.writeLine "# Keep inner classes used for data storage"
+            writer.writeLine "-keep class com.zszl.zszlScriptMod.**\$* { *; }"
+            writer.writeLine ""
+            
+            writer.writeLine "### Keep Public Members, Obfuscate Others ###"
+            writer.writeLine "-keepclassmembers class com.zszl.zszlScriptMod.** { public *; }"
+
+            writer.writeLine ""
+            writer.writeLine "### Keep ImageIO Plugins (Crucial for WebP) ###"
+            // ProGuard 7.8.1 在当前运行方式下不支持 keepresources/keepresourcefiles 选项。
+            // 这里通过 keep 相关 SPI 实现类名称，避免 services 文件中的类名失效。
+            writer.writeLine "-keep class com.twelvemonkeys.** { *; }"
+            writer.writeLine "-keep class com.luciad.imageio.webp.** { *; }"
+
+            writer.writeLine ""
+            writer.writeLine "### Keep Embedded ShadowBaritone ###"
+            writer.writeLine "# ShadowBaritone 依赖 ServiceLoader、mixin 配置和大量按类名定位的运行时逻辑。"
+            writer.writeLine "# 若被重打包/重命名，运行时会出现 provider 初始化失败或 mixin 类名失效。"
+            writer.writeLine "-keep class com.zszl.zszlScriptMod.shadowbaritone.** { *; }"
+            // The merge below restores original mixin bytecode, including its handler
+            // class/member references. Keep those targets stable across obfuscation.
+            writer.writeLine "-keep class com.zszl.zszlScriptMod.otherfeatures.handler.movement.** { *; }"
+            writer.writeLine "-keep class com.zszl.zszlScriptMod.utils.ReflectionCompat { *; }"
+            writer.writeLine "-keep class dev.babbaj.pathfinder.** { *; }"
+            writer.writeLine "-keep class com.github.luben.zstd.** { *; }"
+            writer.writeLine "-keep class com.aayushatharva.brotli4j.** { *; }"
+
+            writer.writeLine ""
+            writer.writeLine "### Keep Mixins ###"
+            writer.writeLine "-keep class com.zszl.zszlScriptMod.mixin.** { *; }"
+            writer.writeLine "-keep class org.spongepowered.** { *; }"
+            
+            writer.writeLine ""
+            writer.writeLine "### Keep Attributes (Important for Forge) ###"
+            writer.writeLine "-keepattributes Exceptions,InnerClasses,Signature,Deprecated,SourceFile,LineNumberTable,*Annotation*,EnclosingMethod"
+            // =====================================================================
+        }
+        
+        // 设置 ProGuard 的命令行参数
+        args = ["@proguard.pro"]
+        
+        println "=================================================="
+        println ">>> Starting ProGuard Obfuscation <<<"
+        println "    Input: ${inputJar}"
+        println "    Output: ${outputJar}"
+        println "    Config: ${configFile}"
+        println "=================================================="
+    }
+
+    doLast {
+        def tempMergeDir = file("${project.buildDir}/tmp/proguard-shadowbaritone-merge")
+        delete tempMergeDir
+
+        copy {
+            from zipTree(outputJar)
+            into tempMergeDir
+            duplicatesStrategy = DuplicatesStrategy.INCLUDE
+            embeddedJarSignatureExcludes.each { pattern ->
+                exclude pattern
+            }
+        }
+
+        copy {
+            from zipTree(inputJar)
+            into tempMergeDir
+            include 'com/zszl/zszlScriptMod/shadowbaritone/**'
+            include 'dev/babbaj/pathfinder/**'
+            include 'org/spongepowered/**'
+            include 'assets/shadowbaritone/**'
+            include 'META-INF/services/com.zszl.zszlScriptMod.shadowbaritone.api.IBaritoneProvider'
+            include 'META-INF/services/org.spongepowered.asm.service.IGlobalPropertyService'
+            include 'META-INF/services/org.spongepowered.asm.service.IMixinService'
+            include 'META-INF/services/org.spongepowered.asm.service.IMixinServiceBootstrap'
+            include 'META-INF/services/org.spongepowered.tools.obfuscation.service.IObfuscationService'
+            include 'mixins.shadowbaritone*.json'
+            duplicatesStrategy = DuplicatesStrategy.INCLUDE
+            embeddedJarSignatureExcludes.each { pattern ->
+                exclude pattern
+            }
+        }
+
+        ant.zip(destfile: outputJar) {
+            fileset(dir: tempMergeDir)
+        }
+
+        // Validate the merged artifact, not just the development classes: original
+        // mixins are restored after ProGuard and their entry points must still exist.
+        new java.util.zip.ZipFile(outputJar).withCloseable { artifact ->
+            ['MovementFeatureManager', 'WallClimbFeatureHandler', 'FreecamFeatureHandler',
+             'FreecamFeatureHandler$GhostCamera'].each { className ->
+                def entry = "com/zszl/zszlScriptMod/otherfeatures/handler/movement/${className}.class"
+                if (artifact.getEntry(entry) == null) {
+                    throw new GradleException("Missing movement mixin dependency in final jar: ${entry}")
+                }
+            }
+        }
+
+        println ">>> ProGuard task finished. <<<"
+    }
+}
+
+// 3. 将最终的构建任务指向新的 proguard 任务
+build.finalizedBy(proguard)

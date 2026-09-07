@@ -1,0 +1,14 @@
+# ShadowBaritone module: command_goal
+
+shadowbaritone.command.goal.status.cleared=Goal cleared.
+shadowbaritone.command.goal.status.no_goal_to_clear=There is no goal to clear.
+shadowbaritone.command.goal.status.goal=Goal: %s
+shadowbaritone.command.goal.short_desc=Set or clear a goal
+shadowbaritone.command.goal.long_desc.1=The goal command lets you set or clear Baritone's goal.
+shadowbaritone.command.goal.long_desc.2=Wherever coordinates are required, you can use ~ just like in vanilla Minecraft commands, or enter ordinary numbers directly.
+shadowbaritone.command.goal.long_desc.usage=Usage:
+shadowbaritone.command.goal.long_desc.example.default=> goal - Set the goal to your current position
+shadowbaritone.command.goal.long_desc.example.clear=> goal <reset/clear/none> - Clear the goal
+shadowbaritone.command.goal.long_desc.example.y=> goal <y> - Set the goal to the specified Y level
+shadowbaritone.command.goal.long_desc.example.xz=> goal <x> <z> - Set the goal to the specified X,Z coordinates
+shadowbaritone.command.goal.long_desc.example.xyz=> goal <x> <y> <z> - Set the goal to the specified X,Y,Z coordinates

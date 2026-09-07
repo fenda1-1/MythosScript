@@ -1,0 +1,34 @@
+# zszl_script i18n module: drop
+gui.drop.title=§f discard settings configuration
+gui.drop.mode=Discard mode: %s
+gui.drop.range=Detection range: %s
+gui.drop.batch_mode=Batch mode: %s
+gui.drop.on=§a enabled
+gui.drop.off=§c disabled
+gui.drop.reset=§eRestore default settings
+gui.drop.save=§aSave settings
+gui.drop.timed_interval=Scheduled discard interval:
+gui.drop.items_per_op=Number of items per operation:
+gui.drop.op_interval=Operation interval:
+gui.drop.max_per_tick=Maximum number of processes per tick:
+gui.drop.item_cooldown=Item cooldown time:
+gui.drop.unit_seconds=seconds (>=1)
+gui.drop.unit_items_64=(1-64)
+gui.drop.unit_items_10=(1-10)
+gui.drop.unit_ms_10k=milliseconds (50-10k)
+gui.drop.unit_ms_60k=milliseconds (100-60k)
+gui.drop.usage=§e Instructions for use
+gui.drop.usage_desc=§7The default take settings and discard settings are stable values after testing. If there are any problems after modification, please restore the default values.
+gui.drop.tip.mode=§eSwitch discard mode§r
+gui.drop.tip.mode.1=§b Discard when opening the box: §r §7 Perform an item discard check after each box is opened.
+gui.drop.tip.mode.2=§b Scheduled discarding: §r §7 Execute an item discarding check every set number of seconds.
+gui.drop.tip.range=§eSwitch discard detection range§r
+gui.drop.tip.range.1=§b Backpack + Box: §r §7 is discarded from the backpack first; only when the backpack has no items to discard, it is discarded from the box.
+gui.drop.tip.range.2=§b Backpack only: §r §7 Only the items in the player's backpack are inspected and discarded, even if the chest is opened.
+gui.drop.tip.batch=§eBatch Mode§r
+gui.drop.tip.batch.1=§7 can handle multiple items at once when enabled.
+gui.drop.tip.batch.2=§7 improves efficiency but may cause server stress.
+gui.drop.tip.reset=§eRestore default§r
+gui.drop.tip.reset.1=§7Restores all settings to recommended defaults.
+msg.drop.saved=§a[Arena] Discard settings saved!
+msg.drop.error=§c[Arena] An unknown error occurred while saving settings!

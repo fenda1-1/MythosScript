@@ -1,0 +1,8 @@
+# ShadowBaritone module: command_invert
+
+shadowbaritone.command.invert.error.no_goal=No goal is currently set
+shadowbaritone.command.invert.status.goal=Goal: %s
+shadowbaritone.command.invert.short_desc=Move away from the current goal
+shadowbaritone.command.invert.long_desc.1=The invert command makes Baritone move away from its current goal instead of toward it.
+shadowbaritone.command.invert.long_desc.usage=Usage:
+shadowbaritone.command.invert.long_desc.example.default=> invert - Invert the current goal.

@@ -1,0 +1,4 @@
+# zszl_script i18n module: update_checker
+msg.update_checker.fetching_changelog=Getting update log...
+msg.update_checker.fetch_failed=Failed to get update log. \n\nError details:\n%s\n%s
+msg.update_checker.new_version_notice=A new version of the script has been detected. Please click Update Script to update. You can click the top version to view the update log.

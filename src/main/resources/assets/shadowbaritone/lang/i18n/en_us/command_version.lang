@@ -1,0 +1,8 @@
+# ShadowBaritone module: command_version
+
+shadowbaritone.command.version.error.null_version=The version is empty (this is usually normal in a development environment)
+shadowbaritone.command.version.status.current=You are currently running Baritone v%s
+shadowbaritone.command.version.short_desc=View the Baritone version
+shadowbaritone.command.version.long_desc.1=The version command prints the version of Baritone currently running.
+shadowbaritone.command.version.long_desc.usage=Usage:
+shadowbaritone.command.version.long_desc.example.default=> version - View version information, if available

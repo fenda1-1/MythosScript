@@ -1,0 +1,25 @@
+# zszl_script i18n module: donation
+gui.donate.title=支持作者/联系方式
+gui.donate.subtitle=与 fenda 一起，让每一次更新都更好。
+gui.donate.info_title=联系作者 · 加入社区
+gui.donate.refresh=刷新榜单
+gui.donate.qr_title=自愿打赏 · 感谢支持
+gui.donate.qr_placeholder=请在代码中填入付款码图片路径
+gui.donate.desc.free=作者：fenda  |  QQ 交流群：954821473
+gui.donate.desc.support=本项目已在 GitHub 开源，欢迎进群交流使用体验、提出建议。
+gui.donate.desc.remark=群内优先发布最新测试版、优先跟进并修复反馈的 Bug，也欢迎随时提问，与长期使用的资深群友交流。
+gui.donate.desc.realtime=项目免费使用，打赏完全自愿。每一份建议、反馈与支持，都是持续更新的动力。
+gui.donate.rank_title=打 赏 榜
+gui.donate.rank_loading=榜单加载中...
+gui.donate.col.rank=序号
+gui.donate.col.name=名字
+gui.donate.col.amount=金额
+gui.donate.source=数据源
+gui.donate.card.contact.title=§l作者：fenda
+gui.donate.card.contact.body=§lQQ 交流群：954821473\n§r欢迎加入，一起把项目做得更好。
+gui.donate.card.opensource.title=§lGitHub 开源 · 共同完善
+gui.donate.card.opensource.body=本项目已在 GitHub 开源。欢迎探索源码、分享想法，也欢迎进群提出建议，让下一次更新更贴近你的需要。
+gui.donate.card.community.title=§l加入交流群 · 抢先体验
+gui.donate.card.community.body=抢先测试  /  最新测试版优先在群内发布。\n反馈直达  /  群内反馈的 Bug 优先跟进与修复。\n交流答疑  /  使用中遇到问题，随时在群内提问。\n经验分享  /  还有许多长期使用的资深群友，一起交流技巧、少走弯路。
+gui.donate.card.thanks.title=§l喜欢这个项目？支持随心
+gui.donate.card.thanks.body=项目免费使用，打赏完全自愿。如果它帮到了你，欢迎扫码支持 fenda 持续维护。你的建议、Bug 反馈和经验分享，同样是珍贵的支持。谢谢每一位同行的你。

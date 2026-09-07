@@ -1,0 +1,9 @@
+# ShadowBaritone module: command_find
+
+shadowbaritone.command.find.status.no_positions_known=没有已知坐标，请确认这些方块已被缓存。
+shadowbaritone.command.find.hover.set_goal=点击将目标设置到该坐标
+shadowbaritone.command.find.short_desc=查找某种方块的位置
+shadowbaritone.command.find.long_desc.1=find 命令会搜索 Baritone 的缓存，并尝试找到该方块的位置。
+shadowbaritone.command.find.long_desc.2=Tab 补全只会建议已缓存的方块，未缓存的方块无法被找到。
+shadowbaritone.command.find.long_desc.usage=用法：
+shadowbaritone.command.find.long_desc.example.default=> find <block> [...] - 尝试查找列出的方块

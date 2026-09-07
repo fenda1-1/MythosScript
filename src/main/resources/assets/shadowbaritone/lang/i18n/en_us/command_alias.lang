@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_alias
+
+shadowbaritone.command.alias.long_desc=This command is an alias for the following command(s): %s ...
+shadowbaritone.command.alias.modified.short_desc=List modified settings
+shadowbaritone.command.alias.reset.short_desc=Reset all settings, or just one
+shadowbaritone.command.alias.sethome.short_desc=Set your home waypoint
+shadowbaritone.command.alias.home.short_desc=Go to your home waypoint

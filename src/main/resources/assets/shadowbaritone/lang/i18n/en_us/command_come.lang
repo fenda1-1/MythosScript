@@ -1,0 +1,8 @@
+# ShadowBaritone module: command_come
+
+shadowbaritone.command.come.status.coming=Coming.
+shadowbaritone.command.come.short_desc=Move in the direction you are looking
+shadowbaritone.command.come.long_desc.1=The come command makes Baritone move toward your camera's position.
+shadowbaritone.command.come.long_desc.2=This is useful on clients where freecam does not move the player's actual position.
+shadowbaritone.command.come.long_desc.usage=Usage:
+shadowbaritone.command.come.long_desc.example.default=> come

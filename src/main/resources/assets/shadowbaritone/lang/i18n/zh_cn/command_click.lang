@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_click
+
+shadowbaritone.command.click.status.opened=Click 界面已打开
+shadowbaritone.command.click.short_desc=打开 Click 界面
+shadowbaritone.command.click.long_desc.1=打开 Click 界面。
+shadowbaritone.command.click.long_desc.usage=用法：
+shadowbaritone.command.click.long_desc.example.default=> click

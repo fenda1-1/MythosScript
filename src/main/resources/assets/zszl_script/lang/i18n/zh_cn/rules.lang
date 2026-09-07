@@ -1,0 +1,6 @@
+# zszl_script i18n module: rules
+rule.auto_escape.default_name=自动逃离规则
+rule.auto_follow.default_name=新追怪规则
+rule.auto_pickup.default_name=新的拾取规则
+rule.conditional.default_name=新规则
+rule.sorting.default_name=新规则

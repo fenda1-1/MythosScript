@@ -1,0 +1,34 @@
+# zszl_script i18n module: drop
+gui.drop.title=§f丢弃设置配置
+gui.drop.mode=丢弃模式: %s
+gui.drop.range=检测范围: %s
+gui.drop.batch_mode=批量模式: %s
+gui.drop.on=§a启用
+gui.drop.off=§c禁用
+gui.drop.reset=§e恢复默认设置
+gui.drop.save=§a保存设置
+gui.drop.timed_interval=定时丢弃间隔:
+gui.drop.items_per_op=每次操作物品数:
+gui.drop.op_interval=操作间隔:
+gui.drop.max_per_tick=每tick最大处理数:
+gui.drop.item_cooldown=物品冷却时间:
+gui.drop.unit_seconds=秒 (>=1)
+gui.drop.unit_items_64=个 (1-64)
+gui.drop.unit_items_10=个 (1-10)
+gui.drop.unit_ms_10k=毫秒 (50-10k)
+gui.drop.unit_ms_60k=毫秒 (100-60k)
+gui.drop.usage=§e使用说明
+gui.drop.usage_desc=§7默认的拿取设置和丢弃设置是测试后的稳定数值，如果修改后有问题请恢复默认。
+gui.drop.tip.mode=§e切换丢弃模式§r
+gui.drop.tip.mode.1=§b开箱时丢弃:§r §7每次打开箱子后，执行一次物品丢弃检查。
+gui.drop.tip.mode.2=§b定时丢弃:§r §7每隔设定的秒数，执行一次物品丢弃检查。
+gui.drop.tip.range=§e切换丢弃检测范围§r
+gui.drop.tip.range.1=§b背包+箱子:§r §7优先从背包丢弃；仅当背包无可丢弃物品时，才从箱子丢弃。
+gui.drop.tip.range.2=§b仅背包:§r §7即使打开箱子，也只检查并丢弃玩家背包中的物品。
+gui.drop.tip.batch=§e批量模式§r
+gui.drop.tip.batch.1=§7启用后可以一次处理多个物品，
+gui.drop.tip.batch.2=§7提高效率但可能导致服务器压力。
+gui.drop.tip.reset=§e恢复默认§r
+gui.drop.tip.reset.1=§7将所有设置恢复为推荐的默认值。
+msg.drop.saved=§a[竞技场] 丢弃设置已保存！
+msg.drop.error=§c[竞技场] 保存设置时发生未知错误！

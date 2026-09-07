@@ -1,0 +1,10 @@
+# zszl_script i18n module: dungeon_warehouse
+gui.dungeon_warehouse.title=副本仓库点击优化设置
+gui.dungeon_warehouse.click_interval=点击速度 (毫秒):
+gui.dungeon_warehouse.shift_click=Shift+点击(背包):一键存入
+gui.dungeon_warehouse.ctrl_click=Ctrl+点击:存/取指定数量
+gui.dungeon_warehouse.ctrl_click_number=存/取数量:
+gui.dungeon_warehouse.tip.title=§e点击速度 (毫秒)
+gui.dungeon_warehouse.tip.line1=§7设置每次自动点击之间的延迟。
+gui.dungeon_warehouse.tip.line2=§c经测试，不能低于100ms，
+gui.dungeon_warehouse.tip.line3=§c否则最多一次只能点击15次。

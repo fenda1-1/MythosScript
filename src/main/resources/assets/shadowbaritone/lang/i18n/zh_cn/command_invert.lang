@@ -1,0 +1,8 @@
+# ShadowBaritone module: command_invert
+
+shadowbaritone.command.invert.error.no_goal=当前没有目标
+shadowbaritone.command.invert.status.goal=目标：%s
+shadowbaritone.command.invert.short_desc=远离当前目标
+shadowbaritone.command.invert.long_desc.1=invert 命令会让 Baritone 朝远离当前目标的方向前进，而不是朝它前进。
+shadowbaritone.command.invert.long_desc.usage=用法：
+shadowbaritone.command.invert.long_desc.example.default=> invert - 反转当前目标。

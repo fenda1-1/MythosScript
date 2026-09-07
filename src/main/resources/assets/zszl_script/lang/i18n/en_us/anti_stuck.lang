@@ -1,0 +1,11 @@
+# zszl_script i18n module: anti_stuck
+gui.antistuck.title=Anti-stuck settings
+gui.antistuck.master=Intelligent anti-jamming system (recommended to turn off)
+gui.antistuck.avoid=Actively avoid dangerous areas (recommended to close)
+gui.antistuck.timeout=Automatic reloading after timeout (recommended to turn off)
+gui.antistuck.vine_distance=Danger prediction distance (grid):
+gui.antistuck.timeout_seconds=Timeout reload time (seconds):
+gui.antistuck.tip.master=§eIntelligent anti-jamming system§r\n§7When enabled, all anti-jamming logic will be activated, \n§7 includes predictive avoidance and intelligent escape in complex terrain.
+gui.antistuck.tip.avoid=After §eactively avoids dangerous areas§r\n§7 is enabled, when the pathfinding path is about to enter \n§7 a dangerous area composed of vines, spider webs, etc., \n§7 will calculate and detour in advance.
+gui.antistuck.tip.timeout=§eTimeout automatic reload§r\n§7 is enabled, if the player does not move at all within the specified time \n§7, the system will force a reload state, \n§7 returns to the center point and chases monsters again. This is the ultimate insurance policy.
+msg.antistuck.saved=§a[Automatic Monster Chasing] Anti-stuck settings have been saved.

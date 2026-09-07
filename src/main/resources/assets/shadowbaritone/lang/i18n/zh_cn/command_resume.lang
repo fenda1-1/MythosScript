@@ -1,0 +1,8 @@
+# ShadowBaritone module: command_resume
+
+shadowbaritone.command.resume.error.not_paused=当前并未暂停
+shadowbaritone.command.resume.status.resumed=已恢复
+shadowbaritone.command.resume.short_desc=在暂停后恢复 Baritone
+shadowbaritone.command.resume.long_desc.1=resume 命令会让 Baritone 恢复到上次使用 pause 前的状态。
+shadowbaritone.command.resume.long_desc.usage=用法：
+shadowbaritone.command.resume.long_desc.example.default=> resume

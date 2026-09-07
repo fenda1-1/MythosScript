@@ -1,0 +1,44 @@
+# ShadowBaritone module: command_sel
+
+shadowbaritone.command.sel.error.action_type=一个操作
+shadowbaritone.command.sel.error.set_pos1_first=请先设置 pos1，再使用 pos2
+shadowbaritone.command.sel.error.nothing_to_undo=没有可撤销的内容！
+shadowbaritone.command.sel.error.no_selections=当前没有选区
+shadowbaritone.command.sel.error.copy_first=你需要先复制一个选区
+shadowbaritone.command.sel.error.invalid_transform_type=无效的变换类型
+shadowbaritone.command.sel.error.no_selections_found=未找到选区
+shadowbaritone.command.sel.status.pos1_set=位置 1 已设置
+shadowbaritone.command.sel.status.selection_added=已添加选区
+shadowbaritone.command.sel.status.removed=已移除 %d 个选区
+shadowbaritone.command.sel.status.undid_pos1=已撤销 pos1
+shadowbaritone.command.sel.status.undid_pos2=已撤销 pos2
+shadowbaritone.command.sel.status.filling=开始填充
+shadowbaritone.command.sel.status.copied=选区已复制
+shadowbaritone.command.sel.status.building=开始建造
+shadowbaritone.command.sel.status.transformed=已变换 %d 个选区
+shadowbaritone.command.sel.value.fill_name=填充
+shadowbaritone.command.sel.short_desc=类似 WorldEdit 的选区命令
+shadowbaritone.command.sel.long_desc.1=sel 命令允许你像使用 WorldEdit 一样操作 Baritone 的选区。
+shadowbaritone.command.sel.long_desc.2=借助这些选区，你可以清空区域、填充方块，或执行其他处理。
+shadowbaritone.command.sel.long_desc.3=expand、contract、shift 命令会使用一种选择器来指定要作用到哪些选区。支持 a/all、n/newest、o/oldest。
+shadowbaritone.command.sel.long_desc.usage=用法：
+shadowbaritone.command.sel.long_desc.example.pos1_current=> sel pos1/p1/1 - 将位置 1 设置为你当前位置。
+shadowbaritone.command.sel.long_desc.example.pos1_relative=> sel pos1/p1/1 <x> <y> <z> - 将位置 1 设置为相对坐标。
+shadowbaritone.command.sel.long_desc.example.pos2_current=> sel pos2/p2/2 - 将位置 2 设置为你当前位置。
+shadowbaritone.command.sel.long_desc.example.pos2_relative=> sel pos2/p2/2 <x> <y> <z> - 将位置 2 设置为相对坐标。
+shadowbaritone.command.sel.long_desc.example.clear=> sel clear/c - 清除选区。
+shadowbaritone.command.sel.long_desc.example.undo=> sel undo/u - 撤销上一次操作（设置位置、创建选区等）。
+shadowbaritone.command.sel.long_desc.example.set=> sel set/fill/s/f [block] - 用某种方块完整填满所有选区。
+shadowbaritone.command.sel.long_desc.example.walls=> sel walls/w [block] - 用指定方块填充选区的墙面。
+shadowbaritone.command.sel.long_desc.example.shell=> sel shell/shl [block] - 与 walls 类似，但也会填充天花板和地板。
+shadowbaritone.command.sel.long_desc.example.sphere=> sel sphere/sph [block] - 在选区边界内填充一个球体。
+shadowbaritone.command.sel.long_desc.example.hsphere=> sel hsphere/hsph [block] - 与 sphere 类似，但为空心。
+shadowbaritone.command.sel.long_desc.example.cylinder=> sel cylinder/cyl [block] <axis> - 在选区边界内填充一个绕指定轴向的圆柱体。（默认=y）
+shadowbaritone.command.sel.long_desc.example.hcylinder=> sel hcylinder/hcyl [block] <axis> - 与 cylinder 类似，但为空心。
+shadowbaritone.command.sel.long_desc.example.cleararea=> sel cleararea/ca - 本质上等同于“set air”。
+shadowbaritone.command.sel.long_desc.example.replace=> sel replace/r <blocks...> <with> - 用另一种方块替换指定方块。
+shadowbaritone.command.sel.long_desc.example.copy=> sel copy/cp <x> <y> <z> - 相对于指定坐标或你当前位置复制选区。
+shadowbaritone.command.sel.long_desc.example.paste=> sel paste/p <x> <y> <z> - 相对于指定坐标或你当前位置建造已复制选区。
+shadowbaritone.command.sel.long_desc.example.expand=> sel expand <target> <direction> <blocks> - 扩展目标选区。
+shadowbaritone.command.sel.long_desc.example.contract=> sel contract <target> <direction> <blocks> - 收缩目标选区。
+shadowbaritone.command.sel.long_desc.example.shift=> sel shift <target> <direction> <blocks> - 平移目标选区（不会改变大小）。

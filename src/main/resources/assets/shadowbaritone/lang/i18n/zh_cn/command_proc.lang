@@ -1,0 +1,10 @@
+# ShadowBaritone module: command_proc
+
+shadowbaritone.command.proc.error.no_process=当前没有正在控制的进程
+shadowbaritone.command.proc.status.process_info=类：%s\n优先级：%f\n临时进程：%b\n显示名称：%s\n最近命令：%s
+shadowbaritone.command.proc.value.none=无
+shadowbaritone.command.proc.short_desc=查看进程状态信息
+shadowbaritone.command.proc.long_desc.1=proc 命令会提供当前正在控制 Baritone 的进程信息。
+shadowbaritone.command.proc.long_desc.2=如果你不熟悉 Baritone 的工作方式，通常不需要理解这些信息。
+shadowbaritone.command.proc.long_desc.usage=用法：
+shadowbaritone.command.proc.long_desc.example.default=> proc - 查看当前进程信息（如果存在）

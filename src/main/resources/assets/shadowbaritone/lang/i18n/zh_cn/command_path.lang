@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_path
+
+shadowbaritone.command.path.status.pathing=开始寻路。
+shadowbaritone.command.path.short_desc=开始朝目标寻路
+shadowbaritone.command.path.long_desc.1=path 命令会让 Baritone 朝当前目标开始寻路。
+shadowbaritone.command.path.long_desc.usage=用法：
+shadowbaritone.command.path.long_desc.example.default=> path - 开始寻路

@@ -1,0 +1,7 @@
+# zszl_script i18n module: command_palette
+gui.command_palette.title=命令面板
+gui.command_palette.search_placeholder=搜索命令、说明或快捷键
+gui.command_palette.results=%s 个命令
+gui.command_palette.empty=没有匹配的命令
+gui.command_palette.settings_tooltip=设置此命令的快捷键
+gui.command_palette.settings_generic=打开快捷键工作台

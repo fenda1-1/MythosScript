@@ -1,0 +1,340 @@
+{
+  "groups": [
+    {
+      "id": "movement",
+      "name": "移动",
+      "features": [
+        {
+          "id": "speed",
+          "name": "加速",
+          "description": "左键切换加速总开关，右键打开参数配置。支持 Ground、Air、Bhop、LowHop、OnGround 五种模式。"
+        },
+        {
+          "id": "no_slow",
+          "name": "不受减速",
+          "description": "使用物品或处于常见减速场景时尽量维持移动速度。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "force_sprint",
+          "name": "强制疾跑",
+          "description": "检测到移动输入时自动保持疾跑状态。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "anti_knockback",
+          "name": "防击退",
+          "description": "尽量取消近战与常规受击产生的击退位移，让站位更稳定。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "gui_move",
+          "name": "GUI界面下移动",
+          "description": "打开 GUI 时依旧允许 WASD、跳跃和下蹲。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "auto_step",
+          "name": "自动台阶",
+          "description": "自动抬升 1 到 2 格台阶，减少低矮障碍卡顿。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "freecam",
+          "name": "灵魂出窍",
+          "description": "本体留在原地，幽灵视角自由穿墙查看。WASD 移动，空格上升，潜行下降，疾跑键加速。关闭后回到本体，仅查看已加载区块。"
+        },
+        {
+          "id": "wall_climb",
+          "name": "爬墙",
+          "description": "贴墙行走，天花板 WASD 跟随视角，可爬上高一格的天花板。中键吐丝吸附准星表面，再按中键取消；空格蹬离，潜行松开。右键配置吐丝开关、行走和吸附速度。"
+        },
+        {
+          "id": "block_phase",
+          "name": "方块穿透",
+          "description": "偏向轻微脱困的方块碰撞修正，避免边角卡住。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "no_collision",
+          "name": "无碰撞",
+          "description": "尽量减少与实体之间的推动和挤压，穿人群、贴怪或拥挤场景时更不容易被顶偏。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "long_jump",
+          "name": "长距离跳跃",
+          "description": "预留蓄力超远跳跃逻辑。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "timer_accel",
+          "name": "定时器",
+          "description": "独立调高游戏时钟倍率，加快整体 tick 节奏。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "blink_move",
+          "name": "闪烁移动",
+          "description": "预留短距离瞬间位移逻辑。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "safe_walk",
+          "name": "安全行走",
+          "description": "模拟原版潜行时的贴边防掉落，但不额外降低正常走路速度。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "scaffold",
+          "name": "脚手架",
+          "description": "预留边走边自动铺方块逻辑。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "low_gravity",
+          "name": "低重力模式",
+          "description": "降低下落速度，让空中停留更久。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "ice_boost",
+          "name": "冰面加速",
+          "description": "在冰、浮冰或蓝冰上额外提高水平速度。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "lava_walk",
+          "name": "液体行走",
+          "description": "将水、岩浆等液体表面临时视作可行走平台。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "auto_obstacle_avoid",
+          "name": "自动避障",
+          "description": "预留自动绕开近距离障碍物逻辑。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "hover_mode",
+          "name": "悬停模式",
+          "description": "空中尝试保持定点悬停。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "fall_cushion",
+          "name": "下落缓冲",
+          "description": "快速下落接近地面时自动削弱坠落速度。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "no_fall",
+          "name": "无摔伤",
+          "description": "下落过高时主动补发落地状态，尽量规避摔落伤害。左键快速开关，右键打开移动设置。"
+        },
+        {
+          "id": "anti_arrow_knockback",
+          "name": "反击飞",
+          "description": "尽量压低箭矢等远程命中后的击退位移。左键快速开关，右键打开移动设置。"
+        }
+      ]
+    },
+    {
+      "id": "render",
+      "name": "渲染",
+      "features": [
+        {
+          "id": "brightness_boost",
+          "name": "亮度增强",
+          "description": "通过 Gamma 提升整体亮度。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "no_fog",
+          "name": "迷雾移除",
+          "description": "尽量移除世界和液体中的雾气遮挡。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "entity_visual",
+          "name": "实体视觉",
+          "description": "高亮玩家、怪物和动物轮廓，可选择穿墙与填充显示。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "tracer_line",
+          "name": "Tracer线",
+          "description": "从视角位置向附近目标绘制引导线。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "entity_tags",
+          "name": "实体标签",
+          "description": "显示实体名称、血量、距离和手持物。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "block_highlight",
+          "name": "方块高亮",
+          "description": "高亮矿石、箱子、潜影盒、末影箱和刷怪笼等重要方块。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "xray",
+          "name": "X光",
+          "description": "仅保留矿石方块可见，让其余方块透明，方便快速找矿。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "item_esp",
+          "name": "物品ESP",
+          "description": "高亮地面掉落物，并可显示名称和距离。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "trajectory_line",
+          "name": "轨迹线",
+          "description": "预估弓箭、珍珠、雪球和药水的飞行轨迹。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "custom_crosshair",
+          "name": "自定义十字准星",
+          "description": "使用可调颜色、大小和动态间距的准星替换原版准星。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "anti_bob",
+          "name": "防抖动",
+          "description": "抑制走路视角晃动和受伤镜头抖动。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "ground_speed",
+          "name": "地速显示",
+          "description": "在屏幕右上角显示当前水平地速，便于观察移动状态和速度变化。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "radar",
+          "name": "雷达",
+          "description": "在屏幕角落显示附近玩家、怪物和动物的相对位置。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "player_skeleton",
+          "name": "玩家骨骼",
+          "description": "以骨架线条形式显示附近玩家站姿和朝向。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "block_outline",
+          "name": "方块轮廓",
+          "description": "为当前选中的方块显示更清晰的精确边框。左键快速开关，右键打开渲染设置。"
+        },
+        {
+          "id": "entity_info",
+          "name": "实体信息",
+          "description": "准星指向实体时显示更详细的信息面板。左键快速开关，右键打开渲染设置。"
+        }
+      ]
+    },
+    {
+      "id": "block",
+      "name": "方块",
+      "features": [
+        {
+          "id": "auto_tool",
+          "name": "自动切工具",
+          "description": "挖方块时自动切到热栏中更合适的工具。左键快速开关，右键打开方块设置。"
+        },
+        {
+          "id": "fast_place",
+          "name": "快速放置",
+          "description": "仅在手持方块时缩短放置延迟，不影响吃东西、药水和投掷物。左键快速开关，右键打开方块设置。"
+        },
+        {
+          "id": "place_assist",
+          "name": "精准放置辅助",
+          "description": "边缘放置或点空气失败时，自动补一个更合法的支撑面与朝向。左键快速开关，右键打开方块设置。"
+        },
+        {
+          "id": "fast_break",
+          "name": "基础快速挖掘",
+          "description": "保守降低客户端挖掘延迟，让连挖和打击手感更顺。左键快速开关，右键打开方块设置。"
+        },
+        {
+          "id": "auto_light",
+          "name": "自动补光",
+          "description": "在光照过暗时自动尝试补一个临时光源，减少洞穴、矿道和夜间操作时的黑区。左键快速开关，右键打开方块设置。"
+        },
+        {
+          "id": "block_swap_lock",
+          "name": "方块热栏锁定",
+          "description": "放置建筑方块时短暂锁定当前热栏，避免自动切换影响搭建手感。左键快速开关，右键打开方块设置。"
+        },
+        {
+          "id": "surround",
+          "name": "自动围身",
+          "description": "自动在脚边放方块保护自身，防止被攻击。左键快速开关，右键打开方块设置。"
+        },
+        {
+          "id": "block_refill",
+          "name": "方块自动补栏",
+          "description": "热栏里的建筑方块快没了时，从背包自动补到原槽位。左键快速开关，右键打开方块设置。"
+        },
+        {
+          "id": "ghost_hand_block",
+          "name": "穿墙方块交互",
+          "description": "隔墙拆/放/开容器等高风险功能，可能被服务器检测。左键快速开关，右键打开方块设置。"
+        }
+      ]
+    },
+    {
+      "id": "world",
+      "name": "世界",
+      "features": [
+        {
+          "id": "time_modifier",
+          "name": "时间修改",
+          "description": "自定义世界时间，可设置为白天、黑夜或任意时刻。左键快速开关，右键打开世界设置。"
+        },
+        {
+          "id": "weather_control",
+          "name": "天气控制",
+          "description": "控制雨雪天气强度，可完全关闭或自定义。左键快速开关，右键打开世界设置。"
+        },
+        {
+          "id": "coord_display",
+          "name": "坐标显示",
+          "description": "增强版坐标HUD，显示XYZ坐标、朝向、生物群系等信息。左键快速开关，右键打开世界设置。"
+        }
+      ]
+    },
+    {
+      "id": "item",
+      "name": "物品",
+      "features": [
+        {
+          "id": "inventory_sort",
+          "name": "自动整理",
+          "description": "自动整理背包物品，减少背包杂乱。左键快速开关，右键打开物品设置。"
+        },
+        {
+          "id": "chest_steal",
+          "name": "箱子窃取",
+          "description": "自动从箱子里搬运物品到背包。左键快速开关，右键打开物品设置。"
+        },
+        {
+          "id": "auto_equip",
+          "name": "自动装备",
+          "description": "自动穿戴更好的装备，并可打开现有自动穿戴配置。左键快速开关，右键打开物品设置。"
+        },
+        {
+          "id": "always_critical",
+          "name": "刀刀暴击",
+          "description": "攻击实体前补发短暂伪下落数据，尽量让近战命中按原版暴击结算。左键快速开关，右键打开物品设置。"
+        },
+        {
+          "id": "force_no_hunger",
+          "name": "强制不饥饿",
+          "description": "持续锁定客户端饥饿值与饱和度，尽量保持满饱食显示。左键快速开关，右键打开物品设置。"
+        },
+        {
+          "id": "drop_all",
+          "name": "丢弃所有",
+          "description": "一键丢弃指定物品，方便快速清包。左键快速开关，右键打开物品设置。"
+        },
+        {
+          "id": "shulker_preview",
+          "name": "潜影盒预览",
+          "description": "鼠标悬停时预览潜影盒内容。左键快速开关，右键打开物品设置。"
+        }
+      ]
+    },
+    {
+      "id": "misc",
+      "name": "杂项",
+      "features": [
+        {
+          "id": "auto_reconnect",
+          "name": "自动重连",
+          "description": "被踢出服务器后自动尝试重新连接。左键快速开关，右键打开杂项设置。"
+        },
+        {
+          "id": "auto_respawn",
+          "name": "死亡自动复活",
+          "description": "出现死亡界面后自动点击复活，减少手动操作。左键快速开关，右键打开杂项设置。"
+        }
+      ]
+    }
+  ]
+}

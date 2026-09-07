@@ -1,0 +1,11 @@
+# ShadowBaritone module: command_goto
+
+shadowbaritone.command.goto.status.going_to=Going to: %s
+shadowbaritone.command.goto.short_desc=Go to a coordinate or block
+shadowbaritone.command.goto.long_desc.1=The goto command makes Baritone move toward the specified goal or block.
+shadowbaritone.command.goto.long_desc.2=Wherever coordinates are required, you can use ~ just like in vanilla Minecraft commands, or enter ordinary numbers directly.
+shadowbaritone.command.goto.long_desc.usage=Usage:
+shadowbaritone.command.goto.long_desc.example.block=> goto <block> - Go to a block in the world
+shadowbaritone.command.goto.long_desc.example.y=> goto <y> - Go to the specified Y level
+shadowbaritone.command.goto.long_desc.example.xz=> goto <x> <z> - Go to the specified X,Z coordinates
+shadowbaritone.command.goto.long_desc.example.xyz=> goto <x> <y> <z> - Go to the specified X,Y,Z coordinates

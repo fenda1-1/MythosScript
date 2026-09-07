@@ -1,0 +1,8 @@
+# ShadowBaritone module: command_version
+
+shadowbaritone.command.version.error.null_version=版本号为空（在开发环境中这通常是正常现象）
+shadowbaritone.command.version.status.current=你当前运行的 Baritone 版本为 v%s
+shadowbaritone.command.version.short_desc=查看 Baritone 版本
+shadowbaritone.command.version.long_desc.1=version 命令会输出你当前正在运行的 Baritone 版本。
+shadowbaritone.command.version.long_desc.usage=用法：
+shadowbaritone.command.version.long_desc.example.default=> version - 查看版本信息（如果存在）

@@ -1,0 +1,9 @@
+# zszl_script i18n module: profile
+gui.profile.title=配置管理
+gui.profile.empty=暂无配置，点击“新建”创建
+gui.profile.select=§a选择
+gui.profile.create=§b新建
+gui.profile.delete=§c删除
+gui.profile.current=(当前)
+gui.profile.default=(默认)
+gui.profile.input_new=输入新配置名称

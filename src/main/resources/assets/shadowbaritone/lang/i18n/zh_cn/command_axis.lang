@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_axis
+
+shadowbaritone.command.axis.status.goal=目标：%s
+shadowbaritone.command.axis.short_desc=将目标设为坐标轴
+shadowbaritone.command.axis.long_desc.1=axis 命令会设置一个目标，让 Baritone 朝最近的坐标轴前进，也就是 X=0 或 Z=0。
+shadowbaritone.command.axis.long_desc.usage=用法：
+shadowbaritone.command.axis.long_desc.example.default=> axis

@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_alias
+
+shadowbaritone.command.alias.long_desc=此命令是以下命令的别名：%s ...
+shadowbaritone.command.alias.modified.short_desc=列出已修改设置
+shadowbaritone.command.alias.reset.short_desc=重置全部设置，或只重置单项
+shadowbaritone.command.alias.sethome.short_desc=设置你的 home 航点
+shadowbaritone.command.alias.home.short_desc=前往你的 home 航点
