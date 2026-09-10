@@ -33,6 +33,7 @@ final class PacketViewerPanel extends PacketPanelBase {
     private final String customTitle;
     private final boolean readOnly;
     private final boolean minimalView;
+    private final Long focusTimestamp;
     private final Set<Integer> selected = new HashSet<>();
     private List<PacketCaptureHandler.CapturedPacketData> visible = new ArrayList<>();
     private List<InputTimelineManager.InputEventRecord> timeline = new ArrayList<>();
@@ -44,6 +45,9 @@ final class PacketViewerPanel extends PacketPanelBase {
     private int timelineScroll;
     private int lastSelected = -1;
     private int selectedTimeline = -1;
+    private int focusedPacketIndex = -1;
+    private boolean focusScrollPending;
+    private boolean focusApplied;
     private long lastClickAt;
     private int packetRowHeight;
     private int packetColumns = 1;
@@ -76,20 +80,25 @@ final class PacketViewerPanel extends PacketPanelBase {
     private final ModernMainLayout.Rect[] optionBounds = new ModernMainLayout.Rect[3];
     private final ModernMainLayout.Rect[] directionBounds = new ModernMainLayout.Rect[2];
 
-    PacketViewerPanel(PacketWorkbenchTab owner) { this(owner, null, "", false, "C2S"); }
+    PacketViewerPanel(PacketWorkbenchTab owner) { this(owner, null, "", false, "C2S", false, null); }
     PacketViewerPanel(PacketWorkbenchTab owner, List<PacketCaptureHandler.CapturedPacketData> packets, String title, boolean readOnly) {
-        this(owner, packets, title, readOnly, "C2S");
+        this(owner, packets, title, readOnly, "C2S", false, null);
     }
     PacketViewerPanel(PacketWorkbenchTab owner, List<PacketCaptureHandler.CapturedPacketData> packets, String title, boolean readOnly, String initialDirection) {
-        this(owner, packets, title, readOnly, initialDirection, false);
+        this(owner, packets, title, readOnly, initialDirection, false, null);
     }
     PacketViewerPanel(PacketWorkbenchTab owner, List<PacketCaptureHandler.CapturedPacketData> packets, String title,
             boolean readOnly, String initialDirection, boolean minimalView) {
+        this(owner, packets, title, readOnly, initialDirection, minimalView, null);
+    }
+    PacketViewerPanel(PacketWorkbenchTab owner, List<PacketCaptureHandler.CapturedPacketData> packets, String title,
+            boolean readOnly, String initialDirection, boolean minimalView, Long focusTimestamp) {
         super(owner, "gui.modern.pktview.u004", !minimalView, !minimalView);
         fixedPackets = packets == null ? null : new ArrayList<>(packets);
         customTitle = title == null ? "" : title;
         this.readOnly = readOnly;
         this.minimalView = minimalView;
+        this.focusTimestamp = focusTimestamp;
         mode = "S2C".equals(PacketSendSupport.normalizeDirection(initialDirection)) ? Mode.RECEIVED : Mode.SENT;
     }
 
@@ -264,6 +273,12 @@ final class PacketViewerPanel extends PacketPanelBase {
         packetRowHeight = cardHeight;
         int rows = packetVisibleRows();
         int columns = effectiveColumns();
+        applyInitialFocusIfNeeded();
+        if (focusScrollPending && focusedPacketIndex >= 0 && focusedPacketIndex < visible.size()) {
+            int focusRow = focusedPacketIndex / Math.max(1, columns);
+            packetScroll = clamp(focusRow, 0, packetScrollMax());
+            focusScrollPending = false;
+        }
         int cardGap = 6, cardWidth = Math.max(1, (ModernHoverScrollbar.contentWidth(rightBounds.width - 9) - cardGap * (columns - 1)) / columns);
         for (int row = packetScroll; row < Math.min(packetRowCount(), packetScroll + rows); row++) {
             for (int col = 0; col < columns; col++) {
@@ -271,7 +286,7 @@ final class PacketViewerPanel extends PacketPanelBase {
                 PacketCaptureHandler.CapturedPacketData packet = visible.get(i);
                 int rowY = y + (row - packetScroll) * packetRowHeight, cardX = rightBounds.x + 5 + col * (cardWidth + cardGap);
                 boolean hover = mouseX >= cardX && mouseX < cardX + cardWidth && mouseY >= rowY && mouseY < rowY + cardHeight;
-                boolean chosen = selected.contains(i);
+                boolean chosen = selected.contains(i) || i == focusedPacketIndex;
                 ModernUiRenderer.drawSubtlePanel(cardX, rowY, cardWidth, cardHeight, 4,
                     chosen ? ModernUiRenderer.SELECTED_SURFACE : hover ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SHELL_RAISED,
                     chosen ? ModernUiRenderer.ACCENT : hover ? ModernUiRenderer.BORDER : ModernUiRenderer.BORDER_SUBTLE);
@@ -303,8 +318,10 @@ final class PacketViewerPanel extends PacketPanelBase {
     }
 
     private void drawFooter(FontRenderer renderer, int mouseX, int mouseY) {
-        String[] labels = readOnly
+        String[] labels = readOnly && !allowsMockSend()
                 ? new String[] { "gui.modern.pktview.u018", "gui.modern.pktview.u021" }
+                : readOnly
+                ? new String[] { "gui.modern.pktview.u018", "gui.modern.pktview.u021", "gui.modern.pktview.u022" }
                 : new String[] { "gui.modern.pktview.u019", "gui.modern.pktview.u020", "gui.modern.pktview.u021", "gui.modern.pktview.u022", "gui.modern.pktview.u023", "gui.modern.pktview.u024", "gui.modern.pktview.u025", "gui.modern.pktview.u026", "gui.modern.pktview.u027" };
         footerActions.clear();
         int columns = footerBounds.height >= 60 ? 3 : labels.length;
@@ -319,7 +336,7 @@ final class PacketViewerPanel extends PacketPanelBase {
             footerActions.add(r);
             boolean enabled;
             if (readOnly) {
-                enabled = i == 0 || (i == 1 && !selected.isEmpty());
+                enabled = i == 0 || ((i == 1 || i == 2) && !selected.isEmpty());
             } else {
                 switch (i) {
                     case 0: enabled = !selected.isEmpty(); break;
@@ -332,7 +349,8 @@ final class PacketViewerPanel extends PacketPanelBase {
             ModernUiRenderer.drawSubtlePanel(r.x, r.y, r.width, r.height, 3,
                     !enabled ? 0xFF151E26 : hover ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SURFACE,
                     enabled && (i == 3 || i == 0 && !readOnly) ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
-            text(renderer, labels[i], r.x + 5, r.y + 6, !enabled ? ModernUiRenderer.MUTED_TEXT : ModernUiRenderer.TEXT, r.width - 10);
+            centeredLabel(renderer, labels[i], r,
+                    !enabled ? ModernUiRenderer.MUTED_TEXT : ModernUiRenderer.TEXT);
         }
     }
 
@@ -404,6 +422,7 @@ final class PacketViewerPanel extends PacketPanelBase {
         if (readOnly) {
             if (index == 0) owner.back();
             else if (index == 1 && !selected.isEmpty()) copySelected();
+            else if (index == 2 && allowsMockSend() && !selected.isEmpty()) sendSelected();
             return true;
         }
         switch (index) {
@@ -418,6 +437,10 @@ final class PacketViewerPanel extends PacketPanelBase {
             case 8: InputTimelineManager.clear(); timeline.clear(); selectedTimeline = -1; owner.status("gui.modern.pktview.u028"); return true;
             default: return true;
         }
+    }
+
+    private boolean allowsMockSend() {
+        return focusTimestamp != null;
     }
 
     private void select(int index) {
@@ -454,9 +477,25 @@ final class PacketViewerPanel extends PacketPanelBase {
                 }
             }
         }
+        applyInitialFocusIfNeeded();
         selected.removeIf(i -> i < 0 || i >= visible.size());
         packetScroll = clamp(packetScroll, 0, packetScrollMax());
         timelineScroll = clamp(timelineScroll, 0, timelineScrollMax());
+    }
+
+    private void applyInitialFocusIfNeeded() {
+        if (focusApplied || focusTimestamp == null || visible.isEmpty()) {
+            return;
+        }
+        int nearest = nearestPacketIndex(visible, focusTimestamp.longValue());
+        if (nearest >= 0) {
+            selected.clear();
+            selected.add(Integer.valueOf(nearest));
+            lastSelected = nearest;
+            focusedPacketIndex = nearest;
+            focusScrollPending = true;
+            focusApplied = true;
+        }
     }
 
     private List<PacketCaptureHandler.CapturedPacketData> visibleBeforeWindow(List<PacketCaptureHandler.CapturedPacketData> source, String query) {
@@ -469,10 +508,17 @@ final class PacketViewerPanel extends PacketPanelBase {
         int best = -1; long bestDiff = Long.MAX_VALUE;
         for (int i = 0; i < packets.size(); i++) {
             PacketCaptureHandler.CapturedPacketData packet = packets.get(i); if (packet == null) continue;
-            long diff = Math.abs(packet.getLastTimestamp() - timestamp);
+            long diff = packetDistance(packet, timestamp);
             if (diff < bestDiff) { best = i; bestDiff = diff; }
         }
         return best;
+    }
+
+    private long packetDistance(PacketCaptureHandler.CapturedPacketData packet, long timestamp) {
+        if (packet == null) return Long.MAX_VALUE;
+        if (timestamp < packet.timestamp) return packet.timestamp - timestamp;
+        if (timestamp > packet.getLastTimestamp()) return timestamp - packet.getLastTimestamp();
+        return 0L;
     }
 
     private boolean matches(PacketCaptureHandler.CapturedPacketData packet, String query) {
@@ -531,7 +577,7 @@ final class PacketViewerPanel extends PacketPanelBase {
         int best = 0;
         long bestDiff = Long.MAX_VALUE;
         for (int i = 0; i < visible.size(); i++) {
-            long diff = Math.abs(visible.get(i).getLastTimestamp() - timestamp);
+            long diff = packetDistance(visible.get(i), timestamp);
             if (diff < bestDiff) { best = i; bestDiff = diff; }
         }
         selected.clear(); selected.add(best); lastSelected = best;

@@ -102,6 +102,12 @@ public final class PacketWorkbenchTab implements ModernSettingsTab {
         lastSelectedPacket = null;
         showChild(VIEWER, new PacketViewerPanel(this, packets, title, readOnly, direction, minimalView));
     }
+    public void openViewer(List<PacketCaptureHandler.CapturedPacketData> packets, String title, boolean readOnly,
+            String direction, boolean minimalView, long focusTimestamp) {
+        lastSelectedPacket = null;
+        showChild(VIEWER, new PacketViewerPanel(this, packets, title, readOnly, direction, minimalView,
+                focusTimestamp > 0L ? Long.valueOf(focusTimestamp) : null));
+    }
     public boolean isViewerOpen() { return VIEWER.equals(focusedCommand); }
     public PacketCaptureHandler.CapturedPacketData selectedPacket() {
         if (current() instanceof PacketViewerPanel) {

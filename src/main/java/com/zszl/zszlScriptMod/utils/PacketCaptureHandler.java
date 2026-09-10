@@ -117,6 +117,7 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
     private static volatile String latestBossbarText = "";
 
     private static class PendingPacketSnapshot {
+        final long timestamp;
         final String packetClassName;
         final boolean isFmlPacket;
         final Integer packetId;
@@ -124,8 +125,9 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
         final byte[] rawData;
         final boolean isSent;
 
-        PendingPacketSnapshot(String packetClassName, boolean isFmlPacket, Integer packetId, String channel,
-                byte[] rawData, boolean isSent) {
+        PendingPacketSnapshot(long timestamp, String packetClassName, boolean isFmlPacket, Integer packetId,
+                String channel, byte[] rawData, boolean isSent) {
+            this.timestamp = timestamp;
             this.packetClassName = packetClassName;
             this.isFmlPacket = isFmlPacket;
             this.packetId = packetId;
@@ -1073,7 +1075,10 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
                 return;
             }
 
-            PendingPacketSnapshot snapshot = buildSnapshot(packet, isSent);
+            // Correlation with recorded input events must use the moment the packet
+            // crossed the network handler, not the later main-thread queue drain.
+            long captureTimestamp = System.currentTimeMillis();
+            PendingPacketSnapshot snapshot = buildSnapshot(packet, isSent, captureTimestamp);
             if (snapshot == null) {
                 return;
             }
@@ -1129,7 +1134,7 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
         }
     }
 
-    private PendingPacketSnapshot buildSnapshot(Packet<?> packet, boolean isSent) throws Exception {
+    private PendingPacketSnapshot buildSnapshot(Packet<?> packet, boolean isSent, long captureTimestamp) throws Exception {
         String packetClassName = packet.getClass().getSimpleName();
         String channel = "N/A";
         byte[] rawData;
@@ -1162,7 +1167,7 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
             }
         }
 
-        return new PendingPacketSnapshot(packetClassName, isFml, packetId, channel, rawData, isSent);
+        return new PendingPacketSnapshot(captureTimestamp, packetClassName, isFml, packetId, channel, rawData, isSent);
     }
 
     private boolean shouldCapture(PendingPacketSnapshot snapshot) {
@@ -1347,8 +1352,8 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
                 break;
             }
 
-            CapturedPacketData packetData = new CapturedPacketData(snapshot.packetClassName, snapshot.isFmlPacket,
-                    snapshot.packetId, snapshot.channel, snapshot.rawData, null);
+            CapturedPacketData packetData = new CapturedPacketData(snapshot.timestamp, snapshot.packetClassName,
+                    snapshot.isFmlPacket, snapshot.packetId, snapshot.channel, snapshot.rawData, null);
 
             if (snapshot.isSent) {
                 appendCapturedPacket(capturedPackets, packetData, capturedSentRawBytes);

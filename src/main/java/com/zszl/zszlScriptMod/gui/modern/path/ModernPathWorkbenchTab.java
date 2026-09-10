@@ -9344,9 +9344,19 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         }
         List<PacketCaptureHandler.CapturedPacketData> packets = RecordingPacketSupport.packetsForDirection(
                 recordingPacketAction.params, recordingPacketDirection);
+        long focusTimestamp = 0L;
+        if (recordingPacketAction.params != null
+                && recordingPacketAction.params.has(RecordingPacketSupport.INPUT_TIMESTAMP_KEY)) {
+            try {
+                focusTimestamp = recordingPacketAction.params
+                        .get(RecordingPacketSupport.INPUT_TIMESTAMP_KEY).getAsLong();
+            } catch (Exception ignored) {
+                // Older or manually edited actions may not have a valid timestamp.
+            }
+        }
         String title = RecordingPacketSupport.C2S.equals(recordingPacketDirection)
                 ? "gui.modern.path.record.packet_send" : "gui.modern.path.record.packet_receive";
-        recordingPacketWorkbench.openViewer(packets, title, true, recordingPacketDirection, true);
+        recordingPacketWorkbench.openViewer(packets, title, true, recordingPacketDirection, true, focusTimestamp);
     }
 
     private void closeRecordingPacketOverlay() {
@@ -9378,7 +9388,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         ModernUiRenderer.drawPanel(x, y, width, height, 7, ModernUiRenderer.SHELL_RAISED, ModernUiRenderer.ACCENT);
         ModernUiRenderer.drawText(font, "gui.modern.path.record.packet_browser", x + 12, y + 9,
                 ModernUiRenderer.TEXT, Math.max(80, width - 300));
-        int buttonY = y + 5;
+        int buttonY = y + 8;
         int buttonX = x + Math.max(150, width / 3);
         recordingPacketSendBounds = new ModernMainLayout.Rect(buttonX, buttonY, 86, 22);
         recordingPacketReceiveBounds = new ModernMainLayout.Rect(buttonX + 90, buttonY, 86, 22);
@@ -9386,20 +9396,20 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 RecordingPacketSupport.C2S.equals(recordingPacketDirection), false, true, mouseX, mouseY);
         drawButton(font, recordingPacketReceiveBounds, "gui.modern.path.record.packet_receive",
                 RecordingPacketSupport.S2C.equals(recordingPacketDirection), false, true, mouseX, mouseY);
-        int closeX = x + width - 28;
+        int closeX = x + width - 12 - 22;
         recordingPacketCloseBounds = new ModernMainLayout.Rect(closeX, buttonY, 22, 22);
         boolean closeHover = recordingPacketCloseBounds.contains(mouseX, mouseY);
         ModernUiRenderer.drawSubtlePanel(closeX, buttonY, 22, 22, 5,
                 closeHover ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SURFACE,
                 closeHover ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
-        ModernUiRenderer.drawCloseIcon(closeX + 11, buttonY + 11,
+        ModernUiRenderer.drawCloseIcon(closeX + 6, buttonY + 6,
                 closeHover ? ModernUiRenderer.TEXT : ModernUiRenderer.SUBTLE_TEXT);
         PacketCaptureHandler.CapturedPacketData selected = recordingPacketWorkbench.selectedPacket();
         int replaceWidth = 118;
         recordingPacketReplaceBounds = new ModernMainLayout.Rect(closeX - replaceWidth - 8, buttonY, replaceWidth, 22);
         drawButton(font, recordingPacketReplaceBounds, "gui.modern.path.record.packet_replace", true, false,
                 selected != null && recordingPacketAction != null, mouseX, mouseY);
-        recordingPacketViewerBounds = new ModernMainLayout.Rect(x + 7, y + 32, width - 14, height - 39);
+        recordingPacketViewerBounds = new ModernMainLayout.Rect(x + 10, y + 35, width - 20, height - 47);
         recordingPacketWorkbench.draw(font, recordingPacketViewerBounds, mouseX, mouseY);
     }
 
