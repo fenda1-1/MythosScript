@@ -1,0 +1,9 @@
+# ShadowBaritone module: command_blacklist
+
+shadowbaritone.command.blacklist.error.not_active=当前未在执行前往方块流程
+shadowbaritone.command.blacklist.error.no_known_locations=没有已知位置，无法加入黑名单
+shadowbaritone.command.blacklist.status.blacklisted_closest=已将最近目标加入黑名单。
+shadowbaritone.command.blacklist.short_desc=将最近方块加入黑名单
+shadowbaritone.command.blacklist.long_desc.1=在前往某个方块时，此命令会将最近的目标方块加入黑名单，使 Baritone 不再尝试到达它。
+shadowbaritone.command.blacklist.long_desc.usage=用法：
+shadowbaritone.command.blacklist.long_desc.example.default=> blacklist

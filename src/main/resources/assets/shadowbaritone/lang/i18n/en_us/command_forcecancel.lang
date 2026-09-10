@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_forcecancel
+
+shadowbaritone.command.forcecancel.status.canceled=Force-canceled.
+shadowbaritone.command.forcecancel.short_desc=Force-cancel the current process
+shadowbaritone.command.forcecancel.long_desc.1=Like cancel, but interrupts the current behavior more forcefully.
+shadowbaritone.command.forcecancel.long_desc.usage=Usage:
+shadowbaritone.command.forcecancel.long_desc.example.default=> forcecancel

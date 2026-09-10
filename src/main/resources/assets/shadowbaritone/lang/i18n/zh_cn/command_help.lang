@@ -1,0 +1,10 @@
+# ShadowBaritone module: command_help
+
+shadowbaritone.command.help.header.all_commands=所有 Baritone 命令（可点击）：
+shadowbaritone.command.help.hover.click_full_help=点击查看完整帮助
+shadowbaritone.command.help.action.return_to_menu=点击返回帮助菜单
+shadowbaritone.command.help.short_desc=查看全部命令，或查看指定命令的帮助
+shadowbaritone.command.help.long_desc.1=使用此命令可查看 Baritone 某些命令的详细帮助信息。
+shadowbaritone.command.help.long_desc.usage=用法：
+shadowbaritone.command.help.long_desc.example.list=> help - 列出所有命令及其简短说明。
+shadowbaritone.command.help.long_desc.example.command=> help <command> - 显示某个具体命令的帮助信息。

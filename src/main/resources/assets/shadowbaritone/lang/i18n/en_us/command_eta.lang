@@ -1,0 +1,10 @@
+# ShadowBaritone module: command_eta
+
+shadowbaritone.command.eta.error.no_process=No process is currently being controlled
+shadowbaritone.command.eta.status.current=Next segment: %.1f seconds (%.0f ticks)\nGoal: %.1f seconds (%.0f ticks)
+shadowbaritone.command.eta.short_desc=View the current estimated time of arrival
+shadowbaritone.command.eta.long_desc.1=The eta command provides an estimated time for reaching the next path segment,
+shadowbaritone.command.eta.long_desc.2=as well as an approximate estimated time for reaching the goal.
+shadowbaritone.command.eta.long_desc.3=Note that the ETA for reaching the final goal is usually not very accurate.
+shadowbaritone.command.eta.long_desc.usage=Usage:
+shadowbaritone.command.eta.long_desc.example.default=> eta - View the ETA (if available)

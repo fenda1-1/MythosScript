@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_thisway
+
+shadowbaritone.command.thisway.status.goal=Goal: %s
+shadowbaritone.command.thisway.short_desc=Move in the direction you are facing
+shadowbaritone.command.thisway.long_desc.1=Creates a GoalXZ a certain number of blocks ahead in the direction you are facing.
+shadowbaritone.command.thisway.long_desc.usage=Usage:
+shadowbaritone.command.thisway.long_desc.example.default=> thisway <distance> - Create a GoalXZ target that many blocks ahead of you.

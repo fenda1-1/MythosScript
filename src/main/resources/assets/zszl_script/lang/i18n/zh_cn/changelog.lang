@@ -1,0 +1,20 @@
+# zszl_script i18n module: changelog
+gui.changelog.empty_content=内容为空。
+gui.changelog.toc=目录
+gui.changelog.main_title=版 本 更 新 日 志
+gui.changelog.title=更新日志
+gui.changelog.description=浏览版本更新、功能改进与问题修复。
+gui.changelog.current=当前版本 %s
+gui.changelog.latest=最新版本 %s
+gui.changelog.header_versions=当前:%s / 最新:%s
+gui.changelog.refresh=刷新日志
+gui.changelog.refreshing=刷新中…
+gui.changelog.copy=复制全文
+gui.changelog.copied=更新日志已复制
+gui.changelog.outline=日志目录
+gui.changelog.read=返回正文
+gui.changelog.no_outline=暂无标题目录
+gui.changelog.loading=正在获取更新日志…
+gui.changelog.failed=刷新失败，可重试；已有日志仍可阅读。
+gui.changelog.empty=暂无更新内容，点击“刷新日志”重新获取。
+gui.changelog.ready=版本记录 · 点击目录快速跳转

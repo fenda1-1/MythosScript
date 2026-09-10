@@ -1,0 +1,9 @@
+# zszl_script i18n module: profile
+gui.profile.title=Configuration management
+gui.profile.empty=There is no configuration yet, click "New" to create
+gui.profile.select=Select
+gui.profile.create=New
+gui.profile.delete=Delete
+gui.profile.current=(current)
+gui.profile.default=(default)
+gui.profile.input_new=Enter new configuration name

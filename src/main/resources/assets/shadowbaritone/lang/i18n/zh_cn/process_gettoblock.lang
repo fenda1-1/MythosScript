@@ -1,0 +1,9 @@
+# ShadowBaritone module: process_gettoblock
+
+shadowbaritone.process.gettoblock.error.no_known_locations=没有已知位置：%s，已取消前往方块。
+shadowbaritone.process.gettoblock.error.no_path_blacklisting=无法找到通往 %s 的路径，正在将最近的疑似不可达实例加入黑名单...
+shadowbaritone.process.gettoblock.error.no_path_canceling=无法找到通往 %s 的路径，已取消前往方块。
+shadowbaritone.process.gettoblock.error.right_click_timed_out=右键交互超时。
+shadowbaritone.process.gettoblock.error.arrived_open_failed=已到达，但右键打开失败。
+shadowbaritone.process.gettoblock.display.exploring_no_locations=正在随机探索以寻找 %s，当前没有已知位置
+shadowbaritone.process.gettoblock.display.get_to_known_locations=前往 %s，当前有 %s 个已知位置

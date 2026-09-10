@@ -1,0 +1,9 @@
+# ShadowBaritone module: process_gettoblock
+
+shadowbaritone.process.gettoblock.error.no_known_locations=No known locations for %s; canceled going to the block.
+shadowbaritone.process.gettoblock.error.no_path_blacklisting=Unable to find a path to %s; blacklisting the nearest suspected unreachable instance...
+shadowbaritone.process.gettoblock.error.no_path_canceling=Unable to find a path to %s; canceled going to the block.
+shadowbaritone.process.gettoblock.error.right_click_timed_out=Right-click interaction timed out.
+shadowbaritone.process.gettoblock.error.arrived_open_failed=Arrived, but opening with right-click failed.
+shadowbaritone.process.gettoblock.display.exploring_no_locations=Randomly exploring to find %s; no known locations currently
+shadowbaritone.process.gettoblock.display.get_to_known_locations=Going to %s; %s known locations currently

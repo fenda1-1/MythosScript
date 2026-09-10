@@ -1,0 +1,17 @@
+# ShadowBaritone module: process_builder
+
+shadowbaritone.process.builder.error.no_selection_build_only=BuildOnlySelection=true 时未设置选区。
+shadowbaritone.process.builder.error.no_schematic_open=当前未打开蓝图。
+shadowbaritone.process.builder.error.schematica_not_present=未检测到 Schematica。
+shadowbaritone.process.builder.error.schematic_file_load_failed=蓝图文件加载失败。
+shadowbaritone.process.builder.error.no_schematic_loaded=当前未加载蓝图。
+shadowbaritone.process.builder.error.litematica_not_present=未检测到 Litematica。
+shadowbaritone.process.builder.error.unable_pausing=当前无法继续，已暂停。输入 resume 继续，输入 cancel 取消。
+shadowbaritone.process.builder.status.starting_layer=开始建造层：%s
+shadowbaritone.process.builder.status.done_building=建造完成。
+shadowbaritone.process.builder.status.repeating_build=按向量重复建造：%s，新原点为 %s
+shadowbaritone.process.builder.status.skipping_unconstructable_layer=跳过无法建造的层！层号 #%s
+shadowbaritone.process.builder.status.missing_materials=至少缺少以下材料：
+shadowbaritone.process.builder.status.unreplaceable_liquids=至少存在不可替换液体：
+shadowbaritone.process.builder.display.paused=建造器已暂停
+shadowbaritone.process.builder.display.building=正在建造 %s

@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_render
+
+shadowbaritone.command.render.status.done=Done
+shadowbaritone.command.render.short_desc=Fix abnormal chunk rendering
+shadowbaritone.command.render.long_desc.1=The render command fixes abnormal chunk rendering without reloading all chunks.
+shadowbaritone.command.render.long_desc.usage=Usage:
+shadowbaritone.command.render.long_desc.example.default=> render

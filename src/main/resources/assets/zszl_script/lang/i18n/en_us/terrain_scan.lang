@@ -1,0 +1,21 @@
+# zszl_script i18n module: terrain_scan
+msg.terrain_scan.read_failed=Error: Unable to read file contents.
+msg.terrain_scan.player_world_not_loaded=[Terrain Scan] Error: Player or world not loading.
+msg.terrain_scan.start=[Terrain Scan] §e starts scanning terrain within radius %s...
+msg.terrain_scan.done=[Terrain Scan] §a Scan completed! %s block data has been saved to:
+msg.terrain_scan.failed=[Terrain Scan] Scan failed, please check the log for details.
+gui.scan_manager.title=Terrain Scan Manager
+gui.scan_manager.create=§aNew Scan
+gui.scan_manager.view=§bView
+gui.scan_manager.rename=§e Rename
+gui.scan_manager.delete=§cDelete
+gui.scan_manager.clear_all=§cClear all
+gui.scan_manager.input_radius=Enter scan radius (1-50)
+gui.scan_manager.input_new_name=Enter new file name
+gui.scan_manager.confirm_delete.title=Confirm deletion
+gui.scan_manager.confirm_delete.message='%s' will be permanently deleted.
+gui.scan_manager.confirm_clear_all.title=Confirm clear all
+gui.scan_manager.confirm_clear_all.message=All terrain scan files will be permanently deleted!
+gui.scan_viewer.title=View: %s
+gui.scan_viewer.copy=§aCopy to clipboard
+msg.scan_viewer.copy_success=§a[Terrain Scan] The file contents have been successfully copied to the clipboard!

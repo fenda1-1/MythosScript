@@ -1,0 +1,7 @@
+# zszl_script i18n module: command_palette
+gui.command_palette.title=Command palette
+gui.command_palette.search_placeholder=Search commands, descriptions, or shortcuts
+gui.command_palette.results=%s commands
+gui.command_palette.empty=No matching commands
+gui.command_palette.settings_tooltip=Configure this command's shortcut
+gui.command_palette.settings_generic=Open the shortcut workbench

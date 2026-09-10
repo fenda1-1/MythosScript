@@ -1,0 +1,11 @@
+# ShadowBaritone module: command_tunnel
+
+shadowbaritone.command.tunnel.error.invalid_dimensions=Width and depth must be at least 1 block; height must be at least 2 blocks and cannot exceed the building height limit.
+shadowbaritone.command.tunnel.error.unexpected_direction=Unexpected direction value: %s
+shadowbaritone.command.tunnel.status.creating=Creating a tunnel %s blocks high, %s wide, and %s deep
+shadowbaritone.command.tunnel.status.goal=Goal: %s
+shadowbaritone.command.tunnel.short_desc=Set a tunnel goal in the current direction
+shadowbaritone.command.tunnel.long_desc.1=The tunnel command sets a goal that makes Baritone dig straight ahead in the direction you are facing.
+shadowbaritone.command.tunnel.long_desc.usage=Usage:
+shadowbaritone.command.tunnel.long_desc.example.default=> tunnel - With no arguments, dig forward in a 1x2 tunnel.
+shadowbaritone.command.tunnel.long_desc.example.custom=> tunnel <height> <width> <depth> - Dig a tunnel with custom height, width, and depth.

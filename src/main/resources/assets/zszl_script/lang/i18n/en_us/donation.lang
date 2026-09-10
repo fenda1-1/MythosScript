@@ -1,0 +1,25 @@
+# zszl_script i18n module: donation
+gui.donate.title=Support / Contact
+gui.donate.subtitle=Help fenda make every update better.
+gui.donate.info_title=Contact & Community
+gui.donate.refresh=Refresh the list
+gui.donate.qr_title=Optional tip · Thank you
+gui.donate.qr_placeholder=Please fill in the payment code image path in the code
+gui.donate.desc.free=Author: fenda | QQ group: 954821473
+gui.donate.desc.support=Open source on GitHub. Join the group to share feedback and ideas.
+gui.donate.desc.remark=Get test builds first, priority bug follow-up, help and tips from experienced users.
+gui.donate.desc.realtime=Free to use. Tips are optional; feedback and shared experience also help the project grow.
+gui.donate.rank_title=Reward list
+gui.donate.rank_loading=The list is loading...
+gui.donate.col.rank=serial number
+gui.donate.col.name=name
+gui.donate.col.amount=Amount
+gui.donate.source=data source
+gui.donate.card.contact.title=§lAuthor: fenda
+gui.donate.card.contact.body=§lQQ group: 954821473\n§rJoin us and help shape the next update.
+gui.donate.card.opensource.title=§lOpen on GitHub · Built together
+gui.donate.card.opensource.body=This project is open source on GitHub. Explore the code, share your ideas, and join the group to suggest improvements.
+gui.donate.card.community.title=§lJoin the community · Try it first
+gui.donate.card.community.body=Early access / Test builds arrive in the group first.\nBug feedback / Group reports get priority follow-up and fixes.\nQuestions / Ask the community whenever you need help.\nShared experience / Learn tips from long-time users and share your own discoveries.
+gui.donate.card.thanks.title=§lEnjoy the project? Support your way
+gui.donate.card.thanks.body=Free to use, with entirely optional tips. If the project helps you, scan the code to support fenda. Suggestions, bug reports, and shared experience are just as welcome. Thank you for being part of it.

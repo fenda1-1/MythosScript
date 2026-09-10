@@ -1,0 +1,4 @@
+# zszl_script i18n module: update_checker
+msg.update_checker.fetching_changelog=正在获取更新日志...
+msg.update_checker.fetch_failed=获取更新日志失败。\n\n错误详情:\n%s\n%s
+msg.update_checker.new_version_notice=检测到脚本有新版本，请点击更新脚本以更新，可点击顶部版本查看更新日志。

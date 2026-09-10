@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_cancel
+
+shadowbaritone.command.cancel.status.canceled=已取消
+shadowbaritone.command.cancel.short_desc=取消 Baritone 当前正在执行的操作
+shadowbaritone.command.cancel.long_desc.1=cancel 命令会让 Baritone 停止当前正在执行的行为。
+shadowbaritone.command.cancel.long_desc.usage=用法：
+shadowbaritone.command.cancel.long_desc.example.default=> cancel

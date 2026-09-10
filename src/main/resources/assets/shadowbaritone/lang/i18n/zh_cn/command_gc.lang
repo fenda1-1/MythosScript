@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_gc
+
+shadowbaritone.command.gc.status.called=已调用 System.gc()
+shadowbaritone.command.gc.short_desc=调用 System.gc()
+shadowbaritone.command.gc.long_desc.1=调用 System.gc()。
+shadowbaritone.command.gc.long_desc.usage=用法：
+shadowbaritone.command.gc.long_desc.example.default=> gc

@@ -1,0 +1,17 @@
+# ShadowBaritone module: process_builder
+
+shadowbaritone.process.builder.error.no_selection_build_only=No selection was set while BuildOnlySelection=true.
+shadowbaritone.process.builder.error.no_schematic_open=No schematic is currently open.
+shadowbaritone.process.builder.error.schematica_not_present=Schematica was not detected.
+shadowbaritone.process.builder.error.schematic_file_load_failed=Failed to load the schematic file.
+shadowbaritone.process.builder.error.no_schematic_loaded=No schematic is currently loaded.
+shadowbaritone.process.builder.error.litematica_not_present=Litematica was not detected.
+shadowbaritone.process.builder.error.unable_pausing=Cannot continue right now; paused. Enter resume to continue or cancel to cancel.
+shadowbaritone.process.builder.status.starting_layer=Starting build layer: %s
+shadowbaritone.process.builder.status.done_building=Building complete.
+shadowbaritone.process.builder.status.repeating_build=Repeating the build by vector: %s; new origin: %s
+shadowbaritone.process.builder.status.skipping_unconstructable_layer=Skipping an unconstructable layer! Layer #%s
+shadowbaritone.process.builder.status.missing_materials=At least the following materials are missing:
+shadowbaritone.process.builder.status.unreplaceable_liquids=At least the following liquids cannot be replaced:
+shadowbaritone.process.builder.display.paused=Builder paused
+shadowbaritone.process.builder.display.building=Building %s

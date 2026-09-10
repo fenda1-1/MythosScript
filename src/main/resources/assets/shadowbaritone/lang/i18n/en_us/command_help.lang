@@ -1,0 +1,10 @@
+# ShadowBaritone module: command_help
+
+shadowbaritone.command.help.header.all_commands=All Baritone commands (clickable):
+shadowbaritone.command.help.hover.click_full_help=Click for full help
+shadowbaritone.command.help.action.return_to_menu=Click to return to the help menu
+shadowbaritone.command.help.short_desc=View all commands or get help for a specific command
+shadowbaritone.command.help.long_desc.1=Use this command to view detailed help for some Baritone commands.
+shadowbaritone.command.help.long_desc.usage=Usage:
+shadowbaritone.command.help.long_desc.example.list=> help - List all commands and their short descriptions.
+shadowbaritone.command.help.long_desc.example.command=> help <command> - Show detailed help for a specific command.

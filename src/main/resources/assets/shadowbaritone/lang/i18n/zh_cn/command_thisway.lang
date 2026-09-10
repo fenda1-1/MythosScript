@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_thisway
+
+shadowbaritone.command.thisway.status.goal=目标：%s
+shadowbaritone.command.thisway.short_desc=朝你当前面向的方向前进
+shadowbaritone.command.thisway.long_desc.1=创建一个 GoalXZ，目标位于你当前视线方向前方若干格处。
+shadowbaritone.command.thisway.long_desc.usage=用法：
+shadowbaritone.command.thisway.long_desc.example.default=> thisway <distance> - 在你前方 distance 格处创建一个 GoalXZ 目标。

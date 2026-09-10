@@ -1,0 +1,11 @@
+# ShadowBaritone module: command_farm
+
+shadowbaritone.command.farm.error.no_waypoints=未找到航点
+shadowbaritone.command.farm.error.multiple_waypoints=找到多个航点
+shadowbaritone.command.farm.status.farming=开始耕作。
+shadowbaritone.command.farm.short_desc=收割附近作物
+shadowbaritone.command.farm.long_desc.1=farm 命令会开始耕作附近的植物。它会收割成熟作物并重新种植。
+shadowbaritone.command.farm.long_desc.usage=用法：
+shadowbaritone.command.farm.long_desc.example.default=> farm - 收割它能找到的所有作物。
+shadowbaritone.command.farm.long_desc.example.range=> farm <range> - 收割起始位置一定范围内的作物。
+shadowbaritone.command.farm.long_desc.example.waypoint=> farm <range> <waypoint> - 收割指定航点范围内的作物。

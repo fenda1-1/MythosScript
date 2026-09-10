@@ -1,0 +1,11 @@
+# ShadowBaritone module: command_tunnel
+
+shadowbaritone.command.tunnel.error.invalid_dimensions=宽度和深度至少必须为 1 格；高度至少必须为 2 格，且不能超过建筑高度上限。
+shadowbaritone.command.tunnel.error.unexpected_direction=出现了未预期的方向值：%s
+shadowbaritone.command.tunnel.status.creating=正在创建一个高 %s 格、宽 %s 格、深 %s 格的隧道
+shadowbaritone.command.tunnel.status.goal=目标：%s
+shadowbaritone.command.tunnel.short_desc=设定朝当前方向打隧道的目标
+shadowbaritone.command.tunnel.long_desc.1=tunnel 命令会设置一个目标，让 Baritone 朝你当前面向的方向笔直挖掘。
+shadowbaritone.command.tunnel.long_desc.usage=用法：
+shadowbaritone.command.tunnel.long_desc.example.default=> tunnel - 不带参数时，按 1x2 规格向前挖掘。
+shadowbaritone.command.tunnel.long_desc.example.custom=> tunnel <height> <width> <depth> - 按自定义的高度、宽度和深度打隧道。

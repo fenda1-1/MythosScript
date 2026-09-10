@@ -1,0 +1,8 @@
+# ShadowBaritone module: command_resume
+
+shadowbaritone.command.resume.error.not_paused=Not paused
+shadowbaritone.command.resume.status.resumed=Resumed
+shadowbaritone.command.resume.short_desc=Resume Baritone after pausing
+shadowbaritone.command.resume.long_desc.1=The resume command restores Baritone to its state before pause was used.
+shadowbaritone.command.resume.long_desc.usage=Usage:
+shadowbaritone.command.resume.long_desc.example.default=> resume

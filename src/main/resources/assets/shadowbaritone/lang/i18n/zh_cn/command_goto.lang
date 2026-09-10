@@ -1,0 +1,11 @@
+# ShadowBaritone module: command_goto
+
+shadowbaritone.command.goto.status.going_to=正在前往：%s
+shadowbaritone.command.goto.short_desc=前往某个坐标或方块
+shadowbaritone.command.goto.long_desc.1=goto 命令会让 Baritone 朝指定目标或方块前进。
+shadowbaritone.command.goto.long_desc.2=凡是需要坐标的地方，都可以像原版 Minecraft 命令一样使用 ~，也可以直接使用普通数字。
+shadowbaritone.command.goto.long_desc.usage=用法：
+shadowbaritone.command.goto.long_desc.example.block=> goto <block> - 前往世界中的某个方块
+shadowbaritone.command.goto.long_desc.example.y=> goto <y> - 前往指定 Y 高度
+shadowbaritone.command.goto.long_desc.example.xz=> goto <x> <z> - 前往指定 X,Z 坐标
+shadowbaritone.command.goto.long_desc.example.xyz=> goto <x> <y> <z> - 前往指定 X,Y,Z 坐标

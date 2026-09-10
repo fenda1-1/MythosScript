@@ -1,0 +1,15 @@
+# ShadowBaritone module: command_follow
+
+shadowbaritone.command.follow.status.following_all=正在跟随所有 %s
+shadowbaritone.command.follow.status.following_entities=正在跟随以下实体：
+shadowbaritone.command.follow.status.following_entity_types=正在跟随以下实体类型：
+shadowbaritone.command.follow.value.group.entities=实体
+shadowbaritone.command.follow.value.group.players=玩家
+shadowbaritone.command.follow.error.no_valid_entities=范围内没有有效实体！
+shadowbaritone.command.follow.short_desc=跟随实体
+shadowbaritone.command.follow.long_desc.1=follow 命令会让 Baritone 跟随特定类型的实体。
+shadowbaritone.command.follow.long_desc.usage=用法：
+shadowbaritone.command.follow.long_desc.example.entities=> follow entities - 跟随所有实体。
+shadowbaritone.command.follow.long_desc.example.entity=> follow entity <entity1> <entity2> <...> - 跟随指定实体类型（例如 skeleton、horse 等）
+shadowbaritone.command.follow.long_desc.example.players=> follow players - 跟随玩家
+shadowbaritone.command.follow.long_desc.example.player=> follow player <username1> <username2> <...> - 跟随指定玩家

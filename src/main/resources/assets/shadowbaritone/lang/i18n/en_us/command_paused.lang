@@ -1,0 +1,8 @@
+# ShadowBaritone module: command_paused
+
+shadowbaritone.command.paused.status.current_state=Baritone is currently %spaused.
+shadowbaritone.command.paused.value.not_paused_prefix=not 
+shadowbaritone.command.paused.short_desc=Tell you whether Baritone is paused
+shadowbaritone.command.paused.long_desc.1=The paused command tells you whether Baritone is currently paused because of the pause command.
+shadowbaritone.command.paused.long_desc.usage=Usage:
+shadowbaritone.command.paused.long_desc.example.default=> paused

@@ -1,0 +1,9 @@
+# ShadowBaritone module: command_pause
+
+shadowbaritone.command.pause.error.already_paused=已经处于暂停状态
+shadowbaritone.command.pause.status.paused=已暂停
+shadowbaritone.command.pause.short_desc=暂停 Baritone，直到你使用 resume
+shadowbaritone.command.pause.long_desc.1=pause 命令会让 Baritone 暂时停止当前行为。
+shadowbaritone.command.pause.long_desc.2=它可以用于暂停寻路、建造、跟随等任意行为。使用一次 resume 命令后即可继续之前的操作。
+shadowbaritone.command.pause.long_desc.usage=用法：
+shadowbaritone.command.pause.long_desc.example.default=> pause

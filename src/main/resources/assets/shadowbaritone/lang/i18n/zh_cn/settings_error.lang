@@ -1,0 +1,7 @@
+# ShadowBaritone module: settings_error
+
+shadowbaritone.settings.error.read_exception_some_reset=读取 Baritone 设置时发生异常，部分设置可能已重置为默认值！
+shadowbaritone.settings.error.save_exception=保存 Baritone 设置时抛出异常！
+shadowbaritone.settings.error.invalid_syntax=设置文件语法无效：%s
+shadowbaritone.settings.error.unable_parse_line=无法解析此行：%s
+shadowbaritone.settings.error.unable_parse_setting=无法解析设置项：%s=%s

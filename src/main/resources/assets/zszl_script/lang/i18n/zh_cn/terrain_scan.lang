@@ -1,0 +1,21 @@
+# zszl_script i18n module: terrain_scan
+msg.terrain_scan.read_failed=错误: 无法读取文件内容。
+msg.terrain_scan.player_world_not_loaded=[地形扫描] 错误: 玩家或世界未加载。
+msg.terrain_scan.start=[地形扫描] §e开始扫描半径 %s 内的地形...
+msg.terrain_scan.done=[地形扫描] §a扫描完成！ %s 个方块数据已保存至:
+msg.terrain_scan.failed=[地形扫描] 扫描失败，请查看日志获取详情。
+gui.scan_manager.title=地形扫描管理器
+gui.scan_manager.create=§a新建扫描
+gui.scan_manager.view=§b查看
+gui.scan_manager.rename=§e重命名
+gui.scan_manager.delete=§c删除
+gui.scan_manager.clear_all=§c全部清除
+gui.scan_manager.input_radius=输入扫描半径 (1-50)
+gui.scan_manager.input_new_name=输入新文件名
+gui.scan_manager.confirm_delete.title=确认删除
+gui.scan_manager.confirm_delete.message='%s' 将被永久删除。
+gui.scan_manager.confirm_clear_all.title=确认全部清除
+gui.scan_manager.confirm_clear_all.message=所有地形扫描文件将被永久删除！
+gui.scan_viewer.title=查看: %s
+gui.scan_viewer.copy=§a复制到剪贴板
+msg.scan_viewer.copy_success=§a[地形扫描] 文件内容已成功复制到剪贴板！

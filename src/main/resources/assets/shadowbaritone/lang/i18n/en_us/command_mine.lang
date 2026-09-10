@@ -1,0 +1,11 @@
+# ShadowBaritone module: command_mine
+
+shadowbaritone.command.mine.status.mining=Mining: %s
+shadowbaritone.command.mine.short_desc=Mine some blocks
+shadowbaritone.command.mine.long_desc.1=The mine command lets you have Baritone search for and mine specified blocks.
+shadowbaritone.command.mine.long_desc.2=The specified blocks may be ores (which are usually cached) or any other blocks.
+shadowbaritone.command.mine.long_desc.3=See also the legitMine setting (view it with #set l legitMine).
+shadowbaritone.command.mine.long_desc.usage=Usage:
+shadowbaritone.command.mine.long_desc.example.diamond=> mine diamond_ore - Mine all diamond ore it can find.
+shadowbaritone.command.mine.long_desc.example.redstone=> mine redstone_ore lit_redstone_ore - Mine redstone ore.
+shadowbaritone.command.mine.long_desc.example.log=> mine log:0 - Mine only oak logs.

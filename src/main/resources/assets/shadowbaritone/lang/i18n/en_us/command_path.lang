@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_path
+
+shadowbaritone.command.path.status.pathing=Pathing.
+shadowbaritone.command.path.short_desc=Start pathing to the goal
+shadowbaritone.command.path.long_desc.1=The path command makes Baritone start pathing toward the current goal.
+shadowbaritone.command.path.long_desc.usage=Usage:
+shadowbaritone.command.path.long_desc.example.default=> path - Start pathing

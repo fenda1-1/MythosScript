@@ -1,0 +1,20 @@
+# zszl_script i18n module: changelog
+gui.changelog.empty_content=The content is empty.
+gui.changelog.toc=Directory
+gui.changelog.main_title=Version update log
+gui.changelog.title=Changelog
+gui.changelog.description=Explore releases, improvements and bug fixes.
+gui.changelog.current=Installed %s
+gui.changelog.latest=Latest %s
+gui.changelog.header_versions=Current:%s / Latest:%s
+gui.changelog.refresh=Refresh
+gui.changelog.refreshing=Refreshing…
+gui.changelog.copy=Copy all
+gui.changelog.copied=Changelog copied
+gui.changelog.outline=Contents
+gui.changelog.read=Read log
+gui.changelog.no_outline=No headings yet
+gui.changelog.loading=Fetching the changelog…
+gui.changelog.failed=Refresh failed. Retry anytime; existing content is still available.
+gui.changelog.empty=No release notes yet. Select Refresh to try again.
+gui.changelog.ready=Release history · Select a heading to jump

@@ -1,0 +1,14 @@
+# ShadowBaritone module: command_goal
+
+shadowbaritone.command.goal.status.cleared=已清除目标。
+shadowbaritone.command.goal.status.no_goal_to_clear=当前没有可清除的目标。
+shadowbaritone.command.goal.status.goal=目标：%s
+shadowbaritone.command.goal.short_desc=设置或清除目标
+shadowbaritone.command.goal.long_desc.1=goal 命令允许你设置或清除 Baritone 的目标。
+shadowbaritone.command.goal.long_desc.2=凡是需要坐标的地方，都可以像原版 Minecraft 命令一样使用 ~，也可以直接使用普通数字。
+shadowbaritone.command.goal.long_desc.usage=用法：
+shadowbaritone.command.goal.long_desc.example.default=> goal - 将目标设置为你的当前位置
+shadowbaritone.command.goal.long_desc.example.clear=> goal <reset/clear/none> - 清除目标
+shadowbaritone.command.goal.long_desc.example.y=> goal <y> - 将目标设置为指定 Y 高度
+shadowbaritone.command.goal.long_desc.example.xz=> goal <x> <z> - 将目标设置为指定 X,Z 坐标
+shadowbaritone.command.goal.long_desc.example.xyz=> goal <x> <y> <z> - 将目标设置为指定 X,Y,Z 坐标

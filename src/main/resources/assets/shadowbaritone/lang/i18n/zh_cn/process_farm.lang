@@ -1,0 +1,4 @@
+# ShadowBaritone module: process_farm
+
+shadowbaritone.process.farm.status.failed=耕作失败。
+shadowbaritone.process.farm.display.farming=开始耕作。

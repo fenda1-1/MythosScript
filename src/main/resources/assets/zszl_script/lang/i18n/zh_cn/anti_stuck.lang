@@ -1,0 +1,11 @@
+# zszl_script i18n module: anti_stuck
+gui.antistuck.title=防卡死设置
+gui.antistuck.master=智能防卡死系统 (推荐关闭)
+gui.antistuck.avoid=主动规避危险区域 (推荐关闭)
+gui.antistuck.timeout=超时自动重载 (推荐关闭)
+gui.antistuck.vine_distance=危险预判距离 (格):
+gui.antistuck.timeout_seconds=超时重载时间 (秒):
+gui.antistuck.tip.master=§e智能防卡死系统§r\n§7启用后，将激活所有防卡死逻辑，\n§7包括预判性规避和在复杂地形中的智能逃逸。
+gui.antistuck.tip.avoid=§e主动规避危险区域§r\n§7启用后，当寻路路径即将进入\n§7由藤蔓、蜘蛛网等构成的危险区域时，\n§7会提前计算并绕行。
+gui.antistuck.tip.timeout=§e超时自动重载§r\n§7启用后，如果玩家在指定时间内\n§7完全没有移动，系统将强制重载状态，\n§7返回中心点并重新追怪。这是一个终极保险。
+msg.antistuck.saved=§a[自动追怪] 防卡死设置已保存。

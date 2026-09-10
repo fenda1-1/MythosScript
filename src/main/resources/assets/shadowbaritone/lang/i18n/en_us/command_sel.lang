@@ -1,0 +1,44 @@
+# ShadowBaritone module: command_sel
+
+shadowbaritone.command.sel.error.action_type=an action
+shadowbaritone.command.sel.error.set_pos1_first=Set pos1 first, then use pos2
+shadowbaritone.command.sel.error.nothing_to_undo=Nothing to undo!
+shadowbaritone.command.sel.error.no_selections=There are no selections
+shadowbaritone.command.sel.error.copy_first=You need to copy a selection first
+shadowbaritone.command.sel.error.invalid_transform_type=Invalid transform type
+shadowbaritone.command.sel.error.no_selections_found=No selections found
+shadowbaritone.command.sel.status.pos1_set=Position 1 set
+shadowbaritone.command.sel.status.selection_added=Selection added
+shadowbaritone.command.sel.status.removed=Removed %d selections
+shadowbaritone.command.sel.status.undid_pos1=Undid pos1
+shadowbaritone.command.sel.status.undid_pos2=Undid pos2
+shadowbaritone.command.sel.status.filling=Filling
+shadowbaritone.command.sel.status.copied=Selection copied
+shadowbaritone.command.sel.status.building=Building
+shadowbaritone.command.sel.status.transformed=Transformed %d selections
+shadowbaritone.command.sel.value.fill_name=Fill
+shadowbaritone.command.sel.short_desc=WorldEdit-like selection commands
+shadowbaritone.command.sel.long_desc.1=The sel command lets you manipulate Baritone selections like WorldEdit.
+shadowbaritone.command.sel.long_desc.2=Use selections to clear areas, fill blocks, or perform other operations.
+shadowbaritone.command.sel.long_desc.3=The expand, contract, and shift commands use a selector to choose which selections to affect. Supports a/all, n/newest, and o/oldest.
+shadowbaritone.command.sel.long_desc.usage=Usage:
+shadowbaritone.command.sel.long_desc.example.pos1_current=> sel pos1/p1/1 - Set position 1 to your current position.
+shadowbaritone.command.sel.long_desc.example.pos1_relative=> sel pos1/p1/1 <x> <y> <z> - Set position 1 to relative coordinates.
+shadowbaritone.command.sel.long_desc.example.pos2_current=> sel pos2/p2/2 - Set position 2 to your current position.
+shadowbaritone.command.sel.long_desc.example.pos2_relative=> sel pos2/p2/2 <x> <y> <z> - Set position 2 to relative coordinates.
+shadowbaritone.command.sel.long_desc.example.clear=> sel clear/c - Clear selections.
+shadowbaritone.command.sel.long_desc.example.undo=> sel undo/u - Undo the last operation, such as setting a position or creating a selection.
+shadowbaritone.command.sel.long_desc.example.set=> sel set/fill/s/f [block] - Completely fill all selections with a block.
+shadowbaritone.command.sel.long_desc.example.walls=> sel walls/w [block] - Fill the walls of selections with the specified block.
+shadowbaritone.command.sel.long_desc.example.shell=> sel shell/shl [block] - Like walls, but also fills the ceiling and floor.
+shadowbaritone.command.sel.long_desc.example.sphere=> sel sphere/sph [block] - Fill a sphere inside the selection boundary.
+shadowbaritone.command.sel.long_desc.example.hsphere=> sel hsphere/hsph [block] - Like sphere, but hollow.
+shadowbaritone.command.sel.long_desc.example.cylinder=> sel cylinder/cyl [block] <axis> - Fill a cylinder around the specified axis inside the selection boundary (default=y).
+shadowbaritone.command.sel.long_desc.example.hcylinder=> sel hcylinder/hcyl [block] <axis> - Like cylinder, but hollow.
+shadowbaritone.command.sel.long_desc.example.cleararea=> sel cleararea/ca - Essentially equivalent to set air.
+shadowbaritone.command.sel.long_desc.example.replace=> sel replace/r <blocks...> <with> - Replace the specified blocks with another block.
+shadowbaritone.command.sel.long_desc.example.copy=> sel copy/cp <x> <y> <z> - Copy selections relative to the specified coordinates or your current position.
+shadowbaritone.command.sel.long_desc.example.paste=> sel paste/p <x> <y> <z> - Build the copied selections relative to the specified coordinates or your current position.
+shadowbaritone.command.sel.long_desc.example.expand=> sel expand <target> <direction> <blocks> - Expand the target selections.
+shadowbaritone.command.sel.long_desc.example.contract=> sel contract <target> <direction> <blocks> - Contract the target selections.
+shadowbaritone.command.sel.long_desc.example.shift=> sel shift <target> <direction> <blocks> - Shift the target selections without changing their size.

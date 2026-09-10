@@ -1,0 +1,7 @@
+# ShadowBaritone module: settings_error
+
+shadowbaritone.settings.error.read_exception_some_reset=An exception occurred while reading Baritone settings; some settings may have been reset to their defaults!
+shadowbaritone.settings.error.save_exception=An exception was thrown while saving Baritone settings!
+shadowbaritone.settings.error.invalid_syntax=Invalid settings file syntax: %s
+shadowbaritone.settings.error.unable_parse_line=Unable to parse this line: %s
+shadowbaritone.settings.error.unable_parse_setting=Unable to parse setting: %s=%s

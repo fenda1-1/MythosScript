@@ -1,0 +1,6 @@
+# zszl_script i18n module: rules
+rule.auto_escape.default_name=automatic escape rules
+rule.auto_follow.default_name=New rules for chasing monsters
+rule.auto_pickup.default_name=New pickup rules
+rule.conditional.default_name=new rules
+rule.sorting.default_name=new rules

@@ -1,0 +1,8 @@
+# ShadowBaritone module: command_explore
+
+shadowbaritone.command.explore.status.exploring_from=从 %s 开始探索
+shadowbaritone.command.explore.short_desc=探索内容
+shadowbaritone.command.explore.long_desc.1=让 Baritone 随机进行探索。如果在此之前使用过 explorefilter，则会应用该过滤器。
+shadowbaritone.command.explore.long_desc.usage=用法：
+shadowbaritone.command.explore.long_desc.example.default=> explore - 从你当前位置开始探索。
+shadowbaritone.command.explore.long_desc.example.xz=> explore <x> <z> - 从指定的 X 和 Z 坐标开始探索。

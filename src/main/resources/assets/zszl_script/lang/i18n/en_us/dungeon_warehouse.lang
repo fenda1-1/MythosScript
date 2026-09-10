@@ -1,0 +1,10 @@
+# zszl_script i18n module: dungeon_warehouse
+gui.dungeon_warehouse.title=Copy warehouse click optimization settings
+gui.dungeon_warehouse.click_interval=Click speed (ms):
+gui.dungeon_warehouse.shift_click=Shift+click (backpack): deposit with one click
+gui.dungeon_warehouse.ctrl_click=Ctrl+click: Deposit/withdraw specified amount
+gui.dungeon_warehouse.ctrl_click_number=Deposit/withdraw quantity:
+gui.dungeon_warehouse.tip.title=§eClick speed (ms)
+gui.dungeon_warehouse.tip.line1=§7 sets the delay between each automatic click.
+gui.dungeon_warehouse.tip.line2=§c has been tested and cannot be lower than 100ms.
+gui.dungeon_warehouse.tip.line3=§c Otherwise, you can only click up to 15 times at a time.

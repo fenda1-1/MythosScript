@@ -1,0 +1,7 @@
+# ShadowBaritone module: process_explore
+
+shadowbaritone.process.explore.status.failed=失败。
+shadowbaritone.process.explore.status.exploration_failed=探索失败。
+shadowbaritone.process.explore.status.explored_all_chunks=已探索所有区块。
+shadowbaritone.process.explore.status.loaded_positions=已加载 %s 个位置。
+shadowbaritone.process.explore.display.exploring=正在围绕 %s 探索，已完成距离 %s，当前前往 %s

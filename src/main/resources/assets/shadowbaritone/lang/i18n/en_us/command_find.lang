@@ -1,0 +1,9 @@
+# ShadowBaritone module: command_find
+
+shadowbaritone.command.find.status.no_positions_known=No known positions; make sure these blocks have been cached.
+shadowbaritone.command.find.hover.set_goal=Click to set the goal to this position
+shadowbaritone.command.find.short_desc=Find the locations of a block
+shadowbaritone.command.find.long_desc.1=The find command searches Baritone's cache and tries to find the specified block.
+shadowbaritone.command.find.long_desc.2=Tab completion only suggests cached blocks; uncached blocks cannot be found.
+shadowbaritone.command.find.long_desc.usage=Usage:
+shadowbaritone.command.find.long_desc.example.default=> find <block> [...] - Try to find the listed blocks

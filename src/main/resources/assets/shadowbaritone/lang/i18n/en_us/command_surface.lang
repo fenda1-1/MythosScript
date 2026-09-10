@@ -1,0 +1,11 @@
+# ShadowBaritone module: command_surface
+
+shadowbaritone.command.surface.status.already_at_surface=Already at the surface.
+shadowbaritone.command.surface.status.going_to=Going to: %s
+shadowbaritone.command.surface.status.no_higher_location=No higher location found.
+shadowbaritone.command.surface.short_desc=Used to leave caves, mineshafts, and similar areas
+shadowbaritone.command.surface.long_desc.1=The surface/top command makes Baritone move toward the nearest area resembling the surface.
+shadowbaritone.command.surface.long_desc.2=This may be the actual surface or the highest air space reachable in the current environment.
+shadowbaritone.command.surface.long_desc.usage=Usage:
+shadowbaritone.command.surface.long_desc.example.surface=> surface - Used to leave caves, mineshafts, and similar areas
+shadowbaritone.command.surface.long_desc.example.top=> top - Used to leave caves, mineshafts, and similar areas

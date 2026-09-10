@@ -1,0 +1,8 @@
+# ShadowBaritone module: command_come
+
+shadowbaritone.command.come.status.coming=正在前往。
+shadowbaritone.command.come.short_desc=朝你的视角方向前进
+shadowbaritone.command.come.long_desc.1=come 命令会让 Baritone 朝你的相机视角位置前进。
+shadowbaritone.command.come.long_desc.2=在一些 freecam 不会移动玩家本体位置的客户端中，这会非常有用。
+shadowbaritone.command.come.long_desc.usage=用法：
+shadowbaritone.command.come.long_desc.example.default=> come

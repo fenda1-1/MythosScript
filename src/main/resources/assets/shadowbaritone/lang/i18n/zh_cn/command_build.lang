@@ -1,0 +1,9 @@
+# ShadowBaritone module: command_build
+
+shadowbaritone.command.build.error.load_failed=无法加载蓝图。请确保使用完整文件名，包括扩展名（例如 blah.schematic）。
+shadowbaritone.command.build.status.loaded=建筑蓝图加载成功\n原点：%s
+shadowbaritone.command.build.short_desc=建造蓝图
+shadowbaritone.command.build.long_desc.1=从文件中加载并建造蓝图。
+shadowbaritone.command.build.long_desc.usage=用法：
+shadowbaritone.command.build.long_desc.example.default=> build <filename> - 加载并建造 '<filename>.schematic'
+shadowbaritone.command.build.long_desc.example.position=> build <filename> <x> <y> <z> - 在自定义位置建造

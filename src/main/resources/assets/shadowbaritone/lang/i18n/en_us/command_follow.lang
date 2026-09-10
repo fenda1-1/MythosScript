@@ -1,0 +1,15 @@
+# ShadowBaritone module: command_follow
+
+shadowbaritone.command.follow.status.following_all=Following all %s
+shadowbaritone.command.follow.status.following_entities=Following the following entities:
+shadowbaritone.command.follow.status.following_entity_types=Following the following entity types:
+shadowbaritone.command.follow.value.group.entities=Entities
+shadowbaritone.command.follow.value.group.players=Players
+shadowbaritone.command.follow.error.no_valid_entities=No valid entities in range!
+shadowbaritone.command.follow.short_desc=Follow entities
+shadowbaritone.command.follow.long_desc.1=The follow command makes Baritone follow specific types of entities.
+shadowbaritone.command.follow.long_desc.usage=Usage:
+shadowbaritone.command.follow.long_desc.example.entities=> follow entities - Follow all entities.
+shadowbaritone.command.follow.long_desc.example.entity=> follow entity <entity1> <entity2> <...> - Follow the specified entity types (e.g. skeleton, horse, etc.)
+shadowbaritone.command.follow.long_desc.example.players=> follow players - Follow players
+shadowbaritone.command.follow.long_desc.example.player=> follow player <username1> <username2> <...> - Follow the specified players

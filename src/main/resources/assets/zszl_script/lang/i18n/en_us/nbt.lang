@@ -1,0 +1,14 @@
+# zszl_script i18n module: nbt
+gui.nbt.editor.title=Advanced NBT Editor
+gui.nbt.editor.item_name=Item name:
+gui.nbt.editor.count=Quantity:
+gui.nbt.editor.add_tag=§bAdd tag
+gui.nbt.editor.edit_value=Edit NBT value: %s
+gui.nbt_advanced.title=Advanced NBT Editor
+gui.nbt.clear_all_tags=Clear all tags
+gui.nbt.create_root_tag=Create root tag
+gui.nbt.add_tag=Add tag
+gui.nbt.input_new_key=Enter the key for the new label (Key)
+gui.nbt.default_new_value=new value
+gui.nbt.change_value=change value
+gui.nbt.edit_value=Edit NBT value: %s

@@ -1,0 +1,4 @@
+# ShadowBaritone module: process_customgoal
+
+shadowbaritone.process.customgoal.status.pathing_complete=寻路完成。
+shadowbaritone.process.customgoal.display.custom_goal=自定义目标 %s

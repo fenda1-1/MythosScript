@@ -1,0 +1,6 @@
+# ShadowBaritone module: settings_status
+
+shadowbaritone.settings.status.file_not_found_named=未找到 Baritone 设置文件：%s
+shadowbaritone.settings.status.load_failed_fallback=从 %s 加载 Baritone 设置失败，正在尝试回退方案...
+shadowbaritone.settings.status.loaded_legacy_migrated=已加载旧版 settings.txt，并迁移到 setting.json
+shadowbaritone.settings.status.file_not_found_resetting=未找到 Baritone 设置文件，已重置。

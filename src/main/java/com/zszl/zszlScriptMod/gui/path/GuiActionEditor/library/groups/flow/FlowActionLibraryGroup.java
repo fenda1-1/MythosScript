@@ -1,0 +1,88 @@
+package com.zszl.zszlScriptMod.gui.path.GuiActionEditor.library.groups.flow;
+
+import com.zszl.zszlScriptMod.gui.path.GuiActionEditor.model.ActionLibraryNode;
+
+import net.minecraft.client.resources.I18n;
+
+import java.util.function.Function;
+
+public final class FlowActionLibraryGroup {
+    private FlowActionLibraryGroup() {
+    }
+
+    public static ActionLibraryNode buildRoot(Function<String, ActionLibraryNode> itemFactory) {
+        return ActionLibraryNode.group("group_flow",
+                I18n.format("gui.path.action_editor.group.flow"),
+                ActionLibraryNode.group("group_flow_control",
+                        I18n.format("gui.path.action_editor.group.flow.control"),
+                        itemFactory.apply("delay"),
+                        itemFactory.apply("runlastsequence"),
+                        itemFactory.apply("set_var"),
+                        itemFactory.apply("label"),
+                        itemFactory.apply("goto_action"),
+                        itemFactory.apply("goto_label"),
+                        itemFactory.apply("if_else"),
+                        itemFactory.apply("switch_var"),
+                        itemFactory.apply("branch_table"),
+                        itemFactory.apply("while_condition"),
+                        itemFactory.apply("for_each_point"),
+                        itemFactory.apply("for_each_list"),
+                        itemFactory.apply("retry_block"),
+                        itemFactory.apply("debug_print_var"),
+                        itemFactory.apply("debug_print_nearby_entities"),
+                        itemFactory.apply("debug_print_gui_summary"),
+                        itemFactory.apply("skip_actions"),
+                        itemFactory.apply("skip_steps"),
+                        itemFactory.apply("repeat_actions"),
+                        itemFactory.apply("restart_sequence"),
+                        itemFactory.apply("no_stop_navigation")),
+                ActionLibraryNode.group("group_flow_capture",
+                        I18n.format("gui.path.action_editor.group.flow.capture"),
+                        itemFactory.apply("capture_gui_title"),
+                        itemFactory.apply("capture_inventory_slot"),
+                        itemFactory.apply("capture_hotbar"),
+                        itemFactory.apply("capture_entity_list"),
+                        itemFactory.apply("capture_packet_field"),
+                        itemFactory.apply("capture_gui_element"),
+                        itemFactory.apply("capture_scoreboard"),
+                        itemFactory.apply("capture_screen_region"),
+                        itemFactory.apply("capture_block_at"),
+                        itemFactory.apply("capture_nearby_entity")),
+                ActionLibraryNode.group("group_flow_condition",
+                        I18n.format("gui.path.action_editor.group.flow.condition"),
+                        itemFactory.apply("condition_inventory_item"),
+                        itemFactory.apply("condition_gui_title"),
+                        itemFactory.apply("condition_player_in_area"),
+                        itemFactory.apply("condition_player_list"),
+                        itemFactory.apply("condition_scoreboard"),
+                        itemFactory.apply("condition_packet_field"),
+                        itemFactory.apply("condition_packet_text"),
+                        itemFactory.apply("condition_bossbar"),
+                        itemFactory.apply("condition_gui_element"),
+                        itemFactory.apply("condition_screen_region"),
+                        itemFactory.apply("condition_entity_nearby"),
+                        itemFactory.apply("condition_expression")),
+                ActionLibraryNode.group("group_flow_wait",
+                        I18n.format("gui.path.action_editor.group.flow.wait"),
+                        itemFactory.apply("wait_until_inventory_item"),
+                        itemFactory.apply("wait_until_gui_title"),
+                        itemFactory.apply("wait_until_player_in_area"),
+                        itemFactory.apply("wait_until_player_list"),
+                        itemFactory.apply("wait_until_scoreboard"),
+                        itemFactory.apply("wait_until_packet_field"),
+                        itemFactory.apply("wait_until_gui_element"),
+                        itemFactory.apply("wait_until_entity_nearby"),
+                        itemFactory.apply("wait_until_hud_text"),
+                        itemFactory.apply("wait_until_expression"),
+                        itemFactory.apply("wait_combined"),
+                        itemFactory.apply("wait_until_captured_id"),
+                        itemFactory.apply("wait_until_packet_text"),
+                        itemFactory.apply("wait_until_screen_region")),
+                ActionLibraryNode.group("group_flow_network",
+                        I18n.format("gui.path.action_editor.group.flow.network"),
+                        itemFactory.apply("run_sequence"),
+                        itemFactory.apply("stop_current_sequence"),
+                        itemFactory.apply("sequence_control"),
+                        itemFactory.apply("send_packet")));
+    }
+}

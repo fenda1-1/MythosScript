@@ -1,0 +1,10 @@
+# ShadowBaritone module: command_eta
+
+shadowbaritone.command.eta.error.no_process=当前没有正在控制的进程
+shadowbaritone.command.eta.status.current=下一段：%.1f 秒（%.0f tick）\n目标：%.1f 秒（%.0f tick）
+shadowbaritone.command.eta.short_desc=查看当前预计到达时间
+shadowbaritone.command.eta.long_desc.1=eta 命令会提供到达下一段路径的预计时间信息，
+shadowbaritone.command.eta.long_desc.2=以及到达目标的大致预计时间。
+shadowbaritone.command.eta.long_desc.3=请注意，到达最终目标的 ETA 通常并不十分精确。
+shadowbaritone.command.eta.long_desc.usage=用法：
+shadowbaritone.command.eta.long_desc.example.default=> eta - 查看 ETA（如果存在）

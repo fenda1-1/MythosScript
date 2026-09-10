@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_reloadall
+
+shadowbaritone.command.reloadall.status.reloaded=Reloaded
+shadowbaritone.command.reloadall.short_desc=Reload Baritone's cache for this world
+shadowbaritone.command.reloadall.long_desc.1=The reloadall command reloads Baritone's world cache.
+shadowbaritone.command.reloadall.long_desc.usage=Usage:
+shadowbaritone.command.reloadall.long_desc.example.default=> reloadall

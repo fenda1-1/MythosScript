@@ -1,0 +1,6 @@
+# ShadowBaritone module: settings_status
+
+shadowbaritone.settings.status.file_not_found_named=Baritone settings file not found: %s
+shadowbaritone.settings.status.load_failed_fallback=Failed to load Baritone settings from %s; trying the fallback...
+shadowbaritone.settings.status.loaded_legacy_migrated=Loaded legacy settings.txt and migrated it to setting.json
+shadowbaritone.settings.status.file_not_found_resetting=Baritone settings file not found; reset to defaults.

@@ -1,0 +1,54 @@
+# zszl_script i18n module: path_runtime
+status.path.paused_gui=§e已暂停(GUI)
+status.path.paused=§e已暂停
+status.path.stopped=已停止
+status.path.hunting=§c狩猎中...
+status.path.delaying=%s | §e延迟中... (%.1fs)
+status.path.wait_next_loop=等待下一次循环...
+status.path.completed_times=已完成 (%s 次)
+path.common.on=开
+path.common.off=关
+path.common.yes=是
+path.common.no=否
+path.loop.info=循环 %s
+path.loop.infinite=无限
+path.action.desc.command=命令: %s
+path.action.desc.system_message=系统消息: %s
+path.action.desc.disconnect=断开当前连接
+path.action.desc.delay=延迟: %s ticks
+path.action.desc.key=按键: %s (%s)
+path.action.desc.jump=跳跃: %s 次, 间隔 %s ticks
+path.action.desc.click=点击[%s]: (%s, %s)
+path.action.desc.window_click=容器内槽位点击: window=%s, slot=%s, button=%s, type=%s
+path.action.desc.setview=设置视角: (Yaw: %.1f, Pitch: %.1f)
+path.action.desc.right_click_block=右键方块: %s
+path.action.desc.right_click_entity=右键实体: %s
+path.action.desc.take_all_items=全部拾取
+path.action.desc.drop_filtered_items=丢弃已过滤物品
+path.action.desc.auto_chest_click=点击容器槽位: %s
+path.action.desc.transfer_to_warehouse=转移物品到仓库
+path.action.desc.warehouse_auto_deposit=仓库管理-自动存入
+path.action.desc.block_next_gui=屏蔽GUI: %s 次，屏蔽当前GUI: %s
+path.action.desc.hide_current_gui=隐藏当前GUI
+path.action.desc.show_hidden_gui=显示已隐藏GUI
+path.action.desc.close_container_window=关闭当前容器窗口
+path.action.desc.hunt=中心搜怪: 半径 %.1f, 攻击 %s, 距离 %.1f
+path.action.desc.use_hotbar_item=使用快捷栏物品: %s | 匹配:%s | 方式:%s | 本地槽:%s | 次数:%s | 间隔:%s ticks | 切物:%s | 切后:%s | 切回:%s
+path.action.desc.move_inventory_item_to_hotbar=背包物品切到快捷栏: %s | 匹配:%s | 槽位:%s
+path.action.desc.silentuse=静默使用背包物品: %s | 临时槽:%s | 切换:%s | 使用:%s | 切回:%s
+path.action.desc.switch_hotbar_slot=切换快捷栏: %s | 切后使用:%s | 延迟:%s
+path.action.desc.use_held_item=使用手中物品: 延迟 %s
+path.action.desc.send_packet.channel=数据包: 频道=%s, 方向=%s
+path.action.desc.send_packet.id=数据包: ID=%s, 方向=%s
+path.action.desc.send_packet.unconfigured=发送数据包: (未配置)
+path.action.desc.send_packet.direction.c2s=C->S(发送)
+path.action.desc.send_packet.direction.s2c=S->C(接收模拟)
+path.action.desc.run_sequence=执行序列: %s
+path.action.desc.stop_current_sequence=停止当前执行序列: %s
+path.action.desc.sequence_control=序列控制: %s / %s
+path.action.desc.restart_sequence=重头执行序列
+path.action.desc.unknown_action=未知动作: %s
+path.action.desc.error_action=错误动作: %s
+path.category.default=默认分类
+path.category.builtin=内置路径
+path.record.step.desc=玩家位置: (%.1f, %.1f, %.1f), 箱子位置: (%s, %s, %s)

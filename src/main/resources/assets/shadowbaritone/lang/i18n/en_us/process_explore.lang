@@ -1,0 +1,7 @@
+# ShadowBaritone module: process_explore
+
+shadowbaritone.process.explore.status.failed=Failed.
+shadowbaritone.process.explore.status.exploration_failed=Exploration failed.
+shadowbaritone.process.explore.status.explored_all_chunks=All chunks have been explored.
+shadowbaritone.process.explore.status.loaded_positions=Loaded %s positions.
+shadowbaritone.process.explore.display.exploring=Exploring around %s; completed distance %s; currently heading to %s
