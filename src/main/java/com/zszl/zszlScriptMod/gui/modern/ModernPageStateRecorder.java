@@ -334,7 +334,7 @@ public final class ModernPageStateRecorder {
         }
         String simple = value.getClass().getSimpleName();
         if ("ModernHoverScrollbar".equals(simple) || "ModernDropdown".equals(simple)
-                || "GuiTextField".equals(simple)) {
+                || "GuiTextField".equals(simple) || "ModernTextField".equals(simple)) {
             return false;
         }
         String lower = fieldName == null ? "" : fieldName.toLowerCase(java.util.Locale.ROOT);

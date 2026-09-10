@@ -84,7 +84,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.entity.Entity;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.client.renderer.GlStateManager;
 
@@ -131,7 +131,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             "command", "system_message", "paste_text", "disconnect", "delay", "key", "jump", "click",
             "window_click", "conditional_window_click", "setview", "rightclickblock", "rightclickentity",
             "take_all_items_safe", "dropfiltereditems", "move_inventory_items_to_chest_slots",
-            "transferitemstowarehouse", "warehouse_auto_deposit", "autochestclick", "blocknextgui",
+             "warehouse_auto_deposit", "autochestclick", "blocknextgui",
             "hidecurrentgui", "showhiddengui", "close_container_window", "hud_text_check",
             "condition_inventory_item", "condition_gui_title", "condition_player_in_area", "condition_player_list",
             "condition_scoreboard", "condition_packet_field", "condition_packet_text", "condition_bossbar",
@@ -171,7 +171,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private enum ActionPickerMode {
-        NONE, SEQUENCE, CAPTURED_ID, OTHER_FEATURE, KEYBOARD, LABEL, ACTION_INDEX, VARIABLE, TEMPLATE, EQUIP_SET
+        NONE, SEQUENCE, CAPTURED_ID, OTHER_FEATURE, KEYBOARD, LABEL, ACTION_INDEX, VARIABLE, TEMPLATE
     }
 
     private enum ListFocus {
@@ -243,7 +243,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     private final List<PathSequence> recordingRedoHistory = new ArrayList<PathSequence>();
     private final List<ActionData> removedPersistentActions = new ArrayList<>();
 
-    private final Map<String, GuiTextField> fields = new LinkedHashMap<>();
+    private final Map<String, ModernTextField> fields = new LinkedHashMap<>();
     private final Map<String, ModernMainLayout.Rect> fieldBounds = new HashMap<>();
     private String focusedFieldKey;
     private FontRenderer fontRenderer;
@@ -937,7 +937,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         if (!initialized) {
             return;
         }
-        for (GuiTextField field : fields.values()) {
+        for (ModernTextField field : fields.values()) {
             field.updateCursorCounter();
         }
         if (recordingPacketWorkbench != null) {
@@ -1423,7 +1423,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 closePalette();
                 return true;
             }
-            GuiTextField paletteSearch = fields.get("palette.search");
+            ModernTextField paletteSearch = fields.get("palette.search");
             if (paletteSearch != null && paletteSearch.isFocused()) {
                 paletteSearch.textboxKeyTyped(typedChar, keyCode);
                 paletteScroll = 0;
@@ -1486,7 +1486,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                     closeActionPicker();
                     return true;
                 }
-                GuiTextField search = fields.get("action.picker.search");
+                ModernTextField search = fields.get("action.picker.search");
                 if (search != null && search.isFocused()) {
                     boolean handled = search.textboxKeyTyped(typedChar, keyCode);
                     if (handled) actionPickerScroll = 0;
@@ -1717,7 +1717,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         if (auxiliaryView == AuxiliaryView.EXPRESSION_EDITOR && expressionCodeEditor.isFocused()) {
             return true;
         }
-        GuiTextField field = focusedFieldKey == null ? null : fields.get(focusedFieldKey);
+        ModernTextField field = focusedFieldKey == null ? null : fields.get(focusedFieldKey);
         return field != null && field.isFocused() && field.getVisible();
     }
 
@@ -1772,8 +1772,6 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             auxiliaryView = AuxiliaryView.NONE;
             closeMenu();
             clearFocus();
-        } else if ("node_editor".equals(normalized)) {
-            openNodeEditor();
         } else if ("sequence_trigger_rules".equals(normalized)) {
             openTriggerRules();
         }
@@ -2385,7 +2383,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
 
     /** 在指定输入框光标（或选区）处插入格式代码，并让输入框保持聚焦。 */
     private void insertFormattingToken(String fieldKey, String token) {
-        GuiTextField field = fields.get(fieldKey);
+        ModernTextField field = fields.get(fieldKey);
         if (field == null || token == null || token.isEmpty()) {
             return;
         }
@@ -2397,7 +2395,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         field.setText(currentText.substring(0, start) + token + currentText.substring(end));
         field.setCursorPosition(start + token.length());
         field.setSelectionPos(start + token.length());
-        for (GuiTextField other : fields.values()) {
+        for (ModernTextField other : fields.values()) {
             other.setFocused(false);
         }
         field.setCanLoseFocus(false);
@@ -2683,13 +2681,13 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             }
 
             @Override
-            public GuiTextField field(String key) {
+            public ModernTextField field(String key) {
                 return fields.get(key);
             }
 
             @Override
             public void focusField(String key) {
-                GuiTextField field = fields.get(key);
+                ModernTextField field = fields.get(key);
                 if (field != null) {
                     ModernPathWorkbenchTab.this.focusField(key, field.x, field.y, 0);
                 }
@@ -2727,7 +2725,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
 
             @Override
             public String fieldText(String key) {
-                GuiTextField field = fields.get(key);
+                ModernTextField field = fields.get(key);
                 return field == null ? "" : safe(field.getText());
             }
 
@@ -2807,6 +2805,11 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         JsonElement value = selectedAction.params == null ? null : selectedAction.params.get(field.key);
         if (value == null) {
             value = parseLiteral(field.defaultValue);
+        }
+        if ("pickupFilterMode".equals(field.key) && selectedAction.params != null
+                && !selectedAction.params.has(field.key)
+                && !InventoryItemFilterExpressionEngine.readExpressions(selectedAction.params).isEmpty()) {
+            value = parseLiteral("CUSTOM");
         }
         boolean parameterEnabled = canEditStep() && isActionParameterEnabled(field);
         ModernUiRenderer.drawSubtlePanel(row.x, row.y, row.width, row.height, 5,
@@ -2963,6 +2966,11 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         if (field == null) {
             return 0;
         }
+        if ("itemFilterExpressions".equals(field.key)
+                && "pickup_nearby_items".equalsIgnoreCase(safe(selectedAction == null ? "" : selectedAction.type))
+                && !isCustomNearbyPickupFilter()) {
+            return 0;
+        }
         if (ActionEditorUxSupport.isMoveChestAction(selectedAction == null ? "" : selectedAction.type)
                 && ActionEditorJson.isMoveChestOwnedKey(field.key)
                 && field.kind != ModernActionEditorSchema.Kind.MOVE_CANVAS) {
@@ -2998,6 +3006,20 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             return 142;
         }
         return PARAM_ROW_HEIGHT;
+    }
+
+    private boolean isCustomNearbyPickupFilter() {
+        if (selectedAction == null || !"pickup_nearby_items".equalsIgnoreCase(safe(selectedAction.type))) {
+            return false;
+        }
+        JsonObject params = selectedAction.params;
+        if (params == null) {
+            return false;
+        }
+        if (params.has("pickupFilterMode")) {
+            return "CUSTOM".equalsIgnoreCase(jsonValue(params.get("pickupFilterMode")));
+        }
+        return !InventoryItemFilterExpressionEngine.readExpressions(params).isEmpty();
     }
 
     private void drawStructuredListRow(FontRenderer font, ModernMainLayout.Rect row,
@@ -3163,8 +3185,8 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
 
     private void applyStructuredListEntry() {
         if (!canEditStep() || selectedAction == null || structuredEditingKey.isEmpty()) return;
-        GuiTextField nameField = fields.get(structuredNameKey(structuredEditingKey));
-        GuiTextField valueField = fields.get(structuredValueKey(structuredEditingKey));
+        ModernTextField nameField = fields.get(structuredNameKey(structuredEditingKey));
+        ModernTextField valueField = fields.get(structuredValueKey(structuredEditingKey));
         String name = safe(nameField == null ? "" : nameField.getText()).trim();
         if (isHuntFilterList(structuredEditingKey)) {
             name = KillAuraHandler.normalizeFilterName(name);
@@ -3216,8 +3238,8 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         StructuredEntry entry = entries.get(hit.index);
         structuredEditingKey = hit.key;
         structuredEditingIndex = hit.index;
-        GuiTextField nameField = fields.get(structuredNameKey(hit.key));
-        GuiTextField valueField = fields.get(structuredValueKey(hit.key));
+        ModernTextField nameField = fields.get(structuredNameKey(hit.key));
+        ModernTextField valueField = fields.get(structuredValueKey(hit.key));
         if (nameField != null) {
             nameField.setText(entry.name);
             focusField(structuredNameKey(hit.key), nameField.x, nameField.y, 0);
@@ -3315,8 +3337,8 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
 
     private void clearStructuredListEditor() {
         structuredEditingIndex = -1;
-        GuiTextField nameField = fields.get(structuredNameKey(structuredEditingKey));
-        GuiTextField valueField = fields.get(structuredValueKey(structuredEditingKey));
+        ModernTextField nameField = fields.get(structuredNameKey(structuredEditingKey));
+        ModernTextField valueField = fields.get(structuredValueKey(structuredEditingKey));
         if (nameField != null) nameField.setText("");
         if (valueField != null) valueField.setText("");
         structuredPlayerMode = PlayerListTriggerSupport.MODE_EXACT;
@@ -3366,7 +3388,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                         || nameBounds.y > actionPageParameterViewportBounds.bottom())) {
             return;
         }
-        GuiTextField nameField = fields.get(focusedFieldKey);
+        ModernTextField nameField = fields.get(focusedFieldKey);
         String query = PinyinSearchHelper.normalizeQuery(nameField == null ? "" : nameField.getText());
         List<String> names = scanNearbyEntityNames(query);
         int rowHeight = 20;
@@ -3421,7 +3443,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     private void applyHuntEntitySuggestion(String name) {
         if (focusedFieldKey == null || !focusedFieldKey.startsWith("structured.list.name.")) return;
         structuredEditingKey = focusedFieldKey.substring("structured.list.name.".length());
-        GuiTextField nameField = fields.get(focusedFieldKey);
+        ModernTextField nameField = fields.get(focusedFieldKey);
         if (nameField != null) nameField.setText(safe(name).trim());
         applyStructuredListEntry();
     }
@@ -3457,7 +3479,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private float huntScanRadius() {
-        GuiTextField field = fields.get("param.scanRadius");
+        ModernTextField field = fields.get("param.scanRadius");
         if (field != null) {
             try {
                 String raw = safe(field.getText()).trim();
@@ -3778,7 +3800,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         if (selectedAction.params == null) selectedAction.params = new JsonObject();
         ensureVariableScopeContext();
         String normalized = ActionVariableRegistry.normalizeScopeKey(scope);
-        GuiTextField nameField = fields.get("param." + field.key);
+        ModernTextField nameField = fields.get("param." + field.key);
         String base = nameField == null
                 ? ActionVariableRegistry.extractBaseName(jsonValue(selectedAction.params.get(field.key)))
                 : safe(nameField.getText()).trim();
@@ -3794,7 +3816,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         bindEditorFields();
     }
 
-    private void syncVariableNameField(ModernActionEditorSchema.Field fieldSpec, GuiTextField field) {
+    private void syncVariableNameField(ModernActionEditorSchema.Field fieldSpec, ModernTextField field) {
         if (fieldSpec == null || field == null || selectedAction == null || selectedAction.params == null) {
             return;
         }
@@ -4042,8 +4064,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 || "toggle_other_feature".equals(type) && "featureId".equals(field.key)
                 || ActionEditorUxSupport.isLabelKey(type, field.key)
                 || ActionEditorUxSupport.isActionIndexKey(type, field.key)
-                || ActionEditorUxSupport.isTemplateKey(type, field.key)
-                || ActionEditorUxSupport.isEquipSetKey(type, field.key);
+                || ActionEditorUxSupport.isTemplateKey(type, field.key);
     }
 
     private String actionPickerFieldDisplay(ModernActionEditorSchema.Field field, String value) {
@@ -4145,17 +4166,13 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 if (model == null || safe(model.name).trim().isEmpty()) continue;
                 actionPickerOptions.add(new ActionPickerOption(model.name, model.name, safe(model.note)));
             }
-        } else if (ActionEditorUxSupport.isEquipSetKey(selectedAction.type, field.key)) {
-            actionPickerMode = ActionPickerMode.EQUIP_SET;
-            actionPickerOptions.add(new ActionPickerOption(jsonValue(selectedAction.params.get("setName")),
-                    jsonValue(selectedAction.params.get("setName")), "gui.modern.path.wb.u072"));
         } else {
             return;
         }
         actionPickerOptions.sort((a, b) -> a.label.compareToIgnoreCase(b.label));
         actionPickerScroll = 0;
         clearFocus();
-        GuiTextField search = fields.get("action.picker.search");
+        ModernTextField search = fields.get("action.picker.search");
         if (search != null) search.setText("");
     }
 
@@ -4209,7 +4226,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private List<ActionPickerOption> filteredActionPickerOptions() {
-        GuiTextField search = fields.get("action.picker.search");
+        ModernTextField search = fields.get("action.picker.search");
         String query = PinyinSearchHelper.normalizeQuery(search == null ? "" : search.getText());
         if (query.isEmpty()) return new ArrayList<>(actionPickerOptions);
         List<ActionPickerOption> result = new ArrayList<>();
@@ -4233,7 +4250,6 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             return "fromVar".equals(actionPickerParamKey) ? "gui.modern.path.wb.u075" : "gui.modern.path.wb.u076";
         }
         if (actionPickerMode == ActionPickerMode.TEMPLATE) return "gui.modern.path.wb.u077";
-        if (actionPickerMode == ActionPickerMode.EQUIP_SET) return "gui.modern.path.wb.u078";
         return "gui.modern.path.wb.u071";
     }
 
@@ -4467,7 +4483,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 || token == null || token.isEmpty()) {
             return;
         }
-        GuiTextField field = fields.get("param.message");
+        ModernTextField field = fields.get("param.message");
         if (field == null) {
             return;
         }
@@ -4481,7 +4497,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         field.setText(next);
         field.setCursorPosition(start + token.length());
         field.setSelectionPos(start + token.length());
-        for (Map.Entry<String, GuiTextField> entry : fields.entrySet()) {
+        for (Map.Entry<String, ModernTextField> entry : fields.entrySet()) {
             entry.getValue().setFocused("param.message".equals(entry.getKey()));
         }
         focusedFieldKey = "param.message";
@@ -4549,6 +4565,10 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         }
         if ("operation".equals(normalizedKey)) return sequenceControlOperationToDisplay(normalized);
         if ("entitytype".equals(normalizedKey)) return localizedEntityType(normalized);
+        if ("pickupfiltermode".equals(normalizedKey)) {
+            return "CUSTOM".equalsIgnoreCase(normalized)
+                    ? tr("gui.modern.path.schema.u311") : tr("gui.modern.path.schema.u310");
+        }
         if (normalized.isEmpty()) return I18n.format("gui.path.action_editor.option.unselected");
         return normalized;
     }
@@ -5031,8 +5051,8 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private void hideInactiveFields() {
-        for (Map.Entry<String, GuiTextField> entry : fields.entrySet()) {
-            GuiTextField field = entry.getValue();
+        for (Map.Entry<String, ModernTextField> entry : fields.entrySet()) {
+            ModernTextField field = entry.getValue();
             field.setVisible(false);
             if (!entry.getKey().equals(focusedFieldKey)) {
                 field.setFocused(false);
@@ -5040,10 +5060,10 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         }
     }
 
-    private GuiTextField ensureField(String key, int maxLength) {
-        GuiTextField field = fields.get(key);
+    private ModernTextField ensureField(String key, int maxLength) {
+        ModernTextField field = fields.get(key);
         if (field == null) {
-            field = new GuiTextField(5000 + fields.size(), fontRenderer, 0, 0, 1, 18);
+            field = new ModernTextField(5000 + fields.size(), fontRenderer, 0, 0, 1, 18);
             field.setMaxStringLength(maxLength);
             field.setEnableBackgroundDrawing(false);
             field.setCanLoseFocus(false);
@@ -5056,7 +5076,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         if (rect == null) {
             return;
         }
-        GuiTextField field = ensureField(key, 32767);
+        ModernTextField field = ensureField(key, 32767);
         field.x = rect.x;
         field.y = rect.y;
         field.width = Math.max(1, rect.width);
@@ -5071,7 +5091,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     private void drawField(FontRenderer font, String key, ModernMainLayout.Rect rect, boolean enabled,
             String hintText, int mouseX, int mouseY) {
         showField(key, rect, enabled);
-        GuiTextField field = fields.get(key);
+        ModernTextField field = fields.get(key);
         boolean focused = field != null && field.isFocused();
         ModernUiRenderer.drawSubtlePanel(rect.x - 1, rect.y - 1, rect.width + 2, rect.height + 2, 4,
                 enabled ? 0xFF101820 : 0xFF141B22,
@@ -5111,12 +5131,12 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
 
     private void focusField(String key, int mouseX, int mouseY, int mouseButton) {
         expressionCodeEditor.setFocused(false);
-        for (Map.Entry<String, GuiTextField> entry : fields.entrySet()) {
+        for (Map.Entry<String, ModernTextField> entry : fields.entrySet()) {
             boolean focused = entry.getKey().equals(key);
             entry.getValue().setFocused(focused);
         }
         focusedFieldKey = key;
-        GuiTextField field = fields.get(key);
+        ModernTextField field = fields.get(key);
         if (field != null) {
             field.setCanLoseFocus(false);
             field.setFocused(true);
@@ -5126,7 +5146,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
 
     private void clearFocus() {
         expressionCodeEditor.setFocused(false);
-        for (GuiTextField field : fields.values()) {
+        for (ModernTextField field : fields.values()) {
             field.setFocused(false);
         }
         focusedFieldKey = null;
@@ -5136,7 +5156,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         if (focusedFieldKey == null) {
             return false;
         }
-        GuiTextField field = fields.get(focusedFieldKey);
+        ModernTextField field = fields.get(focusedFieldKey);
         if (field == null || !field.isFocused()) {
             return false;
         }
@@ -5224,7 +5244,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private void setFieldTextIfUnchanged(String key, String value) {
-        GuiTextField field = fields.get(key);
+        ModernTextField field = fields.get(key);
         if (field != null && !field.isFocused() && !safe(field.getText()).equals(safe(value))) {
             field.setText(value == null ? "" : value);
         }
@@ -5254,14 +5274,14 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
 
     private void syncAuxiliaryFields() {
         if (auxiliaryView == AuxiliaryView.RECORDING) {
-            GuiTextField radius = fields.get("recording.radius");
+            ModernTextField radius = fields.get("recording.radius");
             if (radius != null) {
                 try {
                     PathRecordingManager.setInfluenceRadius(Double.parseDouble(radius.getText().trim()));
                 } catch (NumberFormatException ignored) {
                 }
             }
-            GuiTextField packetWindow = fields.get("recording.packetWindowSeconds");
+            ModernTextField packetWindow = fields.get("recording.packetWindowSeconds");
             if (packetWindow != null) {
                 try {
                     PathRecordingManager.setPacketRecordWindowSeconds(Integer.parseInt(packetWindow.getText().trim()));
@@ -5280,7 +5300,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private void syncTemplateField(String key, String current, Consumer<String> setter) {
-        GuiTextField field = fields.get(key);
+        ModernTextField field = fields.get(key);
         if (field == null || safe(field.getText()).equals(safe(current))) {
             return;
         }
@@ -5289,7 +5309,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private void syncTextField(String key, String current, Consumer<String> setter) {
-        GuiTextField field = fields.get(key);
+        ModernTextField field = fields.get(key);
         if (field == null || safe(field.getText()).equals(safe(current))) {
             return;
         }
@@ -5299,7 +5319,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private void syncIntegerField(String key, int current, Consumer<Integer> setter) {
-        GuiTextField field = fields.get(key);
+        ModernTextField field = fields.get(key);
         if (field == null || safe(field.getText()).equals(String.valueOf(current))) {
             return;
         }
@@ -5320,9 +5340,9 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private void syncCoordinateFields() {
-        GuiTextField xField = fields.get("step.x");
-        GuiTextField yField = fields.get("step.y");
-        GuiTextField zField = fields.get("step.z");
+        ModernTextField xField = fields.get("step.x");
+        ModernTextField yField = fields.get("step.y");
+        ModernTextField zField = fields.get("step.z");
         if (xField == null || yField == null || zField == null) {
             return;
         }
@@ -5365,7 +5385,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                     && !isActionIntegerField(fieldSpec))) {
                 continue;
             }
-            GuiTextField field = fields.get("param." + fieldSpec.key);
+            ModernTextField field = fields.get("param." + fieldSpec.key);
             if (field == null) {
                 continue;
             }
@@ -5393,7 +5413,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         }
     }
 
-    private void syncActionIntegerField(ModernActionEditorSchema.Field fieldSpec, GuiTextField field) {
+    private void syncActionIntegerField(ModernActionEditorSchema.Field fieldSpec, ModernTextField field) {
         String raw = safe(field.getText()).trim();
         if (raw.isEmpty()) {
             return;
@@ -5959,7 +5979,12 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         }
         menuTitle = field.label;
         menuItems.clear();
-        String current = jsonValue(selectedAction.params.get(field.key));
+        String current = selectedAction.params.has(field.key)
+                ? jsonValue(selectedAction.params.get(field.key)) : safe(field.defaultValue);
+        if ("pickupFilterMode".equals(field.key) && !selectedAction.params.has(field.key)
+                && !InventoryItemFilterExpressionEngine.readExpressions(selectedAction.params).isEmpty()) {
+            current = "CUSTOM";
+        }
         for (String choice : choices) {
             final String value = choice;
             String label = actionChoiceDisplay(field.key, value);
@@ -6611,7 +6636,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         if (!canEditStep() || selectedAction == null) {
             return;
         }
-        GuiTextField field = fields.get("action.type");
+        ModernTextField field = fields.get("action.type");
         String type = field == null ? "" : safe(field.getText()).trim().toLowerCase(Locale.ROOT);
         if (type.isEmpty()) {
             status("gui.modern.path.wb.u114");
@@ -6911,7 +6936,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             modalSecondaryBounds = null;
             setFieldText("modal.main", "");
         }
-        GuiTextField main = fields.get("modal.main");
+        ModernTextField main = fields.get("modal.main");
         if (main != null && modalNeedsInput()) {
             main.setCanLoseFocus(false);
             main.setFocused(true);
@@ -6920,7 +6945,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private void setFieldText(String key, String value) {
-        GuiTextField field = fields.get(key);
+        ModernTextField field = fields.get(key);
         if (field != null) {
             field.setText(value == null ? "" : value);
         }
@@ -7048,7 +7073,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 || modalStepIndex >= selectedSequence.getSteps().size()) {
             return;
         }
-        GuiTextField field = fields.get("modal.main");
+        ModernTextField field = fields.get("modal.main");
         String note = field == null ? "" : safe(field.getText());
         pushHistory("step-note");
         selectedSequence.getSteps().get(modalStepIndex).setNote(note);
@@ -7061,7 +7086,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         if (!isEditableSequence() || selectedSequence == null) {
             return;
         }
-        GuiTextField field = fields.get("modal.main");
+        ModernTextField field = fields.get("modal.main");
         String note = field == null ? "" : safe(field.getText());
         pushHistory("sequence-note");
         selectedSequence.setNote(note);
@@ -7071,7 +7096,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private boolean runFromModalStep() {
-        GuiTextField field = fields.get("modal.main");
+        ModernTextField field = fields.get("modal.main");
         int displayIndex;
         try {
             displayIndex = Integer.parseInt(field == null ? "" : field.getText().trim());
@@ -7136,7 +7161,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private int parseNonNegative(String key, int fallback) {
-        GuiTextField field = fields.get(key);
+        ModernTextField field = fields.get(key);
         try {
             int value = Integer.parseInt(field == null ? "" : field.getText().trim());
             return value < 0 ? -1 : value;
@@ -7168,8 +7193,8 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private void applyModal() {
-        GuiTextField mainField = fields.get("modal.main");
-        GuiTextField secondaryField = fields.get("modal.secondary");
+        ModernTextField mainField = fields.get("modal.main");
+        ModernTextField secondaryField = fields.get("modal.secondary");
         String main = mainField == null ? "" : safe(mainField.getText()).trim();
         String secondary = secondaryField == null ? "" : safe(secondaryField.getText()).trim();
         ModalMode mode = modalMode;
@@ -8160,7 +8185,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private String query(String key) {
-        GuiTextField field = fields.get(key);
+        ModernTextField field = fields.get(key);
         return field == null ? "" : safe(field.getText()).trim().toLowerCase(Locale.ROOT);
     }
 
@@ -10026,12 +10051,12 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private String actionPageFilter() {
-        GuiTextField field = fields.get("action.editor.search");
+        ModernTextField field = fields.get("action.editor.search");
         return PinyinSearchHelper.normalizeQuery(field == null ? "" : field.getText());
     }
 
     private int recentActionLimit() {
-        GuiTextField field = fields.get("action.editor.recent.limit");
+        ModernTextField field = fields.get("action.editor.recent.limit");
         try {
             return clamp(Integer.parseInt(field == null ? "5" : field.getText().trim()), 1, 50);
         } catch (NumberFormatException ignored) {
@@ -10476,7 +10501,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 : expressionEditorKind == ModernActionEditorSchema.Kind.EXPRESSION_LIST
                         ? ExpressionTemplateCatalog.buildBooleanCards()
                         : ExpressionTemplateCatalog.buildSetVarCards();
-        GuiTextField search = fields.get("expression.editor.search");
+        ModernTextField search = fields.get("expression.editor.search");
         String query = PinyinSearchHelper.normalizeQuery(search == null ? "" : search.getText());
         if (query.isEmpty()) return source;
         List<ExpressionTemplateCard> result = new ArrayList<>();
@@ -10699,13 +10724,6 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         closeMenu();
         closePalette();
         clearFocus();
-    }
-
-    private void openNodeEditor() {
-        closeMenu();
-        closePalette();
-        clearFocus();
-        requestNativeRoute("node_editor");
     }
 
     private void openTriggerRules() {
@@ -11056,7 +11074,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
 
     private boolean handleExpressionEditorClick(int mouseX, int mouseY) {
         if (expressionCodeEditor.mouseClicked(mouseX, mouseY, 0)) {
-            for (GuiTextField field : fields.values()) {
+            for (ModernTextField field : fields.values()) {
                 field.setFocused(false);
             }
             focusedFieldKey = null;
@@ -11107,7 +11125,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             if (!hit.bounds.contains(mouseX, mouseY)) continue;
             selectedExpressionTemplate = hit.card;
             insertExpressionTemplate(hit.card.example);
-            for (GuiTextField field : fields.values()) {
+            for (ModernTextField field : fields.values()) {
                 field.setFocused(false);
             }
             focusedFieldKey = null;
@@ -12881,9 +12899,6 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 break;
             case HEADER_VARIABLES:
                 openActionVariablesRoute();
-                break;
-            case HEADER_NODE:
-                openNodeEditor();
                 break;
             case HEADER_TRIGGERS:
                 openTriggerRules();

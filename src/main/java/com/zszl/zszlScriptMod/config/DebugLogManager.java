@@ -408,16 +408,11 @@ public final class DebugLogManager {
         if (value.contains("autopickup")) return DebugModule.AUTO_PICKUP;
         if (value.contains("自动拾取")) return DebugModule.AUTO_PICKUP;
         if (value.contains("掉落物")) return DebugModule.AUTO_PICKUP;
-        if (value.contains("autoequip")) return DebugModule.AUTO_EQUIP;
-        if (value.contains("自动穿戴")) return DebugModule.AUTO_EQUIP;
         if (value.contains("conditionalexecution")) return DebugModule.CONDITIONAL_EXECUTION;
         if (value.contains("条件执行")) return DebugModule.CONDITIONAL_EXECUTION;
         if (value.contains("itemfilter")) return DebugModule.ITEM_FILTER;
         if (value.contains("物品过滤")) return DebugModule.ITEM_FILTER;
         if (value.contains("仓库转移") || value.contains("槽位转移")) return DebugModule.ITEM_FILTER;
-        if (value.contains("arena")) return DebugModule.ARENA_HANDLER;
-        if (value.contains("竞技场")) return DebugModule.ARENA_HANDLER;
-        if (value.contains("processitems") || value.contains("置顶")) return DebugModule.ARENA_HANDLER;
         if (value.contains("chest")) return DebugModule.CHEST_ANALYSIS;
         if (value.contains("箱子")) return DebugModule.CHEST_ANALYSIS;
         if (value.contains("warehouse")) return DebugModule.WAREHOUSE_ANALYSIS;

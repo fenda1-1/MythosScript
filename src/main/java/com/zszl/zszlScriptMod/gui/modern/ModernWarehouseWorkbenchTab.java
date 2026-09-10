@@ -25,7 +25,6 @@ import com.zszl.zszlScriptMod.gui.modern.ModernUiRenderer;
 import com.zszl.zszlScriptMod.gui.modern.form.ModernFormI18n;
 import com.zszl.zszlScriptMod.gui.modern.rules.AutoFollowAreaPicker;
 import com.zszl.zszlScriptMod.handlers.GoToAndOpenHandler;
-import com.zszl.zszlScriptMod.handlers.ItemFilterHandler;
 import com.zszl.zszlScriptMod.handlers.SortingManager;
 import com.zszl.zszlScriptMod.handlers.WarehouseEventHandler;
 import com.zszl.zszlScriptMod.handlers.WarehouseManager;
@@ -37,7 +36,7 @@ import com.zszl.zszlScriptMod.utils.PinyinSearchHelper;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.client.util.ITooltipFlag;
 import net.minecraft.inventory.ContainerChest;
@@ -137,10 +136,10 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
     }
 
     private static final class FieldHit {
-        private final GuiTextField field;
+        private final ModernTextField field;
         private final ModernMainLayout.Rect bounds;
 
-        private FieldHit(GuiTextField field, ModernMainLayout.Rect bounds) {
+        private FieldHit(ModernTextField field, ModernMainLayout.Rect bounds) {
             this.field = field;
             this.bounds = bounds;
         }
@@ -214,19 +213,19 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         ModernUiRenderer.Icon.SETTINGS, ModernUiRenderer.Icon.CONDITIONS});
     private final Map<Warehouse, int[]> viewPositions = new java.util.WeakHashMap<>();
 
-    private GuiTextField searchField;
-    private GuiTextField nameField;
-    private GuiTextField categoryField;
-    private GuiTextField x1Field;
-    private GuiTextField z1Field;
-    private GuiTextField x2Field;
-    private GuiTextField z2Field;
-    private GuiTextField chestSearchField;
-    private GuiTextField inventorySearchField;
-    private GuiTextField designatedField;
-    private GuiTextField ruleNameField;
-    private GuiTextField ruleKeywordsField;
-    private GuiTextField dialogField;
+    private ModernTextField searchField;
+    private ModernTextField nameField;
+    private ModernTextField categoryField;
+    private ModernTextField x1Field;
+    private ModernTextField z1Field;
+    private ModernTextField x2Field;
+    private ModernTextField z2Field;
+    private ModernTextField chestSearchField;
+    private ModernTextField inventorySearchField;
+    private ModernTextField designatedField;
+    private ModernTextField ruleNameField;
+    private ModernTextField ruleKeywordsField;
+    private ModernTextField dialogField;
 
     private ModernMainLayout.Rect bounds;
     private ModernMainLayout.Rect navigationBounds;
@@ -295,6 +294,8 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
     private boolean dirtyForFrame;
     private int lastMouseX;
     private int lastMouseY;
+    /** The field focused before the render-only hide/show pass. */
+    private ModernTextField focusedFieldBeforeLayoutReset;
 
     public ModernWarehouseWorkbenchTab() {
     }
@@ -353,6 +354,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         actionBounds.clear();
         actionEnabled.clear();
         actionTooltips.clear();
+        focusedFieldBeforeLayoutReset = findFocusedField();
         hideFields();
         dirtyForFrame = isDirty();
 
@@ -390,6 +392,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         } finally {
         ModernUiRenderer.endClip();
         }
+        focusedFieldBeforeLayoutReset = null;
     }
 
 
@@ -858,8 +861,6 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         y += 4;
         y = drawSectionTitle(fontRenderer, "gui.modern.warehouse.u091", "gui.modern.warehouse.u092", x, y, width, mouseX,
                 mouseY);
-        y = drawActionLine(fontRenderer, y, "transfer", "gui.modern.warehouse.u093", ActionTone.PRIMARY, true,
-                "gui.modern.warehouse.u094", mouseX, mouseY);
         y = drawActionLine(fontRenderer, y, "auto_route", "gui.modern.warehouse.u095", ActionTone.PRIMARY, true,
                 "gui.modern.warehouse.u096", mouseX, mouseY);
         y = drawChoiceLine(fontRenderer, y, "gui.modern.warehouse.u097", "withdraw_shift", "gui.modern.warehouse.u098", withdrawShiftQuickMove,
@@ -971,7 +972,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         return y + 18;
     }
 
-    private int drawFieldLine(FontRenderer fontRenderer, int y, String label, GuiTextField field, String placeholder,
+    private int drawFieldLine(FontRenderer fontRenderer, int y, String label, ModernTextField field, String placeholder,
             int mouseX, int mouseY) {
         int x = rightViewport.x + 8;
         int width = Math.max(1, rightViewport.width - 8 - ModernHoverScrollbar.GUTTER);
@@ -1018,8 +1019,8 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         return y + (stacked ? 41 : 27);
     }
 
-    private int drawPairFieldLine(FontRenderer fontRenderer, int y, String firstLabel, GuiTextField first,
-            String secondLabel, GuiTextField second, int mouseX, int mouseY) {
+    private int drawPairFieldLine(FontRenderer fontRenderer, int y, String firstLabel, ModernTextField first,
+            String secondLabel, ModernTextField second, int mouseX, int mouseY) {
         int x = rightViewport.x + 8;
         int width = Math.max(1, rightViewport.width - 8 - ModernHoverScrollbar.GUTTER);
         if (width < 260) {
@@ -1252,7 +1253,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         }
     }
 
-    private void drawTextField(FontRenderer fontRenderer, GuiTextField field, ModernMainLayout.Rect rect,
+    private void drawTextField(FontRenderer fontRenderer, ModernTextField field, ModernMainLayout.Rect rect,
             String placeholder, int mouseX, int mouseY) {
         if (field == null || rect == null || rightViewport == null || !intersects(rect, rightViewport)) {
             if (field != null) {
@@ -1260,12 +1261,15 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             }
             return;
         }
+        field.setVisible(true);
+        field.setEnabled(true);
+        if (field == focusedFieldBeforeLayoutReset) {
+            field.setFocused(true);
+        }
         boolean focused = field.isFocused();
         boolean hovered = rect.contains(mouseX, mouseY);
         ModernUiRenderer.drawSubtlePanel(rect.x, rect.y, rect.width, rect.height, 4, 0xFF101820,
                 focused ? ModernUiRenderer.ACCENT : hovered ? 0xFF617581 : ModernUiRenderer.BORDER_SUBTLE);
-        field.setVisible(true);
-        field.setEnabled(true);
         field.setEnableBackgroundDrawing(false);
         field.setTextColor(ModernUiRenderer.TEXT);
         field.setDisabledTextColour(ModernUiRenderer.MUTED_TEXT);
@@ -1286,17 +1290,20 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         }
     }
 
-    private void drawSearchField(FontRenderer fontRenderer, GuiTextField field, ModernMainLayout.Rect rect,
+    private void drawSearchField(FontRenderer fontRenderer, ModernTextField field, ModernMainLayout.Rect rect,
             String placeholder, int mouseX, int mouseY, boolean rightField) {
         if (field == null || rect == null) {
             return;
+        }
+        field.setVisible(true);
+        field.setEnabled(true);
+        if (field == focusedFieldBeforeLayoutReset) {
+            field.setFocused(true);
         }
         boolean focused = field.isFocused();
         boolean hovered = rect.contains(mouseX, mouseY);
         ModernUiRenderer.drawSubtlePanel(rect.x, rect.y, rect.width, rect.height, 4,
                 ModernUiRenderer.SURFACE, focused ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
-        field.setVisible(true);
-        field.setEnabled(true);
         field.setEnableBackgroundDrawing(false);
         field.setTextColor(ModernUiRenderer.TEXT);
         field.setDisabledTextColour(ModernUiRenderer.MUTED_TEXT);
@@ -1356,16 +1363,19 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         drawDialogButton(fontRenderer, dialogConfirmBounds, "gui.modern.warehouse.u145", true, mouseX, mouseY);
     }
 
-    private void drawDialogField(FontRenderer fontRenderer, GuiTextField field, ModernMainLayout.Rect rect, int mouseX,
+    private void drawDialogField(FontRenderer fontRenderer, ModernTextField field, ModernMainLayout.Rect rect, int mouseX,
             int mouseY) {
-        boolean focused = field != null && field.isFocused();
-        ModernUiRenderer.drawSubtlePanel(rect.x, rect.y, rect.width, rect.height, 4, 0xFF101820,
-                focused ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
         if (field == null) {
             return;
         }
         field.setVisible(true);
         field.setEnabled(true);
+        if (field == focusedFieldBeforeLayoutReset) {
+            field.setFocused(true);
+        }
+        boolean focused = field.isFocused();
+        ModernUiRenderer.drawSubtlePanel(rect.x, rect.y, rect.width, rect.height, 4, 0xFF101820,
+                focused ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
         field.x = rect.x + 6;
         field.y = rect.y + 3;
         field.width = Math.max(1, rect.width - 12);
@@ -2062,8 +2072,6 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             generateDesignatedItems();
         } else if ("clear_designated".equals(key)) {
             requestClearDesignated();
-        } else if ("transfer".equals(key)) {
-            runTransferToWarehouse();
         } else if ("auto_route".equals(key)) {
             runAutoDepositRoute();
         } else if ("withdraw_shift".equals(key)) {
@@ -2169,15 +2177,6 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             setStatus("gui.modern.warehouse.u173", ModernUiRenderer.SUCCESS);
         } catch (RuntimeException exception) {
             setStatus(ModernFormI18n.tr("gui.modern.warehouse.fmt.scan_fail", safe(exception.getMessage())), ModernUiRenderer.WARNING);
-        }
-    }
-
-    private void runTransferToWarehouse() {
-        try {
-            ItemFilterHandler.transferItemsToWarehouse();
-            setStatus("gui.modern.warehouse.u174", ModernUiRenderer.SUCCESS);
-        } catch (RuntimeException exception) {
-            setStatus(ModernFormI18n.tr("gui.modern.warehouse.fmt.deposit_fail", safe(exception.getMessage())), ModernUiRenderer.WARNING);
         }
     }
 
@@ -3281,7 +3280,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         return result;
     }
 
-    private boolean coordinateTextMatches(GuiTextField field, double expected) {
+    private boolean coordinateTextMatches(ModernTextField field, double expected) {
         if (field == null) {
             return true;
         }
@@ -3409,7 +3408,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         }
     }
 
-    private String normalizedSearch(GuiTextField field) {
+    private String normalizedSearch(ModernTextField field) {
         String value = field == null ? "" : safe(field.getText()).trim();
         if (value.isEmpty()) {
             return "";
@@ -3823,14 +3822,14 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         return result;
     }
 
-    private void updateCursor(GuiTextField field) {
+    private void updateCursor(ModernTextField field) {
         if (field != null) {
             field.updateCursorCounter();
         }
     }
 
-    private GuiTextField createField(FontRenderer fontRenderer, int maxLength) {
-        GuiTextField field = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+    private ModernTextField createField(FontRenderer fontRenderer, int maxLength) {
+        ModernTextField field = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
         field.setEnableBackgroundDrawing(false);
         field.setMaxStringLength(Math.max(1, maxLength));
         field.setTextColor(ModernUiRenderer.TEXT);
@@ -3858,7 +3857,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         }
     }
 
-    private void setHidden(GuiTextField field) {
+    private void setHidden(ModernTextField field) {
         if (field != null) {
             field.setVisible(false);
             field.x = -2000;
@@ -3866,9 +3865,9 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         }
     }
 
-    private void clearFieldFocusExcept(GuiTextField keep) {
-        GuiTextField[] fields = allFields();
-        for (GuiTextField field : fields) {
+    private void clearFieldFocusExcept(ModernTextField keep) {
+        ModernTextField[] fields = allFields();
+        for (ModernTextField field : fields) {
             if (field != null && field != keep) {
                 field.setFocused(false);
             }
@@ -3876,7 +3875,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
     }
 
     private boolean isAnyFieldFocused() {
-        for (GuiTextField field : allFields()) {
+        for (ModernTextField field : allFields()) {
             if (field != null && field.isFocused()) {
                 return true;
             }
@@ -3884,12 +3883,21 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         return false;
     }
 
-    private GuiTextField[] allFields() {
-        return new GuiTextField[] { searchField, nameField, categoryField, x1Field, z1Field, x2Field, z2Field,
+    private ModernTextField[] allFields() {
+        return new ModernTextField[] { searchField, nameField, categoryField, x1Field, z1Field, x2Field, z2Field,
                 chestSearchField, inventorySearchField, designatedField, ruleNameField, ruleKeywordsField, dialogField };
     }
 
-    private boolean fieldContains(GuiTextField field, int mouseX, int mouseY) {
+    private ModernTextField findFocusedField() {
+        for (ModernTextField field : allFields()) {
+            if (field != null && field.isVisible() && field.isFocused()) {
+                return field;
+            }
+        }
+        return null;
+    }
+
+    private boolean fieldContains(ModernTextField field, int mouseX, int mouseY) {
         return field != null && field.getVisible() && mouseX >= field.x && mouseX < field.x + field.width
                 && mouseY >= field.y && mouseY < field.y + field.height;
     }

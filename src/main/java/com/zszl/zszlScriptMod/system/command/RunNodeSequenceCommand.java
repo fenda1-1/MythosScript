@@ -62,13 +62,13 @@ public class RunNodeSequenceCommand extends CommandBase {
 
         if (finished && context.isCompleted()) {
             mc.player.sendMessage(new TextComponentString(
-                    TextFormatting.GREEN + "[节点编辑器] 已执行节点图: " + graph.getName()));
+                    TextFormatting.GREEN + "[节点序列] 已执行节点图: " + graph.getName()));
             return;
         }
 
         if (context.isWaiting()) {
             mc.player.sendMessage(new TextComponentString(
-                    TextFormatting.YELLOW + "[节点编辑器] 节点图进入等待状态: "
+                    TextFormatting.YELLOW + "[节点序列] 节点图进入等待状态: "
                             + safe(context.getCurrentNodeId()) + " @ " + graph.getName()));
             return;
         }

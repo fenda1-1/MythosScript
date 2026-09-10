@@ -24,7 +24,7 @@ import com.zszl.zszlScriptMod.utils.PinyinSearchHelper;
 
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.client.resources.I18n;
 
 /** Embedded keybinding workbench for the modern main-window tab strip. */
@@ -90,7 +90,7 @@ public final class KeybindWorkbenchTab implements ModernSettingsTab {
     private final Map<BindableAction, Keybind> actionDraft = new EnumMap<>(BindableAction.class);
     private final Map<String, Keybind> sequenceDraft = new LinkedHashMap<>();
 
-    private GuiTextField searchField;
+    private ModernTextField searchField;
     private ModernMainLayout.Rect contentBounds;
     private ModernMainLayout.Rect panelBounds;
     private ModernMainLayout.Rect searchBounds;
@@ -151,7 +151,7 @@ public final class KeybindWorkbenchTab implements ModernSettingsTab {
         if (this.initialized) {
             return;
         }
-        this.searchField = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+        this.searchField = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
         this.searchField.setEnableBackgroundDrawing(false);
         this.searchField.setMaxStringLength(100);
         this.searchField.setTextColor(ModernUiRenderer.TEXT);

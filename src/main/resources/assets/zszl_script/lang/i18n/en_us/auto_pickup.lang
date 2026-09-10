@@ -22,8 +22,6 @@ gui.pickup.title=§f Get settings (unit: Ticks, 20 ticks = 1 second)
 gui.pickup.initial_delay=Initial delay:
 gui.pickup.items_per_batch=Number of clicks per batch:
 gui.pickup.batch_interval=Batch interval:
-msg.pickup.saved=§a[Arena] Fetch settings saved!
-msg.pickup.invalid_number=§c[Arena] The entered number format is incorrect!
 gui.autopickup.tip.add=§aNew rule§r
 gui.autopickup.tip.add.1=§7 creates a new auto-pickup area.
 gui.autopickup.tip.edit=§eEditing Rules§r

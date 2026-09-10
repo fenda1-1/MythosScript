@@ -26,7 +26,6 @@ path.action.desc.right_click_entity=Right-click entity: %s
 path.action.desc.take_all_items=Pick all
 path.action.desc.drop_filtered_items=Discard filtered items
 path.action.desc.auto_chest_click=Click on the container slot: %s
-path.action.desc.transfer_to_warehouse=Transfer items to warehouse
 path.action.desc.warehouse_auto_deposit=Warehouse management-automatic deposit
 path.action.desc.block_next_gui=Block GUI: %s times, block current GUI: %s
 path.action.desc.hide_current_gui=Hide current GUI

@@ -21,7 +21,7 @@ import com.zszl.zszlScriptMod.gui.modern.form.ModernFormI18n;
 import com.zszl.zszlScriptMod.zszlScriptMod;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiButton;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 
 /** Shared, bounded navigation footer and modal action menus for rule workbenches. */
 public final class ModernNavigationActions {
@@ -36,7 +36,7 @@ public final class ModernNavigationActions {
     private FontRenderer font;
     private boolean loaded, open, customizing, footerExpanded = true;
     private int menuX, menuY, scroll;
-    private GuiTextField input;
+    private ModernTextField input;
     private Consumer<String> accept;
     private String inputTitle;
     private String menuTitle;
@@ -201,7 +201,7 @@ public final class ModernNavigationActions {
         close();
         this.inputTitle = title;
         this.accept = accept;
-        input = new GuiTextField(0, font, 0, 0, 1, 18);
+        input = new ModernTextField(0, font, 0, 0, 1, 18);
         input.setMaxStringLength(96);
         input.setText(value == null ? "" : value);
         input.setFocused(true);

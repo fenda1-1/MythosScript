@@ -4,7 +4,7 @@ import java.util.*;
 import java.util.function.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.entity.EntityLivingBase;
 import org.lwjgl.input.Keyboard;
 import com.zszl.zszlScriptMod.gui.modern.*;
@@ -23,7 +23,7 @@ final class AutoFollowCollectionPanel implements ModernFormWidget {
     private final ModernHoverScrollbar scrollbar = new ModernHoverScrollbar();
     private final List<Rect> cards = new ArrayList<>();
     private final Map<String, Rect> buttons = new LinkedHashMap<>();
-    private final GuiTextField[] fields = new GuiTextField[3];
+    private final ModernTextField[] fields = new ModernTextField[3];
     private Rect bounds, body, resize, context, viewport;
     private FontRenderer font;
     private int desiredHeight = 220, scroll, maxScroll, selected = -1, contextIndex = -1;
@@ -55,7 +55,7 @@ final class AutoFollowCollectionPanel implements ModernFormWidget {
     @Override public void ensureInitialized(FontRenderer font) {
         this.font = font;
         for (int i = 0; i < fields.length; i++) if (fields[i] == null) {
-            fields[i] = new GuiTextField(i, font, 0, 0, 1, 18);
+            fields[i] = new ModernTextField(i, font, 0, 0, 1, 18);
             fields[i].setMaxStringLength(mode == Mode.POINTS ? 48 : 256);
             fields[i].setEnableBackgroundDrawing(false);
         }
@@ -165,10 +165,13 @@ final class AutoFollowCollectionPanel implements ModernFormWidget {
         text(label,x+5,y+6,w-10,ModernUiRenderer.TEXT);
     }
     private void field(int i, Rect r, String placeholder) {
-        GuiTextField f = fields[i]; f.x = r.x+4; f.y = r.y+6; f.width = Math.max(1,r.width-8); f.height=12;
+        ModernTextField f = fields[i];
+        f.layout(r);
+        f.setVisible(true);
+        f.setEnabled(true);
+        f.setPlaceholder(placeholder);
         ModernUiRenderer.drawSubtlePanel(r.x,r.y,r.width,r.height,4,ModernUiRenderer.SHELL_RAISED,f.isFocused()?ModernUiRenderer.ACCENT:ModernUiRenderer.BORDER);
-        f.drawTextBox();
-        if (f.getText().isEmpty() && !f.isFocused()) text(placeholder,f.x,f.y,f.width,ModernUiRenderer.MUTED_TEXT);
+        f.drawTextContents(font);
     }
 
     @Override public boolean mouseClicked(int x, int y, int button) {
@@ -216,7 +219,7 @@ final class AutoFollowCollectionPanel implements ModernFormWidget {
         if ("nearby".equals(key)) { suggestions=!suggestions; nextRefresh=0; scroll=0; context=null; return; }
         if ("delete".equals(key)) { if (!suggestions) remove(selected); return; }
         if (!commit()) return;
-        if ("manual".equals(key)) { selected=-1; editing=true; for (GuiTextField f:fields) f.setText(""); fields[0].setFocused(true); }
+        if ("manual".equals(key)) { selected=-1; editing=true; for (ModernTextField f:fields) f.setText(""); fields[0].setFocused(true); }
         if ("pick".equals(key) || "repick".equals(key)) {
             final int replace = "repick".equals(key) ? selected : -1;
             if ("repick".equals(key) && (replace<0 || replace>=values().size())) { error="请先选择一个回点"; return; }
@@ -261,7 +264,7 @@ final class AutoFollowCollectionPanel implements ModernFormWidget {
         if (key==Keyboard.KEY_TAB && mode==Mode.POINTS) {
             for(int i=0;i<3;i++) if(fields[i].isFocused()) { fields[i].setFocused(false); fields[(i+1)%3].setFocused(true); break; } return true;
         }
-        for(GuiTextField f:fields) if(f.isFocused()) return f.textboxKeyTyped(c,key);
+        for(ModernTextField f:fields) if(f.isFocused()) return f.textboxKeyTyped(c,key);
         return false;
     }
     @Override public boolean handleEscape() {
@@ -297,7 +300,7 @@ final class AutoFollowCollectionPanel implements ModernFormWidget {
         if(body==null || !body.contains(x,y)) return false;
         scroll=Math.max(0,Math.min(maxScroll,scroll+(wheel>0?-30:30))); context=null; return true;
     }
-    @Override public boolean isTextInputFocused() { for(GuiTextField f:fields) if(f!=null&&f.isFocused()) return true; return false; }
+    @Override public boolean isTextInputFocused() { for(ModernTextField f:fields) if(f!=null&&f.isFocused()) return true; return false; }
     @Override public Object snapshot() { return get == null ? null : get.get(); }
     @Override public boolean isDirty() {
         if (mode == Mode.NAMES) return fields[0] != null && !fields[0].getText().isEmpty();
@@ -308,7 +311,7 @@ final class AutoFollowCollectionPanel implements ModernFormWidget {
             return !current.get(selected).equals(AutoFollowUiLists.point(fields[0].getText(), fields[1].getText(), fields[2].getText()));
         } catch (IllegalArgumentException invalid) { return true; }
     }
-    @Override public void blur() { for(GuiTextField f:fields) if(f!=null) f.setFocused(false); context=null; }
+    @Override public void blur() { for(ModernTextField f:fields) if(f!=null) f.setFocused(false); context=null; }
     @Override public String getHoveredTooltip(int x,int y) {
         if(body!=null&&body.contains(x,y)) for(int i=0;i<cards.size();i++) if(cards.get(i).contains(x,y)) return rows.get(i);
         return error;

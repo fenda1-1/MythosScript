@@ -1,17 +1,16 @@
 package com.zszl.zszlScriptMod.gui.modern.packet;
 
 import com.zszl.zszlScriptMod.gui.modern.ModernMainLayout;
-import com.zszl.zszlScriptMod.gui.modern.ModernUiRenderer;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
 
 /** Small embedded wrapper around Forge's text field; it never owns a screen. */
 final class PacketTextField {
     private static PacketTextField activeField;
     private final int id;
     private final int maxLength;
-    private GuiTextField field;
+    private ModernTextField field;
 
     PacketTextField(int id, int maxLength) {
         this.id = id;
@@ -20,16 +19,13 @@ final class PacketTextField {
 
     void ensure(FontRenderer fontRenderer) {
         if (field != null || fontRenderer == null) return;
-        field = new GuiTextField(id, fontRenderer, 0, 0, 1, 18);
+        field = new ModernTextField(id, fontRenderer, 0, 0, 1, 18);
         field.setMaxStringLength(maxLength);
-        field.setEnableBackgroundDrawing(false);
-        field.setTextColor(ModernUiRenderer.TEXT);
-        field.setDisabledTextColour(ModernUiRenderer.MUTED_TEXT);
     }
 
     void setBounds(ModernMainLayout.Rect bounds) {
         if (field == null || bounds == null) return;
-        field.x = bounds.x; field.y = bounds.y; field.width = Math.max(1, bounds.width); field.height = Math.max(12, bounds.height);
+        field.layout(bounds);
     }
 
     void setText(String text) { if (field != null) field.setText(text == null ? "" : text); }
@@ -56,12 +52,12 @@ final class PacketTextField {
     }
     static boolean hasActiveFocus() { return activeField != null && activeField.field != null && activeField.field.isFocused(); }
     static boolean activeContains(int mouseX, int mouseY) { return activeField != null && activeField.hit(mouseX, mouseY); }
-    boolean hit(int mouseX, int mouseY) { return field != null && mouseX >= field.x && mouseX < field.x + field.width
-            && mouseY >= field.y && mouseY < field.y + field.height; }
+    boolean hit(int mouseX, int mouseY) { return field != null && field.contains(mouseX, mouseY);
+    }
     boolean click(int mouseX, int mouseY, int button) {
         if (field == null) return false;
         boolean hit = hit(mouseX, mouseY);
-        field.mouseClicked(mouseX, mouseY, button);
+        field.click(mouseX, mouseY, button);
         if (!hit && button == 0 && activeField != null) activeField.focus(false);
         focus(hit && button == 0);
         return hit;
@@ -69,10 +65,7 @@ final class PacketTextField {
     boolean key(char typedChar, int keyCode) { return field != null && field.isFocused() && field.textboxKeyTyped(typedChar, keyCode); }
     void update() { if (field != null) field.updateCursorCounter(); }
     void draw() {
-        if (field == null || !field.getVisible()) return;
-        ModernUiRenderer.drawSubtlePanel(field.x - 1, field.y - 1, field.width + 2, field.height + 2, 3,
-                ModernUiRenderer.SURFACE, field.isFocused() ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
-        ModernUiRenderer.reflowTextField(field);
-        ModernUiRenderer.drawTextField(field);
+        if (field == null || !field.isVisible()) return;
+        field.draw(null, field.x, field.y);
     }
 }

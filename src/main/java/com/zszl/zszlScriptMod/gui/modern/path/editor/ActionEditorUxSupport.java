@@ -107,10 +107,6 @@ public final class ActionEditorUxSupport {
         return "run_template".equals(normalize(type)) && "templateName".equals(key);
     }
 
-    public static boolean isEquipSetKey(String type, String key) {
-        return "autoequip".equals(normalize(type)) && "setName".equals(key);
-    }
-
     public static boolean isHexKey(String type, String key) {
         return "send_packet".equals(normalize(type)) && "hex".equals(key);
     }

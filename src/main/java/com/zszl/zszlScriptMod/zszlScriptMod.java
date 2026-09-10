@@ -55,7 +55,6 @@ import com.zszl.zszlScriptMod.utils.ClientTranslationInjector;
 import com.zszl.zszlScriptMod.utils.TextureManagerHelper;
 import com.zszl.zszlScriptMod.handlers.WarehouseEventHandler; // 新增导入
 import com.zszl.zszlScriptMod.handlers.WarehouseManager; // 新增导入
-import com.zszl.zszlScriptMod.handlers.AutoEquipHandler;
 import com.zszl.zszlScriptMod.handlers.BlockReplacementHandler;
 import com.zszl.zszlScriptMod.handlers.ShadowBaritoneForgeBridge;
 import com.zszl.zszlScriptMod.system.DebugKeybindManager;
@@ -233,10 +232,6 @@ public class zszlScriptMod {
         } catch (Throwable t) {
             LOGGER.error("内置导航初始化失败", t);
         }
-
-        MinecraftForge.EVENT_BUS.register(AutoEquipHandler.INSTANCE);
-        AutoEquipHandler.loadConfig();
-        LOGGER.info("Auto Equip Handler registered!");
 
         MinecraftForge.EVENT_BUS.register(BlockReplacementHandler.INSTANCE);
         BlockReplacementHandler.loadConfig();

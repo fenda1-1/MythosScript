@@ -7,7 +7,7 @@ import com.zszl.zszlScriptMod.gui.modern.ModernUiRenderer;
 import com.zszl.zszlScriptMod.gui.modern.core.ModernEmbeddedPanel;
 
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 
 /** Native input or confirmation overlay for profile create, delete and import paste. */
 final class ProfileModalPanel extends ModernEmbeddedPanel {
@@ -21,7 +21,7 @@ final class ProfileModalPanel extends ModernEmbeddedPanel {
     private final boolean input;
     private final boolean danger;
     private final Result result;
-    private GuiTextField field;
+    private ModernTextField field;
     private String pendingInitial = "";
     private boolean committed;
     private ModernMainLayout.Rect area = new ModernMainLayout.Rect(0, 0, 1, 1);
@@ -42,7 +42,7 @@ final class ProfileModalPanel extends ModernEmbeddedPanel {
     @Override
     protected void onInitialize(FontRenderer fontRenderer) {
         if (input && fontRenderer != null) {
-            field = new GuiTextField(9101, fontRenderer, 0, 0, 1, 18);
+            field = new ModernTextField(9101, fontRenderer, 0, 0, 1, 18);
             field.setMaxStringLength(4096);
             field.setEnableBackgroundDrawing(false);
             field.setText(pendingInitial);

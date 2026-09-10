@@ -538,8 +538,7 @@ public class NodeSequenceRunner {
     private boolean handleAsyncAction(EntityPlayerSP player, NodeNode node, String actionType,
             Consumer<EntityPlayerSP> action) {
         String normalized = normalize(actionType);
-        if (!"transferitemstowarehouse".equals(normalized)
-                && !"move_inventory_items_to_chest_slots".equals(normalized)
+        if (!"move_inventory_items_to_chest_slots".equals(normalized)
                 && !"spread_inventory_item".equals(normalized)
                 && !"stack_inventory_item".equals(normalized)
                 && !"pickup_nearby_items".equals(normalized)
@@ -586,9 +585,6 @@ public class NodeSequenceRunner {
     }
 
     private boolean isAsyncActionRunning(String actionType) {
-        if ("transferitemstowarehouse".equals(actionType)) {
-            return ItemFilterHandler.isWarehouseTransferInProgress();
-        }
         if ("move_inventory_items_to_chest_slots".equals(actionType)) {
             return ItemFilterHandler.isWarehouseTransferInProgress();
         }

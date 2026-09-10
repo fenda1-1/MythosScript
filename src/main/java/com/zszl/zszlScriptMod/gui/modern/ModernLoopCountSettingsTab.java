@@ -7,14 +7,14 @@ import com.zszl.zszlScriptMod.gui.GuiInventory;
 import com.zszl.zszlScriptMod.gui.modern.form.ModernFormI18n;
 
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 
 /**
  * Compact loop-count editor embedded in the modern main window.
  */
 public final class ModernLoopCountSettingsTab implements ModernSettingsTab {
 
-    private GuiTextField loopCountField;
+    private ModernTextField loopCountField;
     private ModernMainLayout.Rect inputBounds;
     private ModernMainLayout.Rect saveBounds;
     private ModernMainLayout.Rect infiniteBounds;
@@ -29,7 +29,7 @@ public final class ModernLoopCountSettingsTab implements ModernSettingsTab {
         if (loopCountField != null) {
             return;
         }
-        loopCountField = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+        loopCountField = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
         loopCountField.setEnableBackgroundDrawing(false);
         loopCountField.setMaxStringLength(16);
         loopCountField.setTextColor(ModernUiRenderer.TEXT);
@@ -210,7 +210,7 @@ public final class ModernLoopCountSettingsTab implements ModernSettingsTab {
                 panelWidth, panelHeight);
     }
 
-    private void drawTextField(FontRenderer fontRenderer, GuiTextField field, ModernMainLayout.Rect bounds, int mouseX,
+    private void drawTextField(FontRenderer fontRenderer, ModernTextField field, ModernMainLayout.Rect bounds, int mouseX,
             int mouseY) {
         boolean focused = field != null && field.isFocused();
         boolean hovered = contains(bounds, mouseX, mouseY);

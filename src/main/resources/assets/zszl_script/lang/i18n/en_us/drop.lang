@@ -30,5 +30,3 @@ gui.drop.tip.batch.1=§7 can handle multiple items at once when enabled.
 gui.drop.tip.batch.2=§7 improves efficiency but may cause server stress.
 gui.drop.tip.reset=§eRestore default§r
 gui.drop.tip.reset.1=§7Restores all settings to recommended defaults.
-msg.drop.saved=§a[Arena] Discard settings saved!
-msg.drop.error=§c[Arena] An unknown error occurred while saving settings!

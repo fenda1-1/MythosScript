@@ -112,8 +112,6 @@ public final class PathWorkbenchToolCatalog {
                 "gui.modern.path.tool.u035", "", true, false, false),
         HEADER_VARIABLES(Zone.HEADER, "action_variables", "gui.modern.path.tool.u036", "gui.modern.path.tool.u037",
                 "gui.modern.path.tool.u038", "", true, false, false),
-        HEADER_NODE(Zone.HEADER, "node_editor", "gui.modern.path.tool.u039", "gui.modern.path.tool.u039",
-                "gui.modern.path.tool.u040", "", true, false, false),
         HEADER_TRIGGERS(Zone.HEADER, "trigger_rules", "gui.modern.path.tool.u041", "gui.modern.path.tool.u042",
                 "gui.modern.path.tool.u043", "", true, false, false),
         HEADER_RELOAD(Zone.HEADER, "reload_draft", "gui.modern.path.tool.u044", "gui.modern.path.tool.u045",

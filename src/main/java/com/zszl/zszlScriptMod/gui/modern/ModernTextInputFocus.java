@@ -3,29 +3,44 @@ package com.zszl.zszlScriptMod.gui.modern;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.ConcurrentModificationException;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
+
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 
 /** Finds focused text fields in the nested controls owned by a GUI. */
 public final class ModernTextInputFocus {
 
     private static final int MAX_DEPTH = 8;
+    private static final String OWN_GUI_PACKAGE = "com.zszl.zszlScriptMod.gui.";
 
     private ModernTextInputFocus() {
     }
 
     public static boolean isFocused(Object root) {
+        // Do not reflect into third-party GuiScreens. Their internal
+        // collections may be live and mutable while Forge is dispatching an
+        // input event (DragonCore uses a LinkedHashMap-backed container).
+        if (!isOwnedGuiRoot(root)) {
+            return false;
+        }
         Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
         return isFocused(root, visited, 0);
     }
 
     /** Clears nested inputs when a click lands outside every visible text field. */
     public static void clearFocusOutside(Object root, int mouseX, int mouseY) {
+        if (!isOwnedGuiRoot(root)) {
+            return;
+        }
         Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
         boolean fieldAtPoint = containsTextField(root, visited, 0, mouseX, mouseY);
         visited.clear();
@@ -33,6 +48,9 @@ public final class ModernTextInputFocus {
     }
 
     public static void clearFocus(Object root) {
+        if (!isOwnedGuiRoot(root)) {
+            return;
+        }
         Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
         clearFocus(root, visited, 0, 0, 0, false);
     }
@@ -42,6 +60,10 @@ public final class ModernTextInputFocus {
             return false;
         }
         if (value instanceof GuiTextField) {
+            if (value instanceof ModernTextField) {
+                ModernTextField field = (ModernTextField) value;
+                return field.contains(mouseX, mouseY);
+            }
             GuiTextField field = (GuiTextField) value;
             return field.getVisible() && field.x <= mouseX && mouseX < field.x + field.width
                     && field.y <= mouseY && mouseY < field.y + field.height;
@@ -55,6 +77,12 @@ public final class ModernTextInputFocus {
             return;
         }
         if (value instanceof GuiTextField) {
+            if (value instanceof ModernTextField) {
+                ModernTextField field = (ModernTextField) value;
+                boolean keep = preservePoint && field.contains(mouseX, mouseY);
+                if (!keep) field.setFocused(false);
+                return;
+            }
             GuiTextField field = (GuiTextField) value;
             boolean keep = preservePoint && field.getVisible() && field.x <= mouseX && mouseX < field.x + field.width
                     && field.y <= mouseY && mouseY < field.y + field.height;
@@ -74,7 +102,7 @@ public final class ModernTextInputFocus {
     }
 
     private static boolean inspectChildren(Object value, Set<Object> visited, int depth, ChildVisitor visitor) {
-        if (value == null || depth > MAX_DEPTH || !visited.add(value)) {
+        if (value == null || depth > MAX_DEPTH || !shouldInspect(value.getClass()) || !visited.add(value)) {
             return false;
         }
         if (value.getClass().isArray()) {
@@ -87,8 +115,7 @@ public final class ModernTextInputFocus {
             return false;
         }
         if (value instanceof Map) {
-            for (Object entryObject : ((Map<?, ?>) value).entrySet()) {
-                Map.Entry<?, ?> entry = (Map.Entry<?, ?>) entryObject;
+            for (Map.Entry<?, ?> entry : snapshotMapEntries((Map<?, ?>) value)) {
                 if (visitor.visit(entry.getKey()) || visitor.visit(entry.getValue())) {
                     return true;
                 }
@@ -96,7 +123,7 @@ public final class ModernTextInputFocus {
             return false;
         }
         if (value instanceof Iterable) {
-            for (Object child : (Iterable<?>) value) {
+            for (Object child : snapshotIterable((Iterable<?>) value)) {
                 if (visitor.visit(child)) {
                     return true;
                 }
@@ -132,7 +159,7 @@ public final class ModernTextInputFocus {
         if (value instanceof GuiTextField) {
             return ((GuiTextField) value).isFocused();
         }
-        if (!visited.add(value)) {
+        if (!shouldInspect(value.getClass()) || !visited.add(value)) {
             return false;
         }
 
@@ -147,8 +174,7 @@ public final class ModernTextInputFocus {
             return false;
         }
         if (value instanceof Map) {
-            for (Object entryObject : ((Map<?, ?>) value).entrySet()) {
-                Map.Entry<?, ?> entry = (Map.Entry<?, ?>) entryObject;
+            for (Map.Entry<?, ?> entry : snapshotMapEntries((Map<?, ?>) value)) {
                 if (isFocused(entry.getKey(), visited, depth + 1)
                         || isFocused(entry.getValue(), visited, depth + 1)) {
                     return true;
@@ -157,7 +183,7 @@ public final class ModernTextInputFocus {
             return false;
         }
         if (value instanceof Iterable) {
-            for (Object child : (Iterable<?>) value) {
+            for (Object child : snapshotIterable((Iterable<?>) value)) {
                 if (isFocused(child, visited, depth + 1)) {
                     return true;
                 }
@@ -186,13 +212,54 @@ public final class ModernTextInputFocus {
         return false;
     }
 
-    private static boolean shouldInspect(Class<?> type) {
-        if (type.isArray() || Map.class.isAssignableFrom(type) || Iterable.class.isAssignableFrom(type)) {
-            return true;
-        }
-        if (GuiScreen.class.isAssignableFrom(type)) {
-            return true;
-        }
-        return type.getName().startsWith("com.zszl.zszlScriptMod.gui");
+    private static boolean isOwnedGuiRoot(Object root) {
+        return root != null && isOwnedGuiType(root.getClass());
     }
+
+    private static boolean isOwnedGuiType(Class<?> type) {
+        return type != null && type.getName().startsWith(OWN_GUI_PACKAGE);
+    }
+
+    /**
+     * Only standard collection containers and MythosScript GUI classes may be
+     * traversed. In particular, a Map implementation from another mod is not
+     * a safe boundary to cross even when it implements java.util.Map.
+     */
+    private static boolean shouldInspect(Class<?> type) {
+        if (type == null || type.isPrimitive()) {
+            return false;
+        }
+        if (type.isArray() || isOwnedGuiType(type)) {
+            return true;
+        }
+        if (Map.class.isAssignableFrom(type) || Iterable.class.isAssignableFrom(type)) {
+            return type.getName().startsWith("java.util.");
+        }
+        return false;
+    }
+
+    private static List<Map.Entry<?, ?>> snapshotMapEntries(Map<?, ?> map) {
+        List<Map.Entry<?, ?>> snapshot = new ArrayList<Map.Entry<?, ?>>();
+        try {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                snapshot.add(new AbstractMap.SimpleImmutableEntry<Object, Object>(entry.getKey(), entry.getValue()));
+            }
+        } catch (ConcurrentModificationException ignored) {
+            return Collections.emptyList();
+        }
+        return snapshot;
+    }
+
+    private static List<Object> snapshotIterable(Iterable<?> iterable) {
+        List<Object> snapshot = new ArrayList<Object>();
+        try {
+            for (Object child : iterable) {
+                snapshot.add(child);
+            }
+        } catch (ConcurrentModificationException ignored) {
+            return Collections.emptyList();
+        }
+        return snapshot;
+    }
+
 }

@@ -15,7 +15,7 @@ import com.zszl.zszlScriptMod.utils.PinyinSearchHelper;
 import org.lwjgl.input.Keyboard;
 
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 
 /** Shared category-aware modal picker for a single path sequence. */
 public class ModernPathSequencePicker {
@@ -23,7 +23,7 @@ public class ModernPathSequencePicker {
 
     private final Selection selection;
     private final Map<String, List<String>> groups = new LinkedHashMap<>();
-    private GuiTextField searchField;
+    private ModernTextField searchField;
     private ModernMainLayout.Rect categoryBounds;
     private ModernMainLayout.Rect sequenceBounds;
     private ModernMainLayout.Rect clearBounds;
@@ -40,7 +40,7 @@ public class ModernPathSequencePicker {
 
     public void ensureInitialized(FontRenderer font) {
         if (searchField != null) return;
-        searchField = new GuiTextField(0, font, 0, 0, 1, 18);
+        searchField = new ModernTextField(0, font, 0, 0, 1, 18);
         searchField.setEnableBackgroundDrawing(false);
         searchField.setMaxStringLength(96);
     }

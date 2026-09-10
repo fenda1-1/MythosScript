@@ -37,7 +37,7 @@ import com.zszl.zszlScriptMod.system.ProfileShareCodeManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.client.resources.I18n;
 
 import java.io.Reader;
@@ -72,7 +72,7 @@ public final class ProfileWorkbenchTab implements ModernSettingsTab {
 
     private List<ConfigField> allFields = new ArrayList<ConfigField>();
     private List<ConfigField> visibleFields = new ArrayList<ConfigField>();
-    private GuiTextField searchField;
+    private ModernTextField searchField;
     private FontRenderer font;
     private ModernMainLayout.Rect bounds = new ModernMainLayout.Rect(0, 0, 1, 1);
     private ModernMainLayout.Rect profileColumn;
@@ -117,7 +117,7 @@ public final class ProfileWorkbenchTab implements ModernSettingsTab {
             return;
         }
         ensurePreferencesLoaded();
-        searchField = new GuiTextField(100, fontRenderer, 0, 0, 1, 18);
+        searchField = new ModernTextField(100, fontRenderer, 0, 0, 1, 18);
         searchField.setMaxStringLength(128);
         searchField.setCanLoseFocus(true);
         searchField.setEnableBackgroundDrawing(false);

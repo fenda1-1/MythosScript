@@ -511,7 +511,7 @@ public final class ActionTemplateCatalog {
                 templates.add(ensurePotionOrBuy());
                 templates.add(npcShopBuySupply());
                 templates.add(enableAutoEatBeforeFight());
-                templates.add(enableAutoEquipSet());
+                templates.add(enableAutoEquip());
                 templates.add(enablePickupDuringFarm());
                 templates.add(toggleKillAuraForMobFarm());
                 templates.add(packetCaptureAndReadField());
@@ -1508,15 +1508,13 @@ public final class ActionTemplateCatalog {
                                                                 "foodKeywordsText", "面包\n牛排\n苹果"))));
         }
 
-        private static ActionTemplate enableAutoEquipSet() {
-                return template("enable_auto_equip_set", CATEGORY_SUPPORT,
-                                "进入副本前启用套装自动穿戴",
-                                "启用自动穿戴并指定套装名，让装备变更后自动补齐目标套装。",
-                                "适合副本、Boss、PVP 前切换固定装备套装。",
-                                "setName 需要和自动穿戴功能里配置的套装名称一致。",
-                                actions(
-                                                action("autoequip", params("enabled", true, "setName", "副本套装",
-                                                                "smartActivation", true))));
+        private static ActionTemplate enableAutoEquip() {
+                return template("enable_auto_equip", CATEGORY_SUPPORT,
+                                "进入副本前启用自动装备",
+                                "启用其他功能中的自动装备，按当前装备评分自动补齐更好的护甲。",
+                                "适合副本、Boss、PVP 前统一开启自动装备。",
+                                "自动装备的间隔和总开关在其他功能-物品中配置。",
+                                actions(action("autoequip", params("enabled", true))));
         }
 
         private static ActionTemplate enablePickupDuringFarm() {

@@ -14,7 +14,7 @@ import com.zszl.zszlScriptMod.handlers.ItemFilterHandler;
 import com.zszl.zszlScriptMod.path.InventoryItemFilterExpressionEngine;
 
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.client.resources.I18n;
 
 /**
@@ -35,7 +35,7 @@ public final class MoveChestEditor {
 
         void openChoiceMenu(String title, List<ClickSemantics.Option> options, int mouseX, int mouseY);
 
-        GuiTextField field(String key);
+        ModernTextField field(String key);
 
         void focusField(String key);
 
@@ -114,8 +114,8 @@ public final class MoveChestEditor {
             int mouseY) {
         if (this.params != params) {
             resetTransient();
-            GuiTextField takeField = host == null ? null : host.field("move.chest.maxTake");
-            GuiTextField putField = host == null ? null : host.field("move.chest.maxPut");
+            ModernTextField takeField = host == null ? null : host.field("move.chest.maxTake");
+            ModernTextField putField = host == null ? null : host.field("move.chest.maxPut");
             if (takeField != null) takeField.setText("");
             if (putField != null) putField.setText("");
         }
@@ -211,8 +211,8 @@ public final class MoveChestEditor {
         int strategyY = chestBounds.bottom() + 8;
         ModernUiRenderer.drawText(font, I18n.format("gui.path.action_editor.move_chest.max_take"), row.x + 10,
                 strategyY + 6, ModernUiRenderer.SUBTLE_TEXT, 120);
-        GuiTextField takeField = host == null ? null : host.field("move.chest.maxTake");
-        GuiTextField putField = host == null ? null : host.field("move.chest.maxPut");
+        ModernTextField takeField = host == null ? null : host.field("move.chest.maxTake");
+        ModernTextField putField = host == null ? null : host.field("move.chest.maxPut");
         ModernMainLayout.Rect takeBounds = new ModernMainLayout.Rect(row.x + 132, strategyY, 58, 20);
         ModernMainLayout.Rect putLabel = new ModernMainLayout.Rect(takeBounds.right() + 8, strategyY, 120, 20);
         ModernMainLayout.Rect putBounds = new ModernMainLayout.Rect(putLabel.right() + 4, strategyY, 58, 20);
@@ -689,7 +689,7 @@ public final class MoveChestEditor {
         host.markDirty();
     }
 
-    private Integer parseLimit(GuiTextField field) {
+    private Integer parseLimit(ModernTextField field) {
         if (field == null) {
             return null;
         }
@@ -704,7 +704,7 @@ public final class MoveChestEditor {
         }
     }
 
-    private boolean blank(GuiTextField field) {
+    private boolean blank(ModernTextField field) {
         return field == null || ActionEditorJson.safe(field.getText()).trim().isEmpty();
     }
 
@@ -882,7 +882,7 @@ public final class MoveChestEditor {
                 enabled ? ModernUiRenderer.TEXT : ModernUiRenderer.MUTED_TEXT, Math.max(12, rect.width - 12));
     }
 
-    private void drawFieldFrame(FontRenderer font, ModernMainLayout.Rect rect, GuiTextField field, boolean enabled,
+    private void drawFieldFrame(FontRenderer font, ModernMainLayout.Rect rect, ModernTextField field, boolean enabled,
             int mouseX, int mouseY) {
         if (rect == null) {
             return;

@@ -451,8 +451,7 @@ public final class NodeParameterSchemaRegistry {
                                          "0 表示不限制。", ">= 0", "30"));
                          schemas.add(FieldSchema.paramsField("reachDistance", "到达距离", FieldType.NUMBER, false,
                                          "到达此距离后停止寻路，等待服务器拾取。", "> 0", "0.5"));
-                 } else if ("transferitemstowarehouse".equals(normalized)) {
-                } else if ("warehouse_auto_deposit".equals(normalized)) {
+                 } else if ("warehouse_auto_deposit".equals(normalized)) {
                 } else if ("blocknextgui".equals(normalized)) {
                         schemas.add(FieldSchema.paramsField("count", "屏蔽次数", FieldType.NUMBER, false,
                                         "后续要屏蔽的 GUI 打开次数。", ">= 1", "1"));
@@ -479,13 +478,9 @@ public final class NodeParameterSchemaRegistry {
                                         "自动移动食物时使用的快捷栏槽位。", "1 ~ 9", "9"));
                         schemas.add(FieldSchema.paramsField("foodKeywordsText", "食物关键字", FieldType.KV_LINES, false,
                                         "每行或逗号分隔一个食物关键字。", "留空则使用当前配置", ""));
-                } else if ("autoequip".equals(normalized)) {
-                        schemas.add(FieldSchema.paramsField("enabled", "启用自动穿戴", FieldType.BOOLEAN, false,
-                                        "关闭时表示禁用自动穿戴。", "true / false", "true"));
-                        schemas.add(FieldSchema.paramsField("setName", "套装名称", FieldType.TEXT, false,
-                                        "要启用的自动穿戴套装名称。", "关闭时可为空", ""));
-                        schemas.add(FieldSchema.paramsField("smartActivation", "智能激活", FieldType.BOOLEAN, false,
-                                        "开启后由智能激活逻辑控制，而不是持续启用。", "true / false", "false"));
+                 } else if ("autoequip".equals(normalized)) {
+                         schemas.add(FieldSchema.paramsField("enabled", "启用自动装备", FieldType.BOOLEAN, false,
+                                         "关闭时表示禁用自动装备。", "true / false", "true"));
                 } else if ("autopickup".equals(normalized)) {
                         schemas.add(FieldSchema.paramsField("enabled", "启用自动拾取", FieldType.BOOLEAN, false,
                                         "关闭时表示禁用自动拾取。", "true / false", "true"));

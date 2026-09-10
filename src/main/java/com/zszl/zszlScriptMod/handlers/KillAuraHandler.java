@@ -7045,6 +7045,31 @@ public class KillAuraHandler implements AbstractGameEventListener {
         return new HuntPickupRuleDecision(true, allowMatched ? bestAllowPriority : 0);
     }
 
+    /** Applies the current Kill Aura pickup rules to an item used by another action. */
+    public synchronized boolean matchesHuntPickupRulesForAction(ItemStack stack, double playerDistance) {
+        if (stack == null || stack.isEmpty()) {
+            return false;
+        }
+        List<HuntPickupRule> rules = huntPickupRules == null
+                ? new ArrayList<HuntPickupRule>() : huntPickupRules;
+        if (rules.isEmpty()) {
+            return true;
+        }
+        boolean hasAllowRules = hasEnabledHuntPickupAllowRules();
+        String rarity = normalizeHuntPickupRarityToken(getHuntPickupRarityToken(stack));
+        boolean allowMatched = false;
+        for (HuntPickupRule rule : rules) {
+            if (!isMatchingHuntPickupRuleStack(stack, rule, rarity, playerDistance)) {
+                continue;
+            }
+            if (HUNT_PICKUP_RULE_MODE_BLOCK.equals(rule.mode)) {
+                return false;
+            }
+            allowMatched = true;
+        }
+        return !hasAllowRules || allowMatched;
+    }
+
     private boolean hasEnabledHuntPickupAllowRules() {
         if (huntPickupRules == null || huntPickupRules.isEmpty()) {
             return false;
@@ -7059,13 +7084,18 @@ public class KillAuraHandler implements AbstractGameEventListener {
 
     private boolean isMatchingHuntPickupRule(EntityItem item, HuntPickupRule rule, String rarity,
             double playerDistance) {
+        ItemStack stack = item == null ? ItemStack.EMPTY : item.getItem();
+        return isMatchingHuntPickupRuleStack(stack, rule, rarity, playerDistance);
+    }
+
+    private boolean isMatchingHuntPickupRuleStack(ItemStack stack, HuntPickupRule rule, String rarity,
+            double playerDistance) {
         if (rule == null || !rule.enabled) {
             return false;
         }
         if (rule.maxDistance > 0.0F && playerDistance - rule.maxDistance > 0.0001D) {
             return false;
         }
-        ItemStack stack = item == null ? ItemStack.EMPTY : item.getItem();
         if (stack == null || stack.isEmpty()) {
             return false;
         }

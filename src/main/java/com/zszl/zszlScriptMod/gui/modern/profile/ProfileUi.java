@@ -5,7 +5,7 @@ import com.zszl.zszlScriptMod.gui.modern.ModernUiRenderer;
 import com.zszl.zszlScriptMod.gui.modern.form.ModernFormI18n;
 
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 
 /** Shared native chrome for the profile workbench and its overlays. */
 final class ProfileUi {
@@ -102,7 +102,7 @@ final class ProfileUi {
         }
     }
 
-    static void drawField(FontRenderer font, GuiTextField field, ModernMainLayout.Rect rect, String placeholder,
+    static void drawField(FontRenderer font, ModernTextField field, ModernMainLayout.Rect rect, String placeholder,
             int mouseX, int mouseY) {
         if (field == null || rect == null) {
             return;

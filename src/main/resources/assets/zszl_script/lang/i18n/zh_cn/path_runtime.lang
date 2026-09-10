@@ -26,7 +26,6 @@ path.action.desc.right_click_entity=右键实体: %s
 path.action.desc.take_all_items=全部拾取
 path.action.desc.drop_filtered_items=丢弃已过滤物品
 path.action.desc.auto_chest_click=点击容器槽位: %s
-path.action.desc.transfer_to_warehouse=转移物品到仓库
 path.action.desc.warehouse_auto_deposit=仓库管理-自动存入
 path.action.desc.block_next_gui=屏蔽GUI: %s 次，屏蔽当前GUI: %s
 path.action.desc.hide_current_gui=隐藏当前GUI

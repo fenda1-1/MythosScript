@@ -28,7 +28,6 @@ public final class ActionDisplayCatalog {
         ACTION_DISPLAY_KEYS.put("dropfiltereditems", "gui.path.action_editor.type.drop_filtered_items");
         ACTION_DISPLAY_KEYS.put("move_inventory_items_to_chest_slots",
                 "gui.path.action_editor.type.move_inventory_items_to_chest_slots");
-        ACTION_DISPLAY_KEYS.put("transferitemstowarehouse", "gui.path.action_editor.type.transfer_to_warehouse");
         ACTION_DISPLAY_KEYS.put("warehouse_auto_deposit", "gui.path.action_editor.type.warehouse_auto_deposit");
         ACTION_DISPLAY_KEYS.put("autochestclick", "gui.path.action_editor.type.auto_chest_click");
         ACTION_DISPLAY_KEYS.put("blocknextgui", "gui.path.action_editor.type.block_next_gui");

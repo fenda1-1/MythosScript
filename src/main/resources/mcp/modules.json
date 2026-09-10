@@ -116,16 +116,6 @@
     ]
   },
   {
-    "id": "ArenaItemHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.ArenaItemHandler",
-    "reload": [
-      "loadArenaConfig"
-    ],
-    "save": [
-      "saveArenaConfig"
-    ]
-  },
-  {
     "id": "AutoEatHandler",
     "class": "com.zszl.zszlScriptMod.handlers.AutoEatHandler",
     "reload": [
@@ -133,16 +123,6 @@
     ],
     "save": [
       "saveAutoEatConfig"
-    ]
-  },
-  {
-    "id": "AutoEquipHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.AutoEquipHandler",
-    "reload": [
-      "loadConfig"
-    ],
-    "save": [
-      "saveConfig"
     ]
   },
   {

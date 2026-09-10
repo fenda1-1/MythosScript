@@ -16,6 +16,7 @@ import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
 import com.zszl.zszlScriptMod.gui.modern.form.ModernFormI18n;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 
 import net.minecraft.util.text.TextFormatting;
 
@@ -232,14 +233,16 @@ public final class ModernTooltipSupport {
                 }
             }
             for (GuiTextField field : getTextFields(screen)) {
-                if (field == null || !field.getVisible() || field.width < 38 || field.height < INFO_ICON_SIZE) {
+                if (field == null || !field.getVisible()) {
                     continue;
                 }
+                ModernMainLayout.Rect rect = fieldBounds(field);
+                if (rect.width < 38 || rect.height < INFO_ICON_SIZE) continue;
                 TooltipAnchor registered = findAnchor(anchors, field);
                 String tooltip = registered == null ? ModernFormI18n.tr("gui.modern.tooltip.field_default")
                         : registered.tooltip;
                 if (!tooltip.isEmpty()
-                        && contains(iconX(field.x, field.width), iconY(field.y, field.height), INFO_ICON_SIZE,
+                        && contains(iconX(rect.x, rect.width), iconY(rect.y, rect.height), INFO_ICON_SIZE,
                                 INFO_ICON_SIZE, mouseX, mouseY)) {
                     return tooltip;
                 }
@@ -258,8 +261,9 @@ public final class ModernTooltipSupport {
                 }
             } else if (anchor.control instanceof GuiTextField) {
                 GuiTextField field = (GuiTextField) anchor.control;
-                if (field.getVisible() && field.width >= 38 && field.height >= INFO_ICON_SIZE
-                        && contains(iconX(field.x, field.width), iconY(field.y, field.height), INFO_ICON_SIZE,
+                ModernMainLayout.Rect rect = fieldBounds(field);
+                if (field.getVisible() && rect.width >= 38 && rect.height >= INFO_ICON_SIZE
+                        && contains(iconX(rect.x, rect.width), iconY(rect.y, rect.height), INFO_ICON_SIZE,
                                 INFO_ICON_SIZE, mouseX, mouseY)) {
                     return anchor.tooltip;
                 }
@@ -391,8 +395,9 @@ public final class ModernTooltipSupport {
                 continue;
             }
             GuiTextField field = (GuiTextField) anchor.control;
-            if (field.getVisible() && field.width >= 38 && field.height >= INFO_ICON_SIZE
-                    && contains(iconX(field.x, field.width), iconY(field.y, field.height), INFO_ICON_SIZE,
+            ModernMainLayout.Rect rect = fieldBounds(field);
+            if (field.getVisible() && rect.width >= 38 && rect.height >= INFO_ICON_SIZE
+                    && contains(iconX(rect.x, rect.width), iconY(rect.y, rect.height), INFO_ICON_SIZE,
                             INFO_ICON_SIZE, mouseX, mouseY)) {
                 return true;
             }
@@ -493,7 +498,8 @@ public final class ModernTooltipSupport {
             if (!field.getVisible()) {
                 continue;
             }
-            HoverCandidate candidate = drawControlIcon(field, field.x, field.y, field.width, field.height,
+            ModernMainLayout.Rect rect = fieldBounds(field);
+            HoverCandidate candidate = drawControlIcon(field, rect.x, rect.y, rect.width, rect.height,
                     anchor.tooltip, mouseX, mouseY);
             if (candidate != null) {
                 result = candidate;
@@ -717,7 +723,8 @@ public final class ModernTooltipSupport {
             }
         }
         for (GuiTextField field : getTextFields(screen)) {
-            if (field.getVisible() && contains(field.x, field.y, field.width, field.height, mouseX, mouseY)) {
+            ModernMainLayout.Rect rect = fieldBounds(field);
+            if (field.getVisible() && contains(rect.x, rect.y, rect.width, rect.height, mouseX, mouseY)) {
                 return field;
             }
         }
@@ -751,6 +758,13 @@ public final class ModernTooltipSupport {
             }
         }
         return new ArrayList<>(seen.keySet());
+    }
+
+    private static ModernMainLayout.Rect fieldBounds(GuiTextField field) {
+        if (field instanceof ModernTextField) {
+            return ((ModernTextField) field).hitBounds();
+        }
+        return new ModernMainLayout.Rect(field.x, field.y, field.width, field.height);
     }
 
     @SuppressWarnings("unchecked")

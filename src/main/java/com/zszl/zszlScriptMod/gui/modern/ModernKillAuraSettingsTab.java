@@ -17,11 +17,13 @@ import com.zszl.zszlScriptMod.handlers.KillAuraHandler.HuntScoreDebugEntry;
 import com.zszl.zszlScriptMod.handlers.KillAuraHandler.KillAuraPreset;
 import com.zszl.zszlScriptMod.gui.modern.form.ModernFormI18n;
 import com.zszl.zszlScriptMod.gui.modern.path.ModernPathSequencePicker;
+import com.zszl.zszlScriptMod.gui.modern.path.editor.ExpressionEditorPreview;
+import com.zszl.zszlScriptMod.gui.modern.path.editor.ModernExpressionEditorPanel;
 import com.zszl.zszlScriptMod.path.PathSequenceManager;
 import com.zszl.zszlScriptMod.utils.guiinspect.GuiElementInspector;
 
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 
 /**
  * Complete embedded editor for Kill Aura. The feature has enough coupled
@@ -89,7 +91,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         NAME_KEYWORD("gui.modern.killaura.u019", "gui.modern.killaura.u020"),
         ITEM_ID_KEYWORD("gui.modern.killaura.u021", "gui.modern.killaura.u022"),
         NBT_TAGS("gui.modern.killaura.u023", "gui.modern.killaura.u024"),
-        EXPRESSIONS("gui.modern.killaura.u025", "gui.modern.killaura.u026"),
+        EXPRESSIONS("gui.modern.killaura.u242", "gui.modern.killaura.u243"),
         MAX_DISTANCE("gui.modern.killaura.u027", "gui.modern.killaura.u028"),
         PRIORITY("gui.modern.killaura.u029", "gui.modern.killaura.u030" );
 
@@ -141,7 +143,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         private boolean fullWidth;
         private Condition visibleWhen = ALWAYS;
         private Condition enabledWhen = ALWAYS;
-        private GuiTextField input;
+        private ModernTextField input;
         private ModernMainLayout.Rect rowBounds;
         private ModernMainLayout.Rect controlBounds;
         private ModernMainLayout.Rect infoBounds;
@@ -258,12 +260,29 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         }
     }
 
+    private static final class RuleExpressionHit {
+        private final int index;
+        private final ModernMainLayout.Rect row;
+        private final ModernMainLayout.Rect edit;
+        private final ModernMainLayout.Rect delete;
+
+        private RuleExpressionHit(int index, ModernMainLayout.Rect row, ModernMainLayout.Rect edit,
+                ModernMainLayout.Rect delete) {
+            this.index = index;
+            this.row = row;
+            this.edit = edit;
+            this.delete = delete;
+        }
+    }
+
     private final Map<Group, List<Section>> sections = new EnumMap<>(Group.class);
     private final List<SectionLayout> sectionLayouts = new ArrayList<>();
     private final List<PresetCardHit> presetCardHits = new ArrayList<>();
     private final List<NameRowHit> nameRowHits = new ArrayList<>();
     private final List<RuleCardHit> ruleCardHits = new ArrayList<>();
-    private final Map<RuleInputKey, GuiTextField> ruleInputs = new EnumMap<>(RuleInputKey.class);
+    private final List<RuleExpressionHit> ruleExpressionHits = new ArrayList<>();
+    private final Map<RuleInputKey, ModernTextField> ruleInputs = new EnumMap<>(RuleInputKey.class);
+    private final Map<RuleInputKey, String> localizedRuleInputSources = new EnumMap<>(RuleInputKey.class);
     private final Map<RuleInputKey, ModernMainLayout.Rect> ruleInputBounds = new EnumMap<>(RuleInputKey.class);
     private final List<String> nearbyNames = new ArrayList<>();
     private final List<KillAuraPreset> presetCards = new ArrayList<>();
@@ -300,14 +319,16 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     private ModernMainLayout.Rect ruleListBounds;
     private ModernMainLayout.Rect ruleToggleBounds;
     private ModernMainLayout.Rect ruleModeBounds;
+    private ModernMainLayout.Rect ruleExpressionAddBounds;
     private final Map<String, ModernMainLayout.Rect> rarityBounds = new java.util.LinkedHashMap<>();
     private ModernMainLayout.Rect huntScoreBounds;
 
-    private GuiTextField presetNameField;
-    private GuiTextField nameEntryField;
+    private ModernTextField presetNameField;
+    private ModernTextField nameEntryField;
     private int selectedPresetIndex = -1;
     private int selectedWhitelistIndex = -1;
     private int selectedRuleIndex = -1;
+    private int selectedRuleExpressionIndex = -1;
     private int scrollOffset;
     private int maxScrollOffset;
     private final ModernHoverScrollbar scrollbar = new ModernHoverScrollbar();
@@ -319,10 +340,16 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     private String statusMessage = "";
     private long statusMessageUntil;
     private boolean drawingContent;
+    /**
+     * The form temporarily hides every text field while rebuilding its layout.
+     * Remember the logical focus so that this render-only reset cannot steal it.
+     */
+    private ModernTextField focusedInputBeforeLayoutReset;
     private boolean initialized;
     private boolean immediatePersistenceOccurred;
     private boolean draftDirty;
     private State savedState;
+    private final ModernExpressionEditorPanel ruleExpressionEditor = new ModernExpressionEditorPanel();
     private final ModernPathSequencePicker attackSequencePicker = new ModernPathSequencePicker(new ModernPathSequencePicker.Selection() {
         @Override
         public void accept(String name) {
@@ -535,9 +562,10 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     @Override
     public void updateScreen() {
         attackSequencePicker.updateScreen();
+        ruleExpressionEditor.updateScreen();
         forEachInput(new InputVisitor() {
             @Override
-            public void visit(GuiTextField input) {
+            public void visit(ModernTextField input) {
                 input.updateCursorCounter();
             }
         });
@@ -547,6 +575,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     public void draw(FontRenderer renderer, ModernMainLayout.Rect contentBounds, int mouseX, int mouseY) {
         ensureInitialized(renderer);
         this.fontRenderer = renderer;
+        focusedInputBeforeLayoutReset = findFocusedInput();
         hoveredTooltip = "";
         drawingContent = false;
         panelBounds = buildPanelBounds(contentBounds);
@@ -578,6 +607,24 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         drawEditorHeader(editorBounds, mouseX, mouseY);
         ModernSplitPane.drawVerticalDivider(groupRailDividerBounds, mouseX, mouseY, draggingGroupRailDivider);
 
+        if (ruleExpressionEditor.isOpen()) {
+            clearAllFieldBounds();
+            hideAllInputs();
+            drawingContent = true;
+            ModernUiRenderer.beginClip(contentClipBounds);
+            ruleExpressionEditor.draw(renderer, contentClipBounds, mouseX, mouseY);
+            ModernUiRenderer.endClip();
+            drawingContent = false;
+            hoveredTooltip = ruleExpressionEditor.getHoveredTooltip();
+            drawFooter(mouseX, mouseY);
+            if (attackSequencePicker.isOpen()) {
+                hoveredTooltip = "";
+                attackSequencePicker.draw(fontRenderer, panelBounds, t("gui.modern.killaura.u047"), mouseX, mouseY);
+            }
+            focusedInputBeforeLayoutReset = null;
+            return;
+        }
+
         if (activeGroup == Group.TARGET) {
             refreshHuntScoreEntries();
         }
@@ -606,6 +653,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             hoveredTooltip = "";
             attackSequencePicker.draw(fontRenderer, panelBounds, t("gui.modern.killaura.u047"), mouseX, mouseY);
         }
+        focusedInputBeforeLayoutReset = null;
     }
 
     @Override
@@ -615,6 +663,9 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                 attackSequencePicker.mouseClicked(mouseX, mouseY);
             }
             return true;
+        }
+        if (ruleExpressionEditor.isOpen()) {
+            return ruleExpressionEditor.mouseClicked(mouseX, mouseY, mouseButton);
         }
         if (mouseButton != 0 || panelBounds == null || !panelBounds.contains(mouseX, mouseY)) {
             return false;
@@ -667,6 +718,9 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         if (attackSequencePicker.isOpen()) {
             return attackSequencePicker.keyTyped(typedChar, keyCode);
         }
+        if (ruleExpressionEditor.isOpen()) {
+            return ruleExpressionEditor.keyTyped(typedChar, keyCode);
+        }
         if (keyTypedInInputs(typedChar, keyCode)) {
             return true;
         }
@@ -684,6 +738,9 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         if (attackSequencePicker.isOpen()) {
             return attackSequencePicker.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
         }
+        if (ruleExpressionEditor.isOpen()) {
+            return ruleExpressionEditor.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
+        }
         if (clickedMouseButton == 0 && draggingGroupRailDivider && panelBounds != null) {
             resizeGroupRail(mouseX);
             return true;
@@ -699,6 +756,9 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     public boolean mouseReleased(int mouseX, int mouseY, int state) {
         if (attackSequencePicker.isOpen()) {
             return attackSequencePicker.mouseReleased(mouseX, mouseY, state);
+        }
+        if (ruleExpressionEditor.isOpen()) {
+            return ruleExpressionEditor.mouseReleased(mouseX, mouseY, state);
         }
         if (state == 0 && scrollbar.isDragging()) {
             scrollbar.endDrag();
@@ -717,6 +777,9 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         if (attackSequencePicker.isOpen()) {
             return true;
         }
+        if (ruleExpressionEditor.isOpen()) {
+            return true;
+        }
         if (wheel == 0 || maxScrollOffset <= 0) {
             return false;
         }
@@ -730,22 +793,33 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         if (attackSequencePicker.isOpen()) {
             return attackSequencePicker.handleMouseWheel(wheel, mouseX, mouseY);
         }
+        if (ruleExpressionEditor.isOpen()) {
+            return ruleExpressionEditor.handleMouseWheel(wheel, mouseX, mouseY);
+        }
         return handleMouseWheel(wheel);
     }
 
     @Override
     public boolean handleEscape() {
-        return attackSequencePicker.isOpen() && attackSequencePicker.handleEscape();
+        if (attackSequencePicker.isOpen()) {
+            return attackSequencePicker.handleEscape();
+        }
+        return ruleExpressionEditor.isOpen() && ruleExpressionEditor.handleEscape();
     }
 
     @Override
     public boolean isTextInputFocused() {
-        return attackSequencePicker.isTextInputFocused() || ModernSettingsTab.super.isTextInputFocused();
+        return attackSequencePicker.isTextInputFocused() || ruleExpressionEditor.isTextInputFocused()
+                || ModernSettingsTab.super.isTextInputFocused();
     }
 
     @Override
     public void clearTextInputFocusOutside(int mouseX, int mouseY) {
         if (attackSequencePicker.isOpen()) {
+            return;
+        }
+        if (ruleExpressionEditor.isOpen()) {
+            ruleExpressionEditor.clearTextInputFocusOutside(mouseX, mouseY);
             return;
         }
         ModernSettingsTab.super.clearTextInputFocusOutside(mouseX, mouseY);
@@ -898,10 +972,33 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                             KillAuraHandler.getHuntPickupRarityDisplayName(entry.getKey()), entry.getValue());
                 }
                 for (Map.Entry<RuleInputKey, ModernMainLayout.Rect> entry : ruleInputBounds.entrySet()) {
+                    if (entry.getKey() == RuleInputKey.EXPRESSIONS) {
+                        continue;
+                    }
                     addMcpElement(result,
                             "screen/GuiModernMainScreen/tab/toggle_kill_aura/special/hunt/rule/input/"
                                     + entry.getKey().name().toLowerCase(Locale.ROOT),
-                            entry.getKey().label, entry.getValue());
+                            t(entry.getKey().label), entry.getValue());
+                }
+                ModernMainLayout.Rect expressionPanel = ruleInputBounds.get(RuleInputKey.EXPRESSIONS);
+                addMcpElement(result,
+                        "screen/GuiModernMainScreen/tab/toggle_kill_aura/special/hunt/rule/expressions",
+                        t("gui.modern.killaura.u242"), expressionPanel, "expression_list",
+                        joinLiteralLines(selectedRule().itemFilterExpressions), true, false,
+                        Collections.singletonList("click"), Collections.<String>emptyList());
+                addMcpElement(result,
+                        "screen/GuiModernMainScreen/tab/toggle_kill_aura/special/hunt/rule/expressions/add",
+                        t("gui.modern.killaura.u244"), ruleExpressionAddBounds);
+                for (RuleExpressionHit hit : ruleExpressionHits) {
+                    if (hit == null) continue;
+                    List<String> values = selectedRule().itemFilterExpressions;
+                    String value = values != null && hit.index >= 0 && hit.index < values.size()
+                            ? safe(values.get(hit.index)) : "";
+                    String base = "screen/GuiModernMainScreen/tab/toggle_kill_aura/special/hunt/rule/expressions/"
+                            + hit.index;
+                    addMcpElement(result, base, value, hit.row);
+                    addMcpElement(result, base + "/edit", t("gui.modern.killaura.u245"), hit.edit);
+                    addMcpElement(result, base + "/delete", t("gui.modern.killaura.u246"), hit.delete);
                 }
             }
         }
@@ -1013,7 +1110,31 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
     @Override
     public boolean setMcpText(String target, String text, boolean append) {
-        GuiTextField input = findMcpInput(target);
+        String normalizedTarget = target == null ? "" : target.trim().toLowerCase(Locale.ROOT);
+        if (normalizedTarget.contains("/rule/expressions")
+                && !normalizedTarget.endsWith("/add") && !normalizedTarget.endsWith("/edit")
+                && !normalizedTarget.endsWith("/delete")) {
+            activeGroup = Group.HUNT;
+            scrollOffset = 0;
+            HuntPickupRule rule = selectedRule();
+            if (rule == null) {
+                return false;
+            }
+            List<String> values = parseExpressionList(text);
+            if (!append) {
+                rule.itemFilterExpressions = values;
+            } else {
+                if (rule.itemFilterExpressions == null) {
+                    rule.itemFilterExpressions = new ArrayList<>();
+                }
+                rule.itemFilterExpressions.addAll(values);
+            }
+            selectedRuleExpressionIndex = rule.itemFilterExpressions.isEmpty()
+                    ? -1 : rule.itemFilterExpressions.size() - 1;
+            draftDirty = true;
+            return true;
+        }
+        ModernTextField input = findMcpInput(target);
         if (input == null) {
             return false;
         }
@@ -1022,6 +1143,18 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         input.setText(append ? safe(input.getText()) + (text == null ? "" : text) : (text == null ? "" : text));
         draftDirty = true;
         return true;
+    }
+
+    private List<String> parseExpressionList(String text) {
+        List<String> values = new ArrayList<>();
+        String normalized = safe(text).replace("\\n", "\n").replace('\r', '\n');
+        for (String part : normalized.split("[\\n;；]+")) {
+            String expression = safe(part).trim();
+            if (!expression.isEmpty()) {
+                values.add(expression);
+            }
+        }
+        return values;
     }
 
     @Override
@@ -1037,7 +1170,12 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             }
             return true;
         }
-        GuiTextField input = findMcpInput(target);
+        if (normalized.contains("/rule/expressions")
+                && !normalized.endsWith("/add") && !normalized.endsWith("/edit")
+                && !normalized.endsWith("/delete")) {
+            return setMcpText(target, value, false);
+        }
+        ModernTextField input = findMcpInput(target);
         if (input != null) {
             return setMcpText(target, value, false);
         }
@@ -1122,6 +1260,9 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         for (RuleCardHit hit : ruleCardHits) {
             if (hit != null && normalized.contains("/hunt/rule/" + hit.index)) return revealRect(hit.bounds);
         }
+        if (normalized.contains("/hunt/rule/expressions")) {
+            return revealRect(ruleInputBounds.get(RuleInputKey.EXPRESSIONS));
+        }
         return false;
     }
 
@@ -1135,7 +1276,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         return true;
     }
 
-    private GuiTextField findMcpInput(String target) {
+    private ModernTextField findMcpInput(String target) {
         String normalized = target == null ? "" : target.trim().toLowerCase(Locale.ROOT);
         if (normalized.isEmpty()) {
             return null;
@@ -1284,13 +1425,15 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         presetNameField = createTextField(renderer, 96);
         nameEntryField = createTextField(renderer, 128);
         for (RuleInputKey key : RuleInputKey.values()) {
-            ruleInputs.put(key, createTextField(renderer, key == RuleInputKey.EXPRESSIONS ? 2048 : 256));
+            if (key != RuleInputKey.EXPRESSIONS) {
+                ruleInputs.put(key, createTextField(renderer, 256));
+            }
         }
         syncInputFields();
     }
 
-    private GuiTextField createTextField(FontRenderer renderer, int maxLength) {
-        GuiTextField field = new GuiTextField(0, renderer, 0, 0, 1, 18);
+    private ModernTextField createTextField(FontRenderer renderer, int maxLength) {
+        ModernTextField field = new ModernTextField(0, renderer, 0, 0, 1, 18);
         field.setEnableBackgroundDrawing(false);
         field.setMaxStringLength(Math.max(1, maxLength));
         field.setTextColor(ModernUiRenderer.TEXT);
@@ -1496,10 +1639,8 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             return total;
         }
         int inputColumns = width >= 430 ? 2 : 1;
-        int inputWidth = Math.max(1, (width - ROW_GAP * Math.max(0, inputColumns - 1)) / inputColumns);
-        int inputHeight = inputWidth < 210 ? 48 : ROW_HEIGHT;
-        int inputRows = (RuleInputKey.values().length + inputColumns - 1) / inputColumns;
-        return total + SPECIAL_TITLE_HEIGHT + 25 + 24 + inputRows * (inputHeight + ROW_GAP) + 4;
+        return total + SPECIAL_TITLE_HEIGHT + 25 + 24
+                + ruleInputRowsHeight(width, inputColumns) + 4;
     }
 
     private int layoutPickupContent(int x, int y, int width, int columns) {
@@ -1532,16 +1673,64 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         y += 24;
         int inputColumns = width >= 430 ? 2 : 1;
         int inputWidth = Math.max(1, (width - ROW_GAP * Math.max(0, inputColumns - 1)) / inputColumns);
-        int inputHeight = inputWidth < 210 ? 48 : ROW_HEIGHT;
         RuleInputKey[] keys = RuleInputKey.values();
-        for (int index = 0; index < keys.length; index++) {
-            int row = index / inputColumns;
-            int column = index % inputColumns;
-            ruleInputBounds.put(keys[index], new ModernMainLayout.Rect(x + column * (inputWidth + ROW_GAP),
-                    y + row * (inputHeight + ROW_GAP), inputWidth, inputHeight));
+        int index = 0;
+        while (index < keys.length) {
+            RuleInputKey key = keys[index];
+            if (key == RuleInputKey.EXPRESSIONS) {
+                int height = ruleInputHeight(key, width);
+                ruleInputBounds.put(key, new ModernMainLayout.Rect(x, y, width, height));
+                y += height + ROW_GAP;
+                index++;
+                continue;
+            }
+            RuleInputKey second = index + 1 < keys.length && keys[index + 1] != RuleInputKey.EXPRESSIONS
+                    ? keys[index + 1] : null;
+            int rowWidth = second == null && inputColumns == 1 ? width : inputWidth;
+            int height = Math.max(ruleInputHeight(key, rowWidth),
+                    second == null ? 0 : ruleInputHeight(second, inputWidth));
+            ruleInputBounds.put(key, new ModernMainLayout.Rect(x, y, rowWidth, height));
+            if (second != null) {
+                ruleInputBounds.put(second, new ModernMainLayout.Rect(x + inputWidth + ROW_GAP, y,
+                        inputWidth, height));
+            }
+            y += height + ROW_GAP;
+            index += second == null ? 1 : 2;
         }
-        int rows = (keys.length + inputColumns - 1) / inputColumns;
-        return y + rows * (inputHeight + ROW_GAP) + 4;
+        return y + 4;
+    }
+
+    private int ruleInputRowsHeight(int width, int inputColumns) {
+        int inputWidth = Math.max(1, (width - ROW_GAP * Math.max(0, inputColumns - 1)) / inputColumns);
+        RuleInputKey[] keys = RuleInputKey.values();
+        int total = 0;
+        int index = 0;
+        while (index < keys.length) {
+            RuleInputKey key = keys[index];
+            if (key == RuleInputKey.EXPRESSIONS) {
+                total += ruleInputHeight(key, width) + ROW_GAP;
+                index++;
+                continue;
+            }
+            RuleInputKey second = index + 1 < keys.length && keys[index + 1] != RuleInputKey.EXPRESSIONS
+                    ? keys[index + 1] : null;
+            int rowWidth = second == null && inputColumns == 1 ? width : inputWidth;
+            int height = Math.max(ruleInputHeight(key, rowWidth),
+                    second == null ? 0 : ruleInputHeight(second, inputWidth));
+            total += height + ROW_GAP;
+            index += second == null ? 1 : 2;
+        }
+        return total;
+    }
+
+    private int ruleInputHeight(RuleInputKey key, int width) {
+        if (key == RuleInputKey.EXPRESSIONS) {
+            int count = selectedRule() == null || selectedRule().itemFilterExpressions == null
+                    ? 0 : selectedRule().itemFilterExpressions.size();
+            int visibleRows = Math.max(1, count);
+            return Math.max(96, 50 + visibleRows * (LIST_CARD_HEIGHT + LIST_CARD_GAP));
+        }
+        return width < 210 ? 48 : ROW_HEIGHT;
     }
 
     private int huntScoreContentHeight() {
@@ -1747,7 +1936,11 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         drawRuleRarityOptions(rule, mouseX, mouseY);
         for (RuleInputKey key : RuleInputKey.values()) {
             ModernMainLayout.Rect bounds = ruleInputBounds.get(key);
-            GuiTextField input = ruleInputs.get(key);
+            if (key == RuleInputKey.EXPRESSIONS) {
+                drawRuleExpressionPanel(rule, bounds, mouseX, mouseY);
+                continue;
+            }
+            ModernTextField input = ruleInputs.get(key);
             if (bounds == null || input == null) {
                 continue;
             }
@@ -1838,7 +2031,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         }
     }
 
-    private void drawRuleInput(RuleInputKey key, GuiTextField input, ModernMainLayout.Rect row, int mouseX, int mouseY) {
+    private void drawRuleInput(RuleInputKey key, ModernTextField input, ModernMainLayout.Rect row, int mouseX, int mouseY) {
         boolean compact = row.width < 210;
         int titleY = row.y + (compact ? 5 : (row.height - fontRenderer.FONT_HEIGHT) / 2);
         int labelWidth = compact ? row.width - 20 : Math.max(28, row.width - 120);
@@ -1850,6 +2043,64 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         ModernMainLayout.Rect inputBounds = compact ? new ModernMainLayout.Rect(row.x + 9, row.bottom() - 25,
                 Math.max(1, row.width - 18), 21) : new ModernMainLayout.Rect(row.right() - 110, row.y + 5, 102, 22);
         drawInput(input, inputBounds, "", true, mouseX, mouseY);
+    }
+
+    private void drawRuleExpressionPanel(HuntPickupRule rule, ModernMainLayout.Rect bounds,
+            int mouseX, int mouseY) {
+        if (rule == null || bounds == null) {
+            return;
+        }
+        ModernUiRenderer.drawSubtlePanel(bounds.x, bounds.y, bounds.width, bounds.height, 5,
+                0xFF111A22, ModernUiRenderer.BORDER_SUBTLE);
+        ModernUiRenderer.drawText(fontRenderer, "gui.modern.killaura.u242", bounds.x + 9, bounds.y + 7,
+                ModernUiRenderer.TEXT, Math.max(70, bounds.width - 112));
+        drawInfoIcon(bounds.x + Math.min(Math.max(0, bounds.width - 112),
+                fontRenderer.getStringWidth(t("gui.modern.killaura.u242")) + 5), bounds.y + 6,
+                "gui.modern.killaura.u243", mouseX, mouseY);
+        ruleExpressionAddBounds = new ModernMainLayout.Rect(bounds.right() - 82, bounds.y + 6, 72, 21);
+        drawActionButton(ruleExpressionAddBounds, "gui.modern.killaura.u244", true, mouseX, mouseY, false);
+        ModernUiRenderer.drawText(fontRenderer, "gui.modern.killaura.u243", bounds.x + 9, bounds.y + 27,
+                ModernUiRenderer.MUTED_TEXT, Math.max(70, bounds.width - 18));
+
+        ruleExpressionHits.clear();
+        List<String> expressions = rule.itemFilterExpressions == null
+                ? Collections.<String>emptyList() : rule.itemFilterExpressions;
+        if (expressions.isEmpty()) {
+            ModernUiRenderer.drawText(fontRenderer, "gui.modern.killaura.u247", bounds.x + 10, bounds.y + 51,
+                    ModernUiRenderer.MUTED_TEXT, Math.max(40, bounds.width - 20));
+            return;
+        }
+        int y = bounds.y + 45;
+        int maxRows = Math.max(1, (bounds.height - 50) / (LIST_CARD_HEIGHT + LIST_CARD_GAP));
+        int visible = Math.min(expressions.size(), maxRows);
+        for (int index = 0; index < visible; index++) {
+            String expression = safe(expressions.get(index)).trim();
+            ModernMainLayout.Rect row = new ModernMainLayout.Rect(bounds.x + 8, y,
+                    Math.max(1, bounds.width - 16), LIST_CARD_HEIGHT);
+            boolean selected = index == selectedRuleExpressionIndex;
+            boolean hovered = row.contains(mouseX, mouseY);
+            ModernUiRenderer.drawSubtlePanel(row.x, row.y, row.width, row.height, 4,
+                    selected ? ModernUiRenderer.SELECTED_SURFACE
+                            : hovered ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SURFACE,
+                    selected ? ModernUiRenderer.ACCENT : hovered ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
+            int buttonWidth = 58;
+            int textRight = row.right() - buttonWidth - 4;
+            ModernUiRenderer.drawText(fontRenderer, (index + 1) + ". " + expression, row.x + 8,
+                    row.y + (row.height - fontRenderer.FONT_HEIGHT) / 2,
+                    selected ? ModernUiRenderer.SELECTED_TEXT : ModernUiRenderer.SUBTLE_TEXT,
+                    Math.max(28, textRight - row.x - 10));
+            ModernMainLayout.Rect edit = new ModernMainLayout.Rect(row.right() - 54, row.y + 3, 25, 19);
+            ModernMainLayout.Rect delete = new ModernMainLayout.Rect(row.right() - 27, row.y + 3, 24, 19);
+            drawTinyButton(edit, "gui.modern.killaura.u245", true, mouseX, mouseY);
+            drawTinyButton(delete, "gui.modern.killaura.u246", true, mouseX, mouseY);
+            ruleExpressionHits.add(new RuleExpressionHit(index, row, edit, delete));
+            y += LIST_CARD_HEIGHT + LIST_CARD_GAP;
+        }
+        if (expressions.size() > visible) {
+            ModernUiRenderer.drawText(fontRenderer,
+                    t("gui.modern.killaura.fmt.more", String.valueOf(expressions.size() - visible)),
+                    bounds.right() - 78, bounds.y + 27, ModernUiRenderer.MUTED_TEXT, 68);
+        }
     }
 
     private void drawHuntScoreContent(int x, int y, int width, int mouseX, int mouseY) {
@@ -2222,6 +2473,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             }
             KillAuraHandler.huntPickupRules.add(rule);
             selectedRuleIndex = KillAuraHandler.huntPickupRules.size() - 1;
+            selectedRuleExpressionIndex = 0;
             draftDirty = true;
             syncRuleInputs();
             showStatus("gui.modern.killaura.u233");
@@ -2231,6 +2483,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             KillAuraHandler.huntPickupRules.remove(selectedRuleIndex);
             draftDirty = true;
             selectedRuleIndex = Math.min(selectedRuleIndex, KillAuraHandler.huntPickupRules.size() - 1);
+            selectedRuleExpressionIndex = -1;
             syncRuleInputs();
             showStatus("gui.modern.killaura.u234");
             return true;
@@ -2239,6 +2492,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             if (hit.bounds.contains(mouseX, mouseY)) {
                 applyRuleInputs();
                 selectedRuleIndex = hit.index;
+                selectedRuleExpressionIndex = -1;
                 syncRuleInputs();
                 return true;
             }
@@ -2267,9 +2521,15 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                     return true;
                 }
             }
+            if (contains(ruleInputBounds.get(RuleInputKey.EXPRESSIONS), mouseX, mouseY)) {
+                return handleRuleExpressionClick(mouseX, mouseY);
+            }
             for (Map.Entry<RuleInputKey, ModernMainLayout.Rect> entry : ruleInputBounds.entrySet()) {
+                if (entry.getKey() == RuleInputKey.EXPRESSIONS) {
+                    continue;
+                }
                 if (entry.getValue().contains(mouseX, mouseY)) {
-                    GuiTextField input = ruleInputs.get(entry.getKey());
+                    ModernTextField input = ruleInputs.get(entry.getKey());
                     clearInputFocus();
                     if (input != null) {
                         input.setFocused(true);
@@ -2280,6 +2540,80 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             }
         }
         return true;
+    }
+
+    private boolean handleRuleExpressionClick(int mouseX, int mouseY) {
+        HuntPickupRule rule = selectedRule();
+        if (rule == null) {
+            return true;
+        }
+        if (contains(ruleExpressionAddBounds, mouseX, mouseY)) {
+            applyRuleInputs();
+            openRuleExpressionEditor(-1);
+            return true;
+        }
+        for (RuleExpressionHit hit : new ArrayList<>(ruleExpressionHits)) {
+            if (hit == null || hit.row == null || !hit.row.contains(mouseX, mouseY)) {
+                continue;
+            }
+            if (contains(hit.delete, mouseX, mouseY)) {
+                applyRuleInputs();
+                if (rule.itemFilterExpressions != null && hit.index >= 0
+                        && hit.index < rule.itemFilterExpressions.size()) {
+                    rule.itemFilterExpressions.remove(hit.index);
+                    selectedRuleExpressionIndex = Math.min(hit.index,
+                            rule.itemFilterExpressions.size() - 1);
+                    draftDirty = true;
+                    showStatus("gui.modern.killaura.u253");
+                }
+                return true;
+            }
+            selectedRuleExpressionIndex = hit.index;
+            if (contains(hit.edit, mouseX, mouseY) || hit.row.contains(mouseX, mouseY)) {
+                applyRuleInputs();
+                openRuleExpressionEditor(hit.index);
+            }
+            return true;
+        }
+        return true;
+    }
+
+    private void openRuleExpressionEditor(final int index) {
+        final HuntPickupRule rule = selectedRule();
+        if (rule == null) {
+            return;
+        }
+        List<String> expressions = rule.itemFilterExpressions == null
+                ? Collections.<String>emptyList() : rule.itemFilterExpressions;
+        String initial = index >= 0 && index < expressions.size() ? safe(expressions.get(index)) : "";
+        clearInputFocus();
+        ruleExpressionEditor.open(fontRenderer, initial,
+                index < 0 ? "gui.modern.killaura.u248" : "gui.modern.killaura.u249",
+                ExpressionEditorPreview.Mode.ITEM_FILTER, Collections.emptyList(), null, -1, -1,
+                new ModernExpressionEditorPanel.CommitListener() {
+                    @Override
+                    public void accept(String expression) {
+                        if (rule.itemFilterExpressions == null) {
+                            rule.itemFilterExpressions = new ArrayList<>();
+                        }
+                        String value = safe(expression).trim();
+                        if (index >= 0 && index < rule.itemFilterExpressions.size()) {
+                            rule.itemFilterExpressions.set(index, value);
+                            selectedRuleExpressionIndex = index;
+                            showStatus("gui.modern.killaura.u251");
+                        } else {
+                            rule.itemFilterExpressions.add(value);
+                            selectedRuleExpressionIndex = rule.itemFilterExpressions.size() - 1;
+                            showStatus("gui.modern.killaura.u250");
+                        }
+                        draftDirty = true;
+                    }
+                }, new ModernExpressionEditorPanel.CancelListener() {
+                    @Override
+                    public void cancel() {
+                        selectedRuleExpressionIndex = index;
+                    }
+                });
     }
 
     @Override
@@ -2359,6 +2693,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         KillAuraHandler.INSTANCE.resetRuntimeState();
         selectedWhitelistIndex = -1;
         selectedRuleIndex = -1;
+        selectedRuleExpressionIndex = -1;
         refreshAfterStateChange();
         showStatus("gui.modern.killaura.u236");
     }
@@ -2406,12 +2741,29 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
     private void syncRuleInputs() {
         HuntPickupRule rule = selectedRule();
+        if (rule == null || rule.itemFilterExpressions == null || rule.itemFilterExpressions.isEmpty()) {
+            selectedRuleExpressionIndex = -1;
+        } else {
+            selectedRuleExpressionIndex = clamp(selectedRuleExpressionIndex, 0,
+                    rule.itemFilterExpressions.size() - 1);
+        }
+        localizedRuleInputSources.clear();
         for (RuleInputKey key : RuleInputKey.values()) {
-            GuiTextField input = ruleInputs.get(key);
+            ModernTextField input = ruleInputs.get(key);
             if (input == null) {
                 continue;
             }
-            input.setText(rule == null ? "" : ruleInputValue(rule, key));
+            if (rule == null) {
+                input.setText("");
+                continue;
+            }
+            String modelValue = ruleInputValue(rule, key);
+            String displayValue = ruleInputDisplayValue(rule, key);
+            input.setText(displayValue);
+            if ((key == RuleInputKey.NAME || key == RuleInputKey.CATEGORY)
+                    && !modelValue.equals(displayValue)) {
+                localizedRuleInputSources.put(key, modelValue);
+            }
         }
     }
 
@@ -2420,19 +2772,28 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         if (rule == null) {
             return;
         }
-        rule.name = valueOf(RuleInputKey.NAME).trim();
-        rule.category = valueOf(RuleInputKey.CATEGORY).trim();
+        rule.name = ruleInputModelValue(RuleInputKey.NAME);
+        rule.category = ruleInputModelValue(RuleInputKey.CATEGORY);
         rule.nameKeyword = valueOf(RuleInputKey.NAME_KEYWORD).trim();
         rule.itemIdKeyword = valueOf(RuleInputKey.ITEM_ID_KEYWORD).trim();
         rule.requiredNbtTags = parseCommaList(valueOf(RuleInputKey.NBT_TAGS));
-        rule.itemFilterExpressions = parseLiteralLines(valueOf(RuleInputKey.EXPRESSIONS));
+        ModernTextField expressionInput = ruleInputs.get(RuleInputKey.EXPRESSIONS);
+        if (expressionInput != null) {
+            rule.itemFilterExpressions = parseLiteralLines(expressionInput.getText());
+        }
         rule.maxDistance = parseFloat(valueOf(RuleInputKey.MAX_DISTANCE), rule.maxDistance, 0.0F, 100.0F);
         rule.priority = parseInt(valueOf(RuleInputKey.PRIORITY), rule.priority, -999, 999);
     }
 
     private String valueOf(RuleInputKey key) {
-        GuiTextField input = ruleInputs.get(key);
+        ModernTextField input = ruleInputs.get(key);
         return input == null ? "" : safe(input.getText());
+    }
+
+    private String ruleInputModelValue(RuleInputKey key) {
+        String visible = valueOf(key).trim();
+        String source = localizedRuleInputSources.get(key);
+        return source != null && t(source).equals(visible) ? source : visible;
     }
 
     private String ruleInputValue(HuntPickupRule rule, RuleInputKey key) {
@@ -2459,6 +2820,11 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         default:
             return "";
         }
+    }
+
+    private String ruleInputDisplayValue(HuntPickupRule rule, RuleInputKey key) {
+        String value = ruleInputValue(rule, key);
+        return key == RuleInputKey.NAME || key == RuleInputKey.CATEGORY ? t(value) : value;
     }
 
     private void refreshAfterStateChange() {
@@ -2573,7 +2939,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     }
 
     private interface InputVisitor {
-        void visit(GuiTextField input);
+        void visit(ModernTextField input);
     }
 
     private void forEachInput(InputVisitor visitor) {
@@ -2595,18 +2961,31 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         if (nameEntryField != null) {
             visitor.visit(nameEntryField);
         }
-        for (GuiTextField input : ruleInputs.values()) {
+        for (ModernTextField input : ruleInputs.values()) {
             if (input != null) {
                 visitor.visit(input);
             }
         }
     }
 
+    private ModernTextField findFocusedInput() {
+        final ModernTextField[] focused = new ModernTextField[] { null };
+        forEachInput(new InputVisitor() {
+            @Override
+            public void visit(ModernTextField input) {
+                if (focused[0] == null && input.isVisible() && input.isFocused()) {
+                    focused[0] = input;
+                }
+            }
+        });
+        return focused[0];
+    }
+
     private boolean keyTypedInInputs(char typedChar, int keyCode) {
         final boolean[] handled = new boolean[] { false };
         forEachInput(new InputVisitor() {
             @Override
-            public void visit(GuiTextField input) {
+            public void visit(ModernTextField input) {
                 if (!handled[0] && input.getVisible() && input.isFocused()
                         && input.textboxKeyTyped(typedChar, keyCode)) {
                     handled[0] = true;
@@ -2623,7 +3002,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         final boolean[] focused = new boolean[] { false };
         forEachInput(new InputVisitor() {
             @Override
-            public void visit(GuiTextField input) {
+            public void visit(ModernTextField input) {
                 if (input.getVisible() && input.isFocused()) {
                     focused[0] = true;
                 }
@@ -2635,7 +3014,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     private void clearInputFocus() {
         forEachInput(new InputVisitor() {
             @Override
-            public void visit(GuiTextField input) {
+            public void visit(ModernTextField input) {
                 input.setFocused(false);
             }
         });
@@ -3252,6 +3631,8 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         ruleListBounds = null;
         ruleToggleBounds = null;
         ruleModeBounds = null;
+        ruleExpressionAddBounds = null;
+        ruleExpressionHits.clear();
         rarityBounds.clear();
         huntScoreBounds = null;
     }
@@ -3259,7 +3640,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     private void hideAllInputs() {
         forEachInput(new InputVisitor() {
             @Override
-            public void visit(GuiTextField input) {
+            public void visit(ModernTextField input) {
                 input.setVisible(false);
             }
         });
@@ -3363,13 +3744,16 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                 Math.max(1, bounds.width - 14));
     }
 
-    private void drawInput(GuiTextField input, ModernMainLayout.Rect bounds, String placeholder, boolean enabled,
+    private void drawInput(ModernTextField input, ModernMainLayout.Rect bounds, String placeholder, boolean enabled,
             int mouseX, int mouseY) {
         if (input == null || bounds == null) {
             return;
         }
         input.setVisible(true);
         input.setEnabled(enabled);
+        if (input == focusedInputBeforeLayoutReset) {
+            input.setFocused(enabled);
+        }
         input.x = bounds.x + 7;
         input.y = bounds.y + (bounds.height - fontRenderer.FONT_HEIGHT) / 2;
         input.width = Math.max(1, bounds.width - 14);

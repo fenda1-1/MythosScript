@@ -34,7 +34,7 @@ import com.zszl.zszlScriptMod.system.ProfileManager;
 
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.util.text.TextFormatting;
 
 /**
@@ -230,8 +230,8 @@ public final class ModernBaritoneCommandTableTab implements ModernSettingsTab {
     private final List<HistoryEntry> executionHistory = new ArrayList<>();
 
     private FontRenderer fontRenderer;
-    private GuiTextField searchField;
-    private GuiTextField commandField;
+    private ModernTextField searchField;
+    private ModernTextField commandField;
     private final ModernDropdown listModeDropdown = new ModernDropdown(
             new String[] { "all", "favorites", "recent" },
             new String[] { "gui.modern.baritone_cmd.u001", "gui.modern.baritone_cmd.u002",
@@ -301,8 +301,8 @@ public final class ModernBaritoneCommandTableTab implements ModernSettingsTab {
         ensureSelection();
     }
 
-    private GuiTextField createField(int maxLength) {
-        GuiTextField field = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+    private ModernTextField createField(int maxLength) {
+        ModernTextField field = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
         field.setMaxStringLength(maxLength);
         field.setEnableBackgroundDrawing(false);
         field.setTextColor(ModernUiRenderer.TEXT);

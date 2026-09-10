@@ -32,6 +32,11 @@ public final class ModernTabCatalog {
                 return ModernGeneralSettingsTab.create(context);
             }
         });
+        register(registry, "other_feature_hud_position", "gui.modern.hud_position.title", new ModernTabFactory() {
+            @Override public ModernSettingsTab create(Minecraft mc, ModernScreenContext context) {
+                return new ModernHudPositionSettingsTab(mc);
+            }
+        });
         register(registry, "autoeat", "gui.modern.tabcat.u002", new ModernTabFactory() {
             @Override public ModernSettingsTab create(Minecraft mc, ModernScreenContext context) {
                 return ModernAutoEatSettingsTab.create();

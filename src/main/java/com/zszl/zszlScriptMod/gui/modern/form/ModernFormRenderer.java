@@ -13,12 +13,12 @@ import com.zszl.zszlScriptMod.gui.modern.ModernHoverScrollbar;
 import com.zszl.zszlScriptMod.gui.modern.ModernMainLayout;
 import com.zszl.zszlScriptMod.gui.modern.ModernTooltipSupport;
 import com.zszl.zszlScriptMod.gui.modern.ModernUiRenderer;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import com.zszl.zszlScriptMod.utils.guiinspect.GuiElementInspector;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.GuiTextField;
 
 /** Draws a form definition and owns only transient Minecraft widget geometry. */
 final class ModernFormRenderer {
@@ -34,7 +34,7 @@ final class ModernFormRenderer {
     }
 
     static final class ItemView {
-        GuiTextField textField;
+        ModernTextField textField;
         ModernMainLayout.Rect rowBounds;
         ModernMainLayout.Rect controlBounds;
         ModernMainLayout.Rect infoBounds;
@@ -871,20 +871,11 @@ final class ModernFormRenderer {
         if (view.textField == null) {
             return;
         }
+        view.textField.layout(bounds);
+        view.textField.setPlaceholder(item.getPlaceholder());
         view.textField.setVisible(true);
         view.textField.setEnabled(enabled);
-        view.textField.x = bounds.x + 7;
-        view.textField.y = bounds.y + (bounds.height - fontRenderer.FONT_HEIGHT) / 2;
-        view.textField.width = Math.max(1, bounds.width - 14);
-        view.textField.height = fontRenderer.FONT_HEIGHT + 2;
-        ModernUiRenderer.reflowTextField(view.textField);
-        ModernUiRenderer.drawTextField(view.textField);
-        String placeholder = translated(item.getPlaceholder());
-        if (!focused && view.textField.getText().trim().isEmpty() && !placeholder.isEmpty()) {
-            ModernUiRenderer.drawText(fontRenderer, placeholder, bounds.x + 7,
-                    bounds.y + (bounds.height - fontRenderer.FONT_HEIGHT) / 2, ModernUiRenderer.MUTED_TEXT,
-                    Math.max(1, bounds.width - 14));
-        }
+        view.textField.drawTextContents(fontRenderer);
     }
 
     private void drawReadOnlyValue(FontRenderer fontRenderer, ModernFormDefinition.Item item,
@@ -1158,12 +1149,9 @@ final class ModernFormRenderer {
         return ModernFormI18n.tr(value);
     }
 
-    private static GuiTextField createTextField(FontRenderer fontRenderer, int maxLength) {
-        GuiTextField field = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
-        field.setEnableBackgroundDrawing(false);
+    private static ModernTextField createTextField(FontRenderer fontRenderer, int maxLength) {
+        ModernTextField field = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
         field.setMaxStringLength(Math.max(1, maxLength));
-        field.setTextColor(ModernUiRenderer.TEXT);
-        field.setDisabledTextColour(ModernUiRenderer.MUTED_TEXT);
         return field;
     }
 

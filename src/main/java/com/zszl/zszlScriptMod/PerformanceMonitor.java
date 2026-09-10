@@ -53,7 +53,6 @@ public class PerformanceMonitor {
         DEFAULT_FEATURE_STATES.put("kill_aura", true);
         DEFAULT_FEATURE_STATES.put("path_sequence", true);
         DEFAULT_FEATURE_STATES.put("conditional_execution", true);
-        DEFAULT_FEATURE_STATES.put("debuff_detector", true);
         DEFAULT_FEATURE_STATES.put("goto_open", true);
         DEFAULT_FEATURE_STATES.put("warehouse", true);
         DEFAULT_FEATURE_STATES.put("block_replacement", true);
@@ -290,7 +289,7 @@ public class PerformanceMonitor {
         }
         switch (featureName) {
             case "auto_equip":
-                return "自动装备处理器的执行耗时与采样状态。";
+                return "当前自动装备功能的执行耗时与采样状态。";
             case "auto_pickup":
                 return "自动拾取处理器的扫描和拾取耗时。";
             case "auto_follow":
@@ -303,8 +302,6 @@ public class PerformanceMonitor {
                 return "路径序列执行器每次动作调度的耗时。";
             case "conditional_execution":
                 return "条件规则评估和触发执行的耗时。";
-            case "debuff_detector":
-                return "状态效果检测器的扫描耗时。";
             case "goto_open":
                 return "前往并打开流程的导航与交互耗时。";
             case "warehouse":

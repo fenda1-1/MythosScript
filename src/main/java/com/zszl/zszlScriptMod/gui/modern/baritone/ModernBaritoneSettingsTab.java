@@ -32,7 +32,7 @@ import com.zszl.zszlScriptMod.shadowbaritone.api.Settings;
 import com.zszl.zszlScriptMod.shadowbaritone.api.utils.SettingsUtil;
 
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.block.Block;
 import net.minecraft.util.text.TextFormatting;
 
@@ -60,7 +60,7 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
     private final List<SettingDef> filteredSettings = new ArrayList<>();
     private final Map<String, String> descriptions = new HashMap<>();
     private final Map<String, String> draftValues = new HashMap<>();
-    private final Map<String, GuiTextField> valueFields = new HashMap<>();
+    private final Map<String, ModernTextField> valueFields = new HashMap<>();
     private final Map<String, ModernMainLayout.Rect> controlBounds = new HashMap<>();
     private final Map<String, ModernMainLayout.Rect> cardBounds = new HashMap<>();
     private final Map<String, NumericRange> numericRanges = new HashMap<>();
@@ -75,7 +75,7 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
     private final ModernHoverScrollbar pageScrollbar = new ModernHoverScrollbar();
 
     private FontRenderer fontRenderer;
-    private GuiTextField searchField;
+    private ModernTextField searchField;
     private ModernBaritoneBlockListEditor blockListEditor;
 
     private ModernMainLayout.Rect contentBounds;
@@ -106,6 +106,8 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
     private int lastMouseX;
     private int lastMouseY;
     private String draggingNumericKey;
+    /** The value field that was focused before the card list reset visibility. */
+    private ModernTextField focusedValueFieldBeforeLayoutReset;
 
     private static final class Manifest {
         private List<ManifestSetting> settings;
@@ -165,8 +167,8 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
         refreshFilteredSettings();
     }
 
-    private GuiTextField createField(int maxLength) {
-        GuiTextField field = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+    private ModernTextField createField(int maxLength) {
+        ModernTextField field = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
         field.setMaxStringLength(maxLength);
         field.setEnableBackgroundDrawing(false);
         field.setTextColor(ModernUiRenderer.TEXT);
@@ -400,7 +402,7 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
         double value = range.min + Math.max(0D, Math.min(1D, fraction)) * (range.max - range.min);
         String formatted = formatNumeric(def, value);
         draftValues.put(def.key, formatted);
-        GuiTextField field = valueFields.get(def.key);
+        ModernTextField field = valueFields.get(def.key);
         if (field != null) {
             field.setText(formatted);
         }
@@ -473,7 +475,7 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
                 refreshFilteredSettings();
             }
         }
-        for (GuiTextField field : valueFields.values()) {
+        for (ModernTextField field : valueFields.values()) {
             field.updateCursorCounter();
         }
     }
@@ -571,7 +573,8 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
     }
 
     private void drawCards(int mouseX, int mouseY) {
-        for (GuiTextField field : valueFields.values()) {
+        focusedValueFieldBeforeLayoutReset = findFocusedValueField();
+        for (ModernTextField field : valueFields.values()) {
             field.setVisible(false);
         }
         controlBounds.clear();
@@ -597,6 +600,7 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
                     Math.max(40, contentClipBounds.width - 28));
         }
         ModernUiRenderer.endClip();
+        focusedValueFieldBeforeLayoutReset = null;
     }
 
     private void drawCard(SettingDef def, ModernMainLayout.Rect bounds, int mouseX, int mouseY) {
@@ -639,17 +643,20 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
     }
 
     private void drawValueField(SettingDef def, ModernMainLayout.Rect bounds, int mouseX, int mouseY) {
-        GuiTextField field = valueFields.get(def.key);
+        ModernTextField field = valueFields.get(def.key);
         if (field == null) {
             field = createField(32767);
             valueFields.put(def.key, field);
+        }
+        field.setVisible(true);
+        field.setEnabled(true);
+        if (field == focusedValueFieldBeforeLayoutReset) {
+            field.setFocused(true);
         }
         String value = safe(draftValues.get(def.key));
         if (!field.isFocused() && !value.equals(field.getText())) {
             field.setText(value);
         }
-        field.setVisible(true);
-        field.setEnabled(true);
         field.x = bounds.x + 6;
         field.y = bounds.y + (bounds.height - fontRenderer.FONT_HEIGHT) / 2;
         field.width = Math.max(1, bounds.width - 12);
@@ -909,7 +916,7 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
                 updateNumericFromMouse(def, control, mouseX);
                 return true;
             }
-            GuiTextField field = valueFields.get(def.key);
+            ModernTextField field = valueFields.get(def.key);
             if (field != null) {
                 clearFieldFocus();
                 field.setFocused(true);
@@ -1019,8 +1026,8 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
     }
 
     private void syncFieldsToDraft() {
-        for (Map.Entry<String, GuiTextField> entry : valueFields.entrySet()) {
-            GuiTextField field = entry.getValue();
+        for (Map.Entry<String, ModernTextField> entry : valueFields.entrySet()) {
+            ModernTextField field = entry.getValue();
             if (field != null && field.getVisible()) {
                 draftValues.put(entry.getKey(), safe(field.getText()));
             }
@@ -1116,7 +1123,7 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
             refreshFilteredSettings();
             return true;
         }
-        for (GuiTextField field : valueFields.values()) {
+        for (ModernTextField field : valueFields.values()) {
             if (field.isFocused() && field.textboxKeyTyped(typedChar, keyCode)) {
                 return true;
             }
@@ -1188,7 +1195,7 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
             clearFieldFocus();
             return true;
         }
-        for (GuiTextField field : valueFields.values()) {
+        for (ModernTextField field : valueFields.values()) {
             if (field.isFocused()) {
                 clearFieldFocus();
                 return true;
@@ -1201,9 +1208,18 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
         if (searchField != null) {
             searchField.setFocused(false);
         }
-        for (GuiTextField field : valueFields.values()) {
+        for (ModernTextField field : valueFields.values()) {
             field.setFocused(false);
         }
+    }
+
+    private ModernTextField findFocusedValueField() {
+        for (ModernTextField field : valueFields.values()) {
+            if (field != null && field.isVisible() && field.isFocused()) {
+                return field;
+            }
+        }
+        return null;
     }
 
     @Override
@@ -1238,8 +1254,8 @@ public final class ModernBaritoneSettingsTab implements ModernSettingsTab {
                 return true;
             }
         }
-        for (Map.Entry<String, GuiTextField> entry : valueFields.entrySet()) {
-            GuiTextField field = entry.getValue();
+        for (Map.Entry<String, ModernTextField> entry : valueFields.entrySet()) {
+            ModernTextField field = entry.getValue();
             if (field != null && field.getVisible()
                     && !safe(field.getText()).equals(safe(draftValues.get(entry.getKey())))) {
                 return true;

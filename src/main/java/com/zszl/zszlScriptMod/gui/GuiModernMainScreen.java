@@ -68,7 +68,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.util.text.TextFormatting;
@@ -493,8 +493,8 @@ public class GuiModernMainScreen extends GuiScreen
     private final List<PathDropTarget> dashboardPathDropTargets = new ArrayList<>();
     private String initiallyOpenSettingsCommand;
     private String activeOtherFeatureCommand = "";
-    private GuiTextField searchField;
-    private GuiTextField commandPaletteSearchField;
+    private ModernTextField searchField;
+    private ModernTextField commandPaletteSearchField;
     private ModernMainLayout.Layout lastLayout;
     private ModernMainLayout.Rect searchBounds;
     private ModernMainLayout.Rect commandPaletteBounds;
@@ -569,7 +569,7 @@ public class GuiModernMainScreen extends GuiScreen
     private String pendingSettingsReplacementCommand = "";
     private String inlineTextInputTitle = "";
     private Consumer<String> inlineTextInputCallback;
-    private GuiTextField inlineTextInputField;
+    private ModernTextField inlineTextInputField;
     private String inlineConfirmationTitle = "";
     private String inlineConfirmationMessage = "";
     private Runnable inlineConfirmationCallback;
@@ -1317,7 +1317,7 @@ public class GuiModernMainScreen extends GuiScreen
         inlineTextInputTitle = title == null || title.trim().isEmpty() ? "gui.modern.main.u001" : title.trim();
         inlineTextInputCallback = callback;
         if (inlineTextInputField == null) {
-            inlineTextInputField = new GuiTextField(0, this.fontRenderer, 0, 0, 1, 22);
+            inlineTextInputField = new ModernTextField(0, this.fontRenderer, 0, 0, 1, 22);
             inlineTextInputField.setEnableBackgroundDrawing(false);
             inlineTextInputField.setMaxStringLength(128);
             inlineTextInputField.setTextColor(ModernUiRenderer.TEXT);
@@ -1399,7 +1399,7 @@ public class GuiModernMainScreen extends GuiScreen
             return;
         }
         if (this.commandPaletteSearchField == null) {
-            this.commandPaletteSearchField = new GuiTextField(0, this.fontRenderer, 0, 0, 1, 18);
+            this.commandPaletteSearchField = new ModernTextField(0, this.fontRenderer, 0, 0, 1, 18);
             this.commandPaletteSearchField.setEnableBackgroundDrawing(false);
             this.commandPaletteSearchField.setMaxStringLength(96);
             this.commandPaletteSearchField.setTextColor(ModernUiRenderer.TEXT);
@@ -1466,7 +1466,7 @@ public class GuiModernMainScreen extends GuiScreen
         }
         headerCollapsed = MainUiLayoutManager.isModernHeaderCollapsed();
         String existingSearch = searchField == null ? "" : searchField.getText();
-        searchField = new GuiTextField(0, this.fontRenderer, 0, 0, 1, 18);
+        searchField = new ModernTextField(0, this.fontRenderer, 0, 0, 1, 18);
         searchField.setEnableBackgroundDrawing(false);
         searchField.setMaxStringLength(96);
         searchField.setTextColor(ModernUiRenderer.TEXT);
@@ -5254,7 +5254,7 @@ public class GuiModernMainScreen extends GuiScreen
                 return;
             case OTHER_FEATURE_HUD_POSITION:
                 if (mouseButton == 0) {
-                    GuiOtherFeaturesHudPosition.open(mc);
+                    openStandaloneHudPositionEditor();
                 }
                 return;
             case OTHER_FEATURE_GROUP:
@@ -6312,6 +6312,10 @@ public class GuiModernMainScreen extends GuiScreen
             resetWindowLayout();
             return;
         }
+        if ("other_feature_hud_position".equals(command)) {
+            openStandaloneHudPositionEditor();
+            return;
+        }
         boolean headerWasCollapsed = headerCollapsed;
         try {
             captureActiveSettingsState();
@@ -6381,6 +6385,16 @@ public class GuiModernMainScreen extends GuiScreen
                 MainUiLayoutManager.setModernHeaderCollapsed(true);
             }
         }
+    }
+
+    /** Opens the persistent other-features HUD editor outside the tab shell. */
+    private void openStandaloneHudPositionEditor() {
+        TabKey hudKey = tabKeyForCommand("other_feature_hud_position");
+        if (hudKey != null && openTabs.contains(hudKey)) {
+            suspendTabWithoutPrompt(hudKey);
+        }
+        closeScreenNow();
+        GuiOtherFeaturesHudPosition.open(mc);
     }
 
     private void openPathEditorTab(String command) {

@@ -23,8 +23,8 @@ public final class ItemsActionLibraryGroup {
                         itemFactory.apply("pickup_nearby_items"),
                         itemFactory.apply("switch_hotbar_slot"),
                         itemFactory.apply("silentuse"),
-                        itemFactory.apply("autoeat"),
-                        itemFactory.apply("autoequip"),
+                         itemFactory.apply("autoeat"),
+                         itemFactory.apply("autoequip"),
                         itemFactory.apply("autopickup")));
     }
 }

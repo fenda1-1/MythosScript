@@ -30,5 +30,3 @@ gui.drop.tip.batch.1=§7启用后可以一次处理多个物品，
 gui.drop.tip.batch.2=§7提高效率但可能导致服务器压力。
 gui.drop.tip.reset=§e恢复默认§r
 gui.drop.tip.reset.1=§7将所有设置恢复为推荐的默认值。
-msg.drop.saved=§a[竞技场] 丢弃设置已保存！
-msg.drop.error=§c[竞技场] 保存设置时发生未知错误！

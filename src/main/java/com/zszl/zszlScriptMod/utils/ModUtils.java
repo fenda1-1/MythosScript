@@ -40,7 +40,6 @@ import com.zszl.zszlScriptMod.zszlScriptMod;
 import java.lang.reflect.Method;
 import com.zszl.zszlScriptMod.config.DebugModule;
 import com.zszl.zszlScriptMod.config.ModConfig;
-import com.zszl.zszlScriptMod.handlers.ArenaItemHandler;
 import com.zszl.zszlScriptMod.otherfeatures.handler.movement.SpeedHandler;
 import com.zszl.zszlScriptMod.system.AutoUseItemRule;
 import com.zszl.zszlScriptMod.system.SimulatedKeyInputManager;
@@ -75,6 +74,9 @@ import io.netty.channel.Channel;
 import java.lang.reflect.Field;
 
 public class ModUtils {
+    private static final int CHEST_WITHDRAW_INITIAL_DELAY_TICKS = 10;
+    private static final int CHEST_WITHDRAW_ITEMS_PER_BATCH = 1;
+    private static final int CHEST_WITHDRAW_OPERATION_INTERVAL_TICKS = 2;
     ;
     private static volatile boolean disconnectScheduled = false;
     private static final Pattern CHAT_COMMAND_PLACEHOLDER_PATTERN = Pattern
@@ -1199,9 +1201,9 @@ public class ModUtils {
                     return;
                 }
 
-                int initialDelay = ArenaItemHandler.pickupInitialDelay;
-                int batchSize = ArenaItemHandler.pickupItemsPerBatch;
-                int interval = ArenaItemHandler.pickupOperationInterval;
+                int initialDelay = CHEST_WITHDRAW_INITIAL_DELAY_TICKS;
+                int batchSize = CHEST_WITHDRAW_ITEMS_PER_BATCH;
+                int interval = CHEST_WITHDRAW_OPERATION_INTERVAL_TICKS;
                 ClickType clickType = shiftQuickMove ? ClickType.QUICK_MOVE : ClickType.PICKUP;
 
                 for (int i = 0; i < slotsToProcess.size(); i++) {

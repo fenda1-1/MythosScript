@@ -42,7 +42,6 @@ gui.keybind.packet_selector_hint=Right-click "Change" to reselect the packet seq
 gui.keybind.footer_hint=Tip: Search supports name, description, and current binding; remember to click "Save and Close" after making changes.
 gui.keybind.empty=No matching shortcut key entry
 msg.keybind.stop_all=[Shortcut Key] All sequences have been stopped.
-msg.keybind.arena_status=[Shortcut Key] Arena Processor %s
 msg.keybind.force_evac_reason=Shortcut key forced trigger
 msg.keybind.mouse_status=[Shortcut keys] Mouse %s §f game window.
 msg.keybind.open_inventory_viewer=[Shortcut Key] The item viewer has been opened.

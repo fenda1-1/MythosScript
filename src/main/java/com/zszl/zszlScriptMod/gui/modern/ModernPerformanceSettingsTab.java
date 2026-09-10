@@ -14,7 +14,7 @@ import com.zszl.zszlScriptMod.PerformanceMonitor;
 import com.zszl.zszlScriptMod.utils.PacketCaptureHandler;
 
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import com.zszl.zszlScriptMod.gui.modern.form.ModernFormI18n;
 
 /**
@@ -42,7 +42,6 @@ public final class ModernPerformanceSettingsTab implements ModernSettingsTab {
             "kill_aura",
             "path_sequence",
             "conditional_execution",
-            "debuff_detector",
             "goto_open",
             "warehouse",
             "block_replacement",
@@ -77,8 +76,8 @@ public final class ModernPerformanceSettingsTab implements ModernSettingsTab {
     private final List<CardHit> cardHits = new ArrayList<>();
     private List<String> featureNames = Collections.emptyList();
 
-    private GuiTextField thresholdField;
-    private GuiTextField disableDurationField;
+    private ModernTextField thresholdField;
+    private ModernTextField disableDurationField;
     private ModernMainLayout.Rect contentBounds;
     private ModernMainLayout.Rect panelBounds;
     private ModernMainLayout.Rect controlPanelBounds;
@@ -339,8 +338,8 @@ public final class ModernPerformanceSettingsTab implements ModernSettingsTab {
                         .equals(disableDurationField.getText().trim());
     }
 
-    private GuiTextField createTextField(FontRenderer fontRenderer, int maxLength) {
-        GuiTextField field = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+    private ModernTextField createTextField(FontRenderer fontRenderer, int maxLength) {
+        ModernTextField field = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
         field.setEnableBackgroundDrawing(false);
         field.setMaxStringLength(maxLength);
         field.setTextColor(ModernUiRenderer.TEXT);
@@ -451,7 +450,7 @@ public final class ModernPerformanceSettingsTab implements ModernSettingsTab {
                 primary ? ModernUiRenderer.SHELL : ModernUiRenderer.TEXT, Math.max(12, bounds.width - 10));
     }
 
-    private void drawInputField(FontRenderer fontRenderer, GuiTextField field, ModernMainLayout.Rect bounds,
+    private void drawInputField(FontRenderer fontRenderer, ModernTextField field, ModernMainLayout.Rect bounds,
             int mouseX, int mouseY) {
         if (field == null || bounds == null) {
             return;
@@ -653,7 +652,7 @@ public final class ModernPerformanceSettingsTab implements ModernSettingsTab {
         disableDurationField.setText(String.valueOf(PerformanceMonitor.getSpikeDisableDurationMs()));
     }
 
-    private void focusField(GuiTextField focused, GuiTextField other) {
+    private void focusField(ModernTextField focused, ModernTextField other) {
         if (other != null) {
             other.setFocused(false);
         }
@@ -724,8 +723,6 @@ public final class ModernPerformanceSettingsTab implements ModernSettingsTab {
                 return "gui.modern.perf.u033";
             case "conditional_execution":
                 return "gui.modern.perf.u034";
-            case "debuff_detector":
-                return "gui.modern.perf.u035";
             case "goto_open":
                 return "gui.modern.perf.u036";
             case "warehouse":

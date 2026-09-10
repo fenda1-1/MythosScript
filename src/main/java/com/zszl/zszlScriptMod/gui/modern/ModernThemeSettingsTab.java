@@ -21,7 +21,7 @@ import com.zszl.zszlScriptMod.gui.modern.core.ModernConfirmationState;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.client.gui.GuiScreen;
 
 /** Native modern editor for the persisted GUI theme profiles. */
@@ -89,16 +89,16 @@ public final class ModernThemeSettingsTab implements ModernSettingsTab {
     private final List<ProfileHit> profileHits = new ArrayList<>();
     private final List<GroupHit> groupHits = new ArrayList<>();
     private final List<SliderHit> sliderHits = new ArrayList<>();
-    private final GuiTextField[] imageFields = new GuiTextField[ASSET_COUNT];
-    private final GuiTextField[] scaleFields = new GuiTextField[ASSET_COUNT];
-    private final GuiTextField[][] cropFields = new GuiTextField[ASSET_COUNT][2];
+    private final ModernTextField[] imageFields = new ModernTextField[ASSET_COUNT];
+    private final ModernTextField[] scaleFields = new ModernTextField[ASSET_COUNT];
+    private final ModernTextField[][] cropFields = new ModernTextField[ASSET_COUNT][2];
     private final ModernMainLayout.Rect[] imageBounds = new ModernMainLayout.Rect[ASSET_COUNT];
     private final ModernMainLayout.Rect[] imageToggleBounds = new ModernMainLayout.Rect[ASSET_COUNT];
     private final ModernMainLayout.Rect[] qualityBounds = new ModernMainLayout.Rect[ASSET_COUNT];
     private final ModernMainLayout.Rect[] scaleBounds = new ModernMainLayout.Rect[ASSET_COUNT];
     private final ModernMainLayout.Rect[][] cropBounds = new ModernMainLayout.Rect[ASSET_COUNT][2];
 
-    private GuiTextField nameField;
+    private ModernTextField nameField;
     private ModernMainLayout.Rect contentBounds;
     private ModernMainLayout.Rect panelBounds;
     private ModernMainLayout.Rect profileBounds;
@@ -147,6 +147,8 @@ public final class ModernThemeSettingsTab implements ModernSettingsTab {
     private String hoveredTooltip = "";
     private String statusMessage = "";
     private long statusMessageUntil;
+    /** The field focused before the render-only visibility reset. */
+    private ModernTextField focusedFieldBeforeLayoutReset;
 
     public static ModernSettingsTab create() {
         return new ModernThemeSettingsTab();
@@ -180,8 +182,8 @@ public final class ModernThemeSettingsTab implements ModernSettingsTab {
         }
     }
 
-    private GuiTextField createField(FontRenderer fontRenderer, int maxLength) {
-        GuiTextField field = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+    private ModernTextField createField(FontRenderer fontRenderer, int maxLength) {
+        ModernTextField field = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
         field.setMaxStringLength(maxLength);
         field.setEnableBackgroundDrawing(false);
         field.setTextColor(ModernUiRenderer.TEXT);
@@ -206,7 +208,7 @@ public final class ModernThemeSettingsTab implements ModernSettingsTab {
         }
     }
 
-    private void updateField(GuiTextField field) {
+    private void updateField(ModernTextField field) {
         if (field != null && field.getVisible()) {
             field.updateCursorCounter();
         }
@@ -471,6 +473,7 @@ public final class ModernThemeSettingsTab implements ModernSettingsTab {
         drawActionButton(fontRenderer, resetBounds, "恢复默认", false,
                 editingProfile != null && ThemeConfigManager.isBuiltInProfile(editingProfile), mouseX, mouseY);
 
+        focusedFieldBeforeLayoutReset = findFocusedField();
         hideFields();
         sliderHits.clear();
         ModernUiRenderer.beginClip(editorClipBounds);
@@ -575,6 +578,7 @@ public final class ModernThemeSettingsTab implements ModernSettingsTab {
         ModernUiRenderer.endClip();
         drawScrollbar(editorScrollbar, editorClipBounds, contentHeight, editorScrollOffset, editorMaxScrollOffset,
                 mouseX, mouseY, value -> editorScrollOffset = value);
+        focusedFieldBeforeLayoutReset = null;
     }
 
     private int calculateEditorContentHeight(int contentWidth) {
@@ -690,7 +694,7 @@ public final class ModernThemeSettingsTab implements ModernSettingsTab {
         ModernUiRenderer.drawText(fontRenderer, "输入框预览", x + 17, y + 67, textColor, inputWidth - 14);
     }
 
-    private void drawTextField(FontRenderer fontRenderer, GuiTextField field, ModernMainLayout.Rect bounds,
+    private void drawTextField(FontRenderer fontRenderer, ModernTextField field, ModernMainLayout.Rect bounds,
             String placeholder, int mouseX, int mouseY) {
         if (field == null || bounds == null) {
             return;
@@ -700,6 +704,9 @@ public final class ModernThemeSettingsTab implements ModernSettingsTab {
         field.setEnabled(isEditable());
         if (!visible) {
             return;
+        }
+        if (field == focusedFieldBeforeLayoutReset) {
+            field.setFocused(true);
         }
         boolean focused = field.isFocused();
         boolean hovered = bounds.contains(mouseX, mouseY);
@@ -901,7 +908,7 @@ public final class ModernThemeSettingsTab implements ModernSettingsTab {
         return true;
     }
 
-    private boolean clickField(GuiTextField field, ModernMainLayout.Rect bounds, int mouseX, int mouseY,
+    private boolean clickField(ModernTextField field, ModernMainLayout.Rect bounds, int mouseX, int mouseY,
             int mouseButton) {
         if (!isVisibleFieldHit(field, bounds, mouseX, mouseY) || !isEditable()) {
             return false;
@@ -912,7 +919,7 @@ public final class ModernThemeSettingsTab implements ModernSettingsTab {
         return true;
     }
 
-    private boolean isVisibleFieldHit(GuiTextField field, ModernMainLayout.Rect bounds, int mouseX, int mouseY) {
+    private boolean isVisibleFieldHit(ModernTextField field, ModernMainLayout.Rect bounds, int mouseX, int mouseY) {
         return field != null && field.getVisible() && bounds != null && editorClipBounds != null
                 && editorClipBounds.contains(mouseX, mouseY) && bounds.contains(mouseX, mouseY);
     }
@@ -969,7 +976,7 @@ public final class ModernThemeSettingsTab implements ModernSettingsTab {
         if (!initialized) {
             return false;
         }
-        for (GuiTextField field : allFields()) {
+        for (ModernTextField field : allFields()) {
             if (field != null && field.getVisible() && field.isFocused() && field.textboxKeyTyped(typedChar, keyCode)) {
                 applyPreview();
                 return true;
@@ -1495,20 +1502,29 @@ public final class ModernThemeSettingsTab implements ModernSettingsTab {
     }
 
     private boolean hasFocusedField() {
-        for (GuiTextField field : allFields()) {
+        for (ModernTextField field : allFields()) {
             if (field != null && field.isFocused()) return true;
         }
         return false;
     }
 
+    private ModernTextField findFocusedField() {
+        for (ModernTextField field : allFields()) {
+            if (field != null && field.isVisible() && field.isFocused()) {
+                return field;
+            }
+        }
+        return null;
+    }
+
     private void clearFieldFocus() {
-        for (GuiTextField field : allFields()) {
+        for (ModernTextField field : allFields()) {
             if (field != null) field.setFocused(false);
         }
     }
 
-    private List<GuiTextField> allFields() {
-        List<GuiTextField> fields = new ArrayList<>();
+    private List<ModernTextField> allFields() {
+        List<ModernTextField> fields = new ArrayList<>();
         if (nameField != null) fields.add(nameField);
         for (int i = 0; i < ASSET_COUNT; i++) {
             fields.add(imageFields[i]);
@@ -1520,7 +1536,7 @@ public final class ModernThemeSettingsTab implements ModernSettingsTab {
     }
 
     private void hideFields() {
-        for (GuiTextField field : allFields()) {
+        for (ModernTextField field : allFields()) {
             if (field != null) field.setVisible(false);
         }
     }

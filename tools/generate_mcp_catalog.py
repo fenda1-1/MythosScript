@@ -9,7 +9,7 @@ OUTPUT = ROOT / "src/main/resources/mcp"
 OUTPUT.mkdir(parents=True, exist_ok=True)
 modules = []
 for path in sorted(JAVA.rglob("*.java")):
-    if "shadowbaritone" in path.parts or "mcp" in path.parts or path.stem == "NodeEditorHotkeyManager":
+    if "shadowbaritone" in path.parts or "mcp" in path.parts:
         continue
     source = path.read_text(encoding="utf-8-sig")
     methods = re.findall(r"public\s+static\s+(?:synchronized\s+)?void\s+((?:load|reload)[A-Za-z]*|save[A-Za-z]*(?:Config|Configs|Settings|Warehouses)|save)\s*\(\s*\)", source)

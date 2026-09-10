@@ -94,7 +94,7 @@ public class OverlayGuiHandler {
         }
 
         if (mc.currentScreen == null && !zszlScriptMod.isGuiVisible) {
-            drawMasterStatusHud(false);
+            drawMasterStatusHud();
         }
 
         if (mc.currentScreen == null) {
@@ -109,20 +109,14 @@ public class OverlayGuiHandler {
         }
     }
 
-    public static void renderMasterStatusHudPreview() {
-        drawMasterStatusHud(true);
-    }
-
-    private static void drawMasterStatusHud(boolean editingPreview) {
+    private static Rectangle drawMasterStatusHud() {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc == null || mc.fontRenderer == null) {
-            GuiInventory.updateMasterStatusHudEditorBounds(null, null);
-            return;
+            return null;
         }
-        List<String> lines = buildMasterStatusHudLines(editingPreview);
+        List<String> lines = buildMasterStatusHudLines();
         if (lines.isEmpty()) {
-            GuiInventory.updateMasterStatusHudEditorBounds(null, null);
-            return;
+            return null;
         }
 
         int baseX = Math.max(0, MovementFeatureManager.getMasterStatusHudX());
@@ -135,42 +129,7 @@ public class OverlayGuiHandler {
         int panelX = Math.max(0, baseX - 4);
         int panelY = Math.max(0, baseY - 4);
         int panelWidth = Math.max(120, maxWidth + 8);
-        if (editingPreview) {
-            panelWidth = Math.max(panelWidth,
-                    mc.fontRenderer.getStringWidth(I18n.format("gui.other_features.hud.drag_hint")) + 10);
-        }
         int panelHeight = lines.size() * lineHeight + 8;
-        Rectangle hudBounds = new Rectangle(panelX, panelY, panelWidth, panelHeight);
-        Rectangle exitBounds = null;
-
-        if (editingPreview) {
-            panelHeight += 34;
-            ScaledResolution screen = new ScaledResolution(mc);
-            panelX = Math.max(0, Math.min(panelX, screen.getScaledWidth() - panelWidth));
-            panelY = Math.max(0, Math.min(panelY, screen.getScaledHeight() - panelHeight));
-            baseX = panelX + 4;
-            baseY = panelY + 4;
-            MovementFeatureManager.setMasterStatusHudPositionTransient(baseX, baseY);
-            hudBounds = new Rectangle(panelX, panelY, panelWidth, panelHeight);
-            Gui.drawRect(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0x7A0F1720);
-            Gui.drawRect(panelX, panelY, panelX + panelWidth, panelY + 1, 0xFF63C7FF);
-            Gui.drawRect(panelX, panelY + panelHeight - 1, panelX + panelWidth, panelY + panelHeight, 0xFF35536C);
-            mc.fontRenderer.drawStringWithShadow(I18n.format("gui.other_features.hud.drag_hint"), panelX + 5, panelY + panelHeight - 30,
-                    0xFFEAF6FF);
-            int exitWidth = 44;
-            int exitHeight = 14;
-            int exitX = panelX + panelWidth - exitWidth - 4;
-            int exitY = panelY + panelHeight - exitHeight - 4;
-            exitBounds = new Rectangle(exitX, exitY, exitWidth, exitHeight);
-            ScaledResolution scaledResolution = new ScaledResolution(mc);
-            int hoverMouseX = Mouse.getX() * scaledResolution.getScaledWidth() / mc.displayWidth;
-            int hoverMouseY = scaledResolution.getScaledHeight()
-                    - Mouse.getY() * scaledResolution.getScaledHeight() / mc.displayHeight - 1;
-            boolean hovered = exitBounds.contains(hoverMouseX, hoverMouseY);
-            GuiTheme.drawButtonFrameSafe(exitX, exitY, exitWidth, exitHeight,
-                    hovered ? GuiTheme.UiState.HOVER : GuiTheme.UiState.NORMAL);
-            mc.fontRenderer.drawStringWithShadow("退出编辑", exitX + 6, exitY + 3, 0xFFFFFFFF);
-        }
 
         int drawY = baseY;
         for (String line : lines) {
@@ -178,23 +137,22 @@ public class OverlayGuiHandler {
             drawY += lineHeight;
         }
 
-        GuiInventory.updateMasterStatusHudEditorBounds(hudBounds, exitBounds);
+        return new Rectangle(panelX, panelY, panelWidth, panelHeight);
     }
 
-    private static List<String> buildMasterStatusHudLines(boolean editingPreview) {
+    /** Draws the existing status HUD while its transparent position editor is open. */
+    public static Rectangle renderMasterStatusHudForEditor() {
+        return drawMasterStatusHud();
+    }
+
+    private static List<String> buildMasterStatusHudLines() {
         List<String> lines = new ArrayList<>();
-        lines.addAll(editingPreview ? SpeedHandler.getStatusLines(true) : SpeedHandler.getStatusLines());
-        lines.addAll(editingPreview ? MovementFeatureManager.getStatusLines(true) : MovementFeatureManager.getStatusLines());
-        lines.addAll(editingPreview ? BlockFeatureManager.getStatusLines(true) : BlockFeatureManager.getStatusLines());
-        lines.addAll(editingPreview ? WorldFeatureManager.getStatusLines(true) : WorldFeatureManager.getStatusLines());
-        lines.addAll(editingPreview ? ItemFeatureManager.getStatusLines(true) : ItemFeatureManager.getStatusLines());
-        lines.addAll(editingPreview ? MiscFeatureManager.getStatusLines(true) : MiscFeatureManager.getStatusLines());
-        if (!editingPreview || !lines.isEmpty()) {
-            return lines;
-        }
-        lines.add("§a[总状态HUD] §f位置预览");
-        lines.add("§7当前没有可显示的状态行");
-        lines.add("§7拖动后将保存新的 HUD 位置");
+        lines.addAll(SpeedHandler.getStatusLines());
+        lines.addAll(MovementFeatureManager.getStatusLines());
+        lines.addAll(BlockFeatureManager.getStatusLines());
+        lines.addAll(WorldFeatureManager.getStatusLines());
+        lines.addAll(ItemFeatureManager.getStatusLines());
+        lines.addAll(MiscFeatureManager.getStatusLines());
         return lines;
     }
 

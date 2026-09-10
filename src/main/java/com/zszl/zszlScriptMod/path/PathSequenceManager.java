@@ -10,7 +10,6 @@ import com.zszl.zszlScriptMod.gui.GuiInventory;
 import com.zszl.zszlScriptMod.gui.MainUiLayoutManager;
 import com.zszl.zszlScriptMod.handlers.AutoEatHandler;
 import com.zszl.zszlScriptMod.handlers.AutoEscapeHandler;
-import com.zszl.zszlScriptMod.handlers.AutoEquipHandler;
 import com.zszl.zszlScriptMod.handlers.AutoFishingHandler;
 import com.zszl.zszlScriptMod.handlers.AutoPickupHandler;
 import com.zszl.zszlScriptMod.handlers.ConditionalExecutionHandler;
@@ -23,6 +22,7 @@ import com.zszl.zszlScriptMod.handlers.ItemSpreadHandler;
 import com.zszl.zszlScriptMod.handlers.KillAuraHandler;
 import com.zszl.zszlScriptMod.handlers.NearbyItemPickupActionHandler;
 import com.zszl.zszlScriptMod.handlers.WarehouseEventHandler;
+import com.zszl.zszlScriptMod.otherfeatures.handler.item.ItemFeatureManager;
 import com.zszl.zszlScriptMod.otherfeatures.OtherFeatureGroupManager;
 import com.zszl.zszlScriptMod.otherfeatures.handler.movement.MovementFeatureManager;
 import com.zszl.zszlScriptMod.otherfeatures.handler.movement.SpeedHandler;
@@ -1379,9 +1379,11 @@ public class PathSequenceManager {
                                 + " tick";
                     case "pickup_nearby_items":
                         List<String> pickupExpressions = InventoryItemFilterExpressionEngine.readExpressions(params);
-                        String pickupSummary = pickupExpressions.isEmpty()
-                                ? "未设置"
-                                : InventoryItemFilterExpressionEngine.summarizeExpressions(pickupExpressions);
+                        String pickupSummary = NearbyItemPickupActionHandler.usesKillAuraPickupRules(params)
+                                ? "沿用杀戮光环规则"
+                                : pickupExpressions.isEmpty()
+                                        ? "未设置"
+                                        : InventoryItemFilterExpressionEngine.summarizeExpressions(pickupExpressions);
                         return "拾取附近掉落物: "
                                 + pickupSummary
                                 + " / 半径"
@@ -1390,8 +1392,6 @@ public class PathSequenceManager {
                                 + (params.has("maxItems") && params.get("maxItems").getAsInt() > 0
                                         ? params.get("maxItems").getAsInt() + "个"
                                         : "不限");
-                    case "transferitemstowarehouse":
-                        return I18n.format("path.action.desc.transfer_to_warehouse");
                     case "warehouse_auto_deposit":
                         return I18n.format("path.action.desc.warehouse_auto_deposit");
                     case "blocknextgui":
@@ -1412,9 +1412,8 @@ public class PathSequenceManager {
                                 : "启用自动吃食物";
                     case "autoequip":
                         return (params.has("enabled") && !params.get("enabled").getAsBoolean())
-                                ? "关闭自动穿戴"
-                                : "启用自动穿戴套装: "
-                                        + (params.has("setName") ? params.get("setName").getAsString() : "");
+                                ? "关闭自动装备"
+                                : "启用自动装备";
                     case "autopickup":
                         return (params.has("enabled") && !params.get("enabled").getAsBoolean())
                                 ? "关闭自动拾取"
@@ -2847,8 +2846,6 @@ public class PathSequenceManager {
                     return player -> ItemSpreadHandler.stackInventoryItems(params);
                 case "pickup_nearby_items":
                     return player -> NearbyItemPickupActionHandler.start(player, params);
-                case "transferitemstowarehouse":
-                    return player -> ItemFilterHandler.transferItemsToWarehouse();
                 case "warehouse_auto_deposit":
                     return player -> WarehouseEventHandler.startAutoDepositByHighlights();
                 case "blocknextgui":
@@ -2907,17 +2904,7 @@ public class PathSequenceManager {
                     };
                 case "autoequip":
                     final boolean autoEquipEnabled = !params.has("enabled") || params.get("enabled").getAsBoolean();
-                    final String setName = params.has("setName") ? params.get("setName").getAsString() : "";
-                    final boolean smartActivation = params.has("smartActivation")
-                            && params.get("smartActivation").getAsBoolean();
-                    return player -> {
-                        if (!autoEquipEnabled || setName == null || setName.trim().isEmpty()) {
-                            AutoEquipHandler.setActiveSet("", false);
-                            AutoEquipHandler.enabled = false;
-                            return;
-                        }
-                        AutoEquipHandler.setActiveSet(setName.trim(), smartActivation);
-                    };
+                    return player -> ItemFeatureManager.setEnabled("auto_equip", autoEquipEnabled);
                 case "autopickup":
                     final boolean autoPickupEnabled = !params.has("enabled") || params.get("enabled").getAsBoolean();
                     return player -> {

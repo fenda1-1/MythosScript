@@ -42,7 +42,6 @@ gui.keybind.packet_selector_hint=右键“更改”可重新选择要执行的�
 gui.keybind.footer_hint=提示：搜索支持名称、说明和当前绑定；更改后记得点击“保存并关闭”。
 gui.keybind.empty=没有匹配的快捷键项目
 msg.keybind.stop_all=[快捷键] 所有序列已停止。
-msg.keybind.arena_status=[快捷键] 竞技场处理器 %s
 msg.keybind.force_evac_reason=快捷键强制触发
 msg.keybind.mouse_status=[快捷键] 鼠标 %s §f游戏窗口。
 msg.keybind.open_inventory_viewer=[快捷键] 已打开物品查看器。

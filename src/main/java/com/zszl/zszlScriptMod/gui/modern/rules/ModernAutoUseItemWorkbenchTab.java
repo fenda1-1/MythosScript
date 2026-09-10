@@ -26,7 +26,7 @@ import com.zszl.zszlScriptMod.handlers.AutoUseItemHandler;
 import com.zszl.zszlScriptMod.system.AutoUseItemRule;
 
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 
 /** Native list-detail workbench for silent item-use rules. */
 public final class ModernAutoUseItemWorkbenchTab implements ModernSettingsTab {
@@ -53,8 +53,8 @@ public final class ModernAutoUseItemWorkbenchTab implements ModernSettingsTab {
     private final java.util.Map<Object, com.zszl.zszlScriptMod.gui.modern.form.RuleSectionState> editorPositions = new java.util.WeakHashMap<>();
     private ModernSettingsTab editor;
     private AutoUseItemRule editorRule;
-    private GuiTextField searchField;
-    private GuiTextField categoryField;
+    private ModernTextField searchField;
+    private ModernTextField categoryField;
     private ModernMainLayout.Rect bounds;
     private ModernMainLayout.Rect navigationBounds;
     private ModernMainLayout.Rect editorBounds;
@@ -90,13 +90,13 @@ public final class ModernAutoUseItemWorkbenchTab implements ModernSettingsTab {
             layoutPreferencesLoaded = true;
         }
         if (searchField == null) {
-            searchField = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+            searchField = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
             searchField.setEnableBackgroundDrawing(false);
             searchField.setCanLoseFocus(true);
             searchField.setMaxStringLength(120);
         }
         if (categoryField == null) {
-            categoryField = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+            categoryField = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
             categoryField.setEnableBackgroundDrawing(false);
             categoryField.setCanLoseFocus(true);
             categoryField.setMaxStringLength(80);
