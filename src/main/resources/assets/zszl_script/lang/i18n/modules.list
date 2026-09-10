@@ -18,12 +18,10 @@ auto_follow
 profile
 auto_pickup
 conditional
-auto_equip
 anti_stuck
 drop
 evacuation
 chat_optimization
-arena
 settings
 other_features
 keybind

@@ -26,7 +26,7 @@ import com.zszl.zszlScriptMod.utils.guiinspect.GuiInspectionManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiButton;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import org.lwjgl.input.Keyboard;
 
 import java.util.ArrayList;
@@ -87,7 +87,7 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
     private final Set<String> collapsedGroups = new HashSet<>();
     private final Set<String> collapsedEventGroups = new HashSet<>();
     private final RuleTreeToggle ruleToggle = new RuleTreeToggle();
-    private final Map<String, GuiTextField> fields = new LinkedHashMap<>();
+    private final Map<String, ModernTextField> fields = new LinkedHashMap<>();
     private final Map<String, ModernMainLayout.Rect> fieldBounds = new HashMap<>();
 
     private FontRenderer font;
@@ -175,7 +175,7 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
     @Override
     public void updateScreen() {
         sequenceSelector.updateScreen();
-        for (GuiTextField field : fields.values()) field.updateCursorCounter();
+        for (ModernTextField field : fields.values()) field.updateCursorCounter();
     }
 
     @Override
@@ -623,7 +623,7 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
             return true;
         }
         if (focusedField == null || "trigger.category".equals(focusedField)) return false;
-        GuiTextField field = fields.get(focusedField);
+        ModernTextField field = fields.get(focusedField);
         if (field == null) return false;
         boolean handled = field.textboxKeyTyped(typedChar, keyCode);
         if (handled) {
@@ -709,7 +709,7 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
     public boolean isTextInputFocused() {
         if (navigationActions.isOpen()) return true;
         if (sequenceSelector.isTextInputFocused()) return true;
-        GuiTextField field = focusedField == null ? null : fields.get(focusedField);
+        ModernTextField field = focusedField == null ? null : fields.get(focusedField);
         return field != null && field.isFocused() && field.getVisible();
     }
 
@@ -893,7 +893,7 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
     private void bindSelected() {
         if (fields.isEmpty()) return;
         if (selectedRule < 0 || selectedRule >= rules.size()) {
-            for (Map.Entry<String, GuiTextField> entry : fields.entrySet()) {
+            for (Map.Entry<String, ModernTextField> entry : fields.entrySet()) {
                 if (entry.getKey().startsWith("trigger.")) entry.getValue().setText("");
             }
             return;
@@ -1116,7 +1116,7 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
     }
 
     private void drawCategoryChoice(String key, ModernMainLayout.Rect rect) {
-        GuiTextField field = ensureField(key, 32767);
+        ModernTextField field = ensureField(key, 32767);
         field.setVisible(false);
         field.setFocused(false);
         fieldBounds.put(key, rect);
@@ -1187,7 +1187,7 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
     }
 
     private void drawField(String key, ModernMainLayout.Rect rect, String hint) {
-        GuiTextField field = ensureField(key, 32767);
+        ModernTextField field = ensureField(key, 32767);
         field.x = rect.x;
         field.y = rect.y;
         field.width = rect.width;
@@ -1214,10 +1214,10 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
         editorScrollBar.idle();
     }
 
-    private GuiTextField ensureField(String key, int maxLength) {
-        GuiTextField field = fields.get(key);
+    private ModernTextField ensureField(String key, int maxLength) {
+        ModernTextField field = fields.get(key);
         if (field == null) {
-            field = new GuiTextField(9400 + fields.size(), font, 0, 0, 20, FIELD_H);
+            field = new ModernTextField(9400 + fields.size(), font, 0, 0, 20, FIELD_H);
             field.setEnableBackgroundDrawing(false);
             field.setMaxStringLength(maxLength);
             field.setCanLoseFocus(false);
@@ -1227,7 +1227,7 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
     }
 
     private void hideFieldsAndOptions() {
-        for (GuiTextField field : fields.values()) field.setVisible(false);
+        for (ModernTextField field : fields.values()) field.setVisible(false);
         enabledToggle = backgroundToggle = sequencePicker = optionToggle = secondaryOptionToggle = importButton = null;
     }
 
@@ -1239,16 +1239,16 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
     }
 
     private void focusField(String key, int mouseX) {
-        for (Map.Entry<String, GuiTextField> entry : fields.entrySet()) {
+        for (Map.Entry<String, ModernTextField> entry : fields.entrySet()) {
             entry.getValue().setFocused(entry.getKey().equals(key));
         }
         focusedField = key;
-        GuiTextField field = fields.get(key);
+        ModernTextField field = fields.get(key);
         if (field != null) ModernUiRenderer.moveTextFieldCursorTo(field, mouseX);
     }
 
     private void clearFocus() {
-        for (GuiTextField field : fields.values()) field.setFocused(false);
+        for (ModernTextField field : fields.values()) field.setFocused(false);
         focusedField = null;
     }
 
@@ -1430,12 +1430,12 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
     }
 
     private void set(String key, String value) {
-        GuiTextField field = fields.get(key);
+        ModernTextField field = fields.get(key);
         if (field != null) field.setText(safe(value));
     }
 
     private String text(String key) {
-        GuiTextField field = fields.get(key);
+        ModernTextField field = fields.get(key);
         return field == null ? "" : safe(field.getText());
     }
 

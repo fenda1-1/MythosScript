@@ -205,14 +205,12 @@ public final class ModernActionEditorSchema {
             text(result, "gui.modern.path.schema.u136", "foodKeywordsText", "gui.modern.path.schema.u142", "", "");
         } else if ("autoequip".equals(t)) {
             toggle(result, "gui.modern.path.schema.u143", "enabled", "gui.modern.path.schema.u137", "", "true");
-            text(result, "gui.modern.path.schema.u143", "setName", "gui.modern.path.schema.u144", "", "");
-            toggle(result, "gui.modern.path.schema.u143", "smartActivation", "gui.modern.path.schema.u145", "", "false");
         } else if ("autopickup".equals(t)) {
             toggle(result, "gui.modern.path.schema.u146", "enabled", "gui.modern.path.schema.u137", "", "true");
         } else if ("dropfiltereditems".equals(t)) {
             itemFilterList(result, "gui.modern.path.schema.u071", "gui.modern.path.schema.u072", "gui.modern.path.schema.u147");
             text(result, "gui.modern.path.schema.u071", "delayTicks", "gui.modern.path.schema.u148", "", "1");
-        } else if ("transferitemstowarehouse".equals(t) || "warehouse_auto_deposit".equals(t)) {
+        } else if ("warehouse_auto_deposit".equals(t)) {
             itemFilterList(result, "gui.modern.path.schema.u149", "gui.modern.path.schema.u072", "gui.modern.path.schema.u073");
             text(result, "gui.modern.path.schema.u149", "delayTicks", "gui.modern.path.schema.u148", "", "1");
             toggle(result, "gui.modern.path.schema.u149", "normalizeDelayTo20Tps", "gui.modern.path.schema.u011", "", "true");
@@ -282,6 +280,10 @@ public final class ModernActionEditorSchema {
         } else if ("spread_inventory_item".equals(t) || "stack_inventory_item".equals(t)) {
             itemTransferFields(result, "gui.modern.path.schema.u200", "spread_inventory_item".equals(t));
         } else if ("pickup_nearby_items".equals(t)) {
+            choice(result, "gui.modern.path.schema.u203", "pickupFilterMode", "gui.modern.path.schema.u308",
+                    "gui.modern.path.schema.u309", "INHERIT_KILLAURA", "CUSTOM");
+            itemFilterList(result, "gui.modern.path.schema.u203", "gui.modern.path.schema.u312",
+                    "gui.modern.path.schema.u313");
             text(result, "gui.modern.path.schema.u203", "searchRadius", "gui.modern.path.schema.u157", "", "16");
             text(result, "gui.modern.path.schema.u203", "maxItems", "gui.modern.path.schema.u204", "gui.modern.path.schema.u205", "0");
             text(result, "gui.modern.path.schema.u203", "timeoutSeconds", "gui.modern.path.schema.u206", "", "30");

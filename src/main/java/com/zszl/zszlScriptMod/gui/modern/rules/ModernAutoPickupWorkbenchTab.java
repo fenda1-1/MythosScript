@@ -19,6 +19,7 @@ import com.zszl.zszlScriptMod.gui.modern.ModernSplitPane;
 import com.zszl.zszlScriptMod.gui.modern.ModernTreeGuide;
 import com.zszl.zszlScriptMod.gui.modern.ModernNavigationActions;
 import com.zszl.zszlScriptMod.gui.modern.ModernUiRenderer;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import com.zszl.zszlScriptMod.gui.modern.form.ModernFormI18n;
 import com.zszl.zszlScriptMod.handlers.AutoPickupHandler;
 import com.zszl.zszlScriptMod.handlers.KillAuraHandler;
@@ -28,7 +29,6 @@ import com.zszl.zszlScriptMod.utils.PinyinSearchHelper;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
 
 /** Native list-detail editor for automatic pickup rules. */
 public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
@@ -71,8 +71,8 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
     private final java.util.Map<Object, com.zszl.zszlScriptMod.gui.modern.form.RuleSectionState> editorPositions = new java.util.WeakHashMap<>();
     private ModernSettingsTab editor;
     private AutoPickupRule editorRule;
-    private GuiTextField searchField;
-    private GuiTextField categoryField;
+    private ModernTextField searchField;
+    private ModernTextField categoryField;
 
     private ModernMainLayout.Rect bounds;
     private ModernMainLayout.Rect navigationBounds;
@@ -117,10 +117,10 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
     private AutoPickupRule.PickupActionEntry overlayAction;
     private AutoPickupRule.PickupActionEntry overlayActionOriginal;
     private final List<String> overlayNbtTags = new ArrayList<>();
-    private final List<GuiTextField> overlayFields = new ArrayList<>();
-    private GuiTextField overlayKeywordField;
-    private GuiTextField overlayNbtInputField;
-    private GuiTextField overlayDelayField;
+    private final List<ModernTextField> overlayFields = new ArrayList<>();
+    private ModernTextField overlayKeywordField;
+    private ModernTextField overlayNbtInputField;
+    private ModernTextField overlayDelayField;
     private String overlayValidation = "";
     private SequenceTarget sequenceTarget = SequenceTarget.NONE;
 
@@ -183,7 +183,7 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
         if (editor != null) {
             editor.updateScreen();
         }
-        for (GuiTextField field : overlayFields) {
+        for (ModernTextField field : overlayFields) {
             if (field != null) {
                 field.updateCursorCounter();
             }
@@ -697,7 +697,7 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
         if (searchField != null && searchField.isFocused() || categoryField != null && categoryField.isFocused()) {
             return true;
         }
-        for (GuiTextField field : overlayFields) {
+        for (ModernTextField field : overlayFields) {
             if (field != null && field.isFocused()) {
                 return true;
             }
@@ -1795,18 +1795,21 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
                 return true;
             }
         }
-        GuiTextField clicked = null;
-        for (GuiTextField field : overlayFields) {
-            if (field != null && field.getVisible() && field.x <= mouseX && mouseX < field.x + field.width
-                    && field.y <= mouseY && mouseY < field.y + field.height) {
+        ModernTextField clicked = null;
+        for (ModernTextField field : overlayFields) {
+            if (field != null && field.contains(mouseX, mouseY)) {
                 clicked = field;
                 break;
             }
         }
         clearOverlayFieldFocus();
         if (clicked != null) {
-            clicked.setFocused(true);
-            clicked.mouseClicked(mouseX, mouseY, 0);
+            // clearOverlayFieldFocus hides every field; restore the selected
+            // field before forwarding the click or ModernTextField will
+            // correctly reject an event aimed at an invisible control.
+            clicked.setVisible(true);
+            clicked.setEnabled(true);
+            clicked.click(mouseX, mouseY, 0);
         }
         return true;
     }
@@ -1867,7 +1870,7 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
             addOverlayNbtTag();
             return true;
         }
-        for (GuiTextField field : overlayFields) {
+        for (ModernTextField field : overlayFields) {
             if (field != null && field.getVisible() && field.isFocused()
                     && field.textboxKeyTyped(typedChar, keyCode)) {
                 return true;
@@ -1982,7 +1985,7 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
     }
 
     private void clearOverlayFieldFocus() {
-        for (GuiTextField field : overlayFields) {
+        for (ModernTextField field : overlayFields) {
             if (field != null) {
                 field.setFocused(false);
                 field.setVisible(false);
@@ -1990,30 +1993,26 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
         }
     }
 
-    private void layoutOverlayField(GuiTextField field, ModernMainLayout.Rect rect) {
+    private void layoutOverlayField(ModernTextField field, ModernMainLayout.Rect rect) {
         if (field == null || rect == null) {
             return;
         }
+        field.layout(rect);
         field.setVisible(true);
         field.setEnabled(true);
-        field.x = rect.x + 5;
-        field.y = rect.y + 3;
-        field.width = Math.max(1, rect.width - 10);
-        field.height = Math.max(1, rect.height - 6);
     }
 
-    private void drawTextField(GuiTextField field) {
+    private void drawTextField(ModernTextField field) {
         if (field == null || !field.getVisible() || field.width <= 0 || field.height <= 0) {
             return;
         }
         field.setTextColor(ModernUiRenderer.TEXT);
         field.setDisabledTextColour(ModernUiRenderer.MUTED_TEXT);
         field.setEnableBackgroundDrawing(false);
-        ModernUiRenderer.reflowTextField(field);
-        ModernUiRenderer.drawTextField(field);
+        field.drawTextContents(Minecraft.getMinecraft().fontRenderer);
     }
 
-    private void drawOverlayFieldSurface(ModernMainLayout.Rect bounds, GuiTextField field) {
+    private void drawOverlayFieldSurface(ModernMainLayout.Rect bounds, ModernTextField field) {
         if (bounds == null) {
             return;
         }
@@ -2435,13 +2434,10 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
         return result;
     }
 
-    private static GuiTextField createField(FontRenderer font, int maxLength) {
-        GuiTextField field = new GuiTextField(0, font, 0, 0, 1, TEXT_FIELD_HEIGHT);
-        field.setEnableBackgroundDrawing(false);
+    private static ModernTextField createField(FontRenderer font, int maxLength) {
+        ModernTextField field = new ModernTextField(0, font, 0, 0, 1, TEXT_FIELD_HEIGHT);
         field.setCanLoseFocus(true);
         field.setMaxStringLength(Math.max(1, maxLength));
-        field.setTextColor(ModernUiRenderer.TEXT);
-        field.setDisabledTextColour(ModernUiRenderer.MUTED_TEXT);
         return field;
     }
 

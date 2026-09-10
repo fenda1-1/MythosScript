@@ -15,6 +15,9 @@ import java.util.List;
 
 /** Executes the action that walks to and collects matching nearby drops. */
 public final class NearbyItemPickupActionHandler {
+    public static final String FILTER_MODE_INHERIT_KILLAURA = "INHERIT_KILLAURA";
+    public static final String FILTER_MODE_CUSTOM = "CUSTOM";
+
     private static final Minecraft MC = Minecraft.getMinecraft();
     private static final int GOTO_INTERVAL_TICKS = 5;
     private static final int MAX_SCANNED_ITEM_ENTITIES = 512;
@@ -32,6 +35,7 @@ public final class NearbyItemPickupActionHandler {
     private static int pickedCount;
     private static int targetEntityId = Integer.MIN_VALUE;
     private static int lastGotoTick = -99999;
+    private static boolean inheritKillAuraRules;
 
     private NearbyItemPickupActionHandler() {
     }
@@ -42,8 +46,10 @@ public final class NearbyItemPickupActionHandler {
             return;
         }
 
-        List<String> configuredExpressions = InventoryItemFilterExpressionEngine.readExpressions(params);
-        if (configuredExpressions.isEmpty()) {
+        inheritKillAuraRules = usesKillAuraPickupRules(params);
+        List<String> configuredExpressions = inheritKillAuraRules
+                ? new ArrayList<String>() : InventoryItemFilterExpressionEngine.readExpressions(params);
+        if (!inheritKillAuraRules && configuredExpressions.isEmpty()) {
             zszlScriptMod.LOGGER.warn("[pickup_nearby_items] 缺少物品过滤表达式，动作取消。");
             return;
         }
@@ -78,6 +84,7 @@ public final class NearbyItemPickupActionHandler {
         }
         running = false;
         expressions = new ArrayList<>();
+        inheritKillAuraRules = false;
         targetEntityId = Integer.MIN_VALUE;
         lastGotoTick = -99999;
     }
@@ -185,6 +192,9 @@ public final class NearbyItemPickupActionHandler {
             return false;
         }
         double playerDistance = Math.sqrt(player.getDistanceSq(item));
+        if (inheritKillAuraRules) {
+            return KillAuraHandler.INSTANCE.matchesHuntPickupRulesForAction(stack, playerDistance);
+        }
         String rarity = getRarityToken(stack);
         for (String expression : expressions) {
             try {
@@ -196,6 +206,14 @@ public final class NearbyItemPickupActionHandler {
             }
         }
         return false;
+    }
+
+    /** Missing mode keeps legacy actions compatible: stored expressions imply custom mode. */
+    public static boolean usesKillAuraPickupRules(JsonObject params) {
+        if (params != null && params.has("pickupFilterMode")) {
+            return !FILTER_MODE_CUSTOM.equalsIgnoreCase(params.get("pickupFilterMode").getAsString());
+        }
+        return InventoryItemFilterExpressionEngine.readExpressions(params).isEmpty();
     }
 
     private static String getRarityToken(ItemStack stack) {
@@ -235,6 +253,7 @@ public final class NearbyItemPickupActionHandler {
             EmbeddedNavigationHandler.INSTANCE.stop();
         }
         running = false;
+        inheritKillAuraRules = false;
         targetEntityId = Integer.MIN_VALUE;
         lastGotoTick = -99999;
     }

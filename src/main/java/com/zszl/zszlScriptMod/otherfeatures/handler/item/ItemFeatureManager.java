@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.zszl.zszlScriptMod.PerformanceMonitor;
 import com.zszl.zszlScriptMod.otherfeatures.handler.movement.MovementFeatureManager;
 import com.zszl.zszlScriptMod.path.InventoryItemFilterExpressionEngine;
 import com.zszl.zszlScriptMod.system.ProfileManager;
@@ -452,7 +453,14 @@ public class ItemFeatureManager {
         tickCooldowns();
         handlePendingCriticalSprintRestore(player);
         handleForceNoHunger(player);
-        handleAutoEquip(mc, player);
+        if (PerformanceMonitor.isFeatureEnabled("auto_equip")) {
+            PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("auto_equip");
+            try {
+                handleAutoEquip(mc, player);
+            } finally {
+                timer.stop();
+            }
+        }
         handleChestSteal(mc, player);
         handleInventorySort(mc, player);
         handleDropAll(mc, player);

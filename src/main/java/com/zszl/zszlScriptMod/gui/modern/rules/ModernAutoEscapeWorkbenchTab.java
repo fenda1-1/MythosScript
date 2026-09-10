@@ -24,7 +24,7 @@ import com.zszl.zszlScriptMod.system.AutoEscapeRule;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.client.resources.I18n;
 
 /** Native list-detail editor for automatic escape rules. */
@@ -53,7 +53,7 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
     private final java.util.Map<Object, com.zszl.zszlScriptMod.gui.modern.form.RuleSectionState> editorPositions = new java.util.WeakHashMap<>();
     private ModernSettingsTab editor;
     private AutoEscapeRule editorRule;
-    private GuiTextField searchField;
+    private ModernTextField searchField;
     private AutoEscapeSequencePicker sequencePicker;
     private ModernMainLayout.Rect bounds;
     private ModernMainLayout.Rect navigationBounds;
@@ -82,7 +82,7 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
             layoutPreferencesLoaded = true;
         }
         if (searchField == null) {
-            searchField = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+            searchField = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
             searchField.setEnableBackgroundDrawing(false);
             searchField.setMaxStringLength(80);
         }

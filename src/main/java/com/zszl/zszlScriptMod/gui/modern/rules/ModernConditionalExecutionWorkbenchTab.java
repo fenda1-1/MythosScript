@@ -30,7 +30,7 @@ import com.zszl.zszlScriptMod.system.ConditionalRule;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 
 /** Native list-detail workbench for conditional execution rules. */
 public final class ModernConditionalExecutionWorkbenchTab implements ModernSettingsTab {
@@ -58,8 +58,8 @@ public final class ModernConditionalExecutionWorkbenchTab implements ModernSetti
     private final java.util.Map<Object, com.zszl.zszlScriptMod.gui.modern.form.RuleSectionState> editorPositions = new java.util.WeakHashMap<>();
     private ModernSettingsTab editor;
     private ConditionalRule editorRule;
-    private GuiTextField searchField;
-    private GuiTextField categoryField;
+    private ModernTextField searchField;
+    private ModernTextField categoryField;
     private SequencePicker sequencePicker;
 
     private ModernMainLayout.Rect bounds;
@@ -103,14 +103,14 @@ public final class ModernConditionalExecutionWorkbenchTab implements ModernSetti
             layoutPreferencesLoaded = true;
         }
         if (searchField == null) {
-            searchField = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+            searchField = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
             searchField.setEnableBackgroundDrawing(false);
             searchField.setMaxStringLength(96);
             searchField.setTextColor(ModernUiRenderer.TEXT);
             searchField.setDisabledTextColour(ModernUiRenderer.MUTED_TEXT);
         }
         if (categoryField == null) {
-            categoryField = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+            categoryField = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
             categoryField.setEnableBackgroundDrawing(false);
             categoryField.setMaxStringLength(80);
             categoryField.setTextColor(ModernUiRenderer.TEXT);
@@ -1953,7 +1953,7 @@ public final class ModernConditionalExecutionWorkbenchTab implements ModernSetti
 
         private final Selection selection;
         private final Map<String, List<String>> groups = new LinkedHashMap<>();
-        private GuiTextField searchField;
+        private ModernTextField searchField;
         private ModernMainLayout.Rect pickerBounds;
         private ModernMainLayout.Rect searchBounds;
         private ModernMainLayout.Rect categoryBounds;
@@ -1973,7 +1973,7 @@ public final class ModernConditionalExecutionWorkbenchTab implements ModernSetti
             if (searchField != null) {
                 return;
             }
-            searchField = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+            searchField = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
             searchField.setEnableBackgroundDrawing(false);
             searchField.setMaxStringLength(96);
             searchField.setTextColor(ModernUiRenderer.TEXT);

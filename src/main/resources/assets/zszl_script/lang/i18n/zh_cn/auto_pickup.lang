@@ -22,8 +22,6 @@ gui.pickup.title=§f拿取设置 (单位: Ticks, 20 ticks = 1秒)
 gui.pickup.initial_delay=初始延迟:
 gui.pickup.items_per_batch=每批次点击数:
 gui.pickup.batch_interval=批次间隔:
-msg.pickup.saved=§a[竞技场] 拿取设置已保存！
-msg.pickup.invalid_number=§c[竞技场] 输入的数字格式不正确！
 gui.autopickup.tip.add=§a新增规则§r
 gui.autopickup.tip.add.1=§7创建一个新的自动拾取区域。
 gui.autopickup.tip.edit=§e编辑规则§r

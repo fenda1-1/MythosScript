@@ -36,19 +36,16 @@ import com.zszl.zszlScriptMod.config.ChatOptimizationConfig;
 import com.zszl.zszlScriptMod.config.ModConfig;
 import com.zszl.zszlScriptMod.gui.DetachedSwingWindowManager;
 import com.zszl.zszlScriptMod.gui.OverlayGuiHandler;
-import com.zszl.zszlScriptMod.handlers.ArenaItemHandler;
 import com.zszl.zszlScriptMod.handlers.AutoEatHandler;
 import com.zszl.zszlScriptMod.handlers.AutoFollowHandler;
 import com.zszl.zszlScriptMod.handlers.AutoUseItemHandler;
 import com.zszl.zszlScriptMod.handlers.ConditionalExecutionHandler;
 import com.zszl.zszlScriptMod.handlers.GuiBlockerHandler;
-import com.zszl.zszlScriptMod.handlers.ArenaItemHandler.DropMode;
 import com.zszl.zszlScriptMod.path.PathSequenceEventListener;
 import com.zszl.zszlScriptMod.path.PathSequenceManager;
 import com.zszl.zszlScriptMod.path.node.NodeTriggerManager;
 import com.zszl.zszlScriptMod.path.trigger.LegacySequenceTriggerManager;
 import com.zszl.zszlScriptMod.path.trigger.PlayerListTriggerSupport;
-import com.zszl.zszlScriptMod.utils.ModUtils;
 import com.zszl.zszlScriptMod.utils.ReflectionCompat;
 import com.zszl.zszlScriptMod.handlers.WarehouseEventHandler;
 import com.zszl.zszlScriptMod.listenersupport.PlayerIdleTriggerTracker;
@@ -64,7 +61,6 @@ import java.util.TreeSet;
 
 public class GlobalEventListener {
     public static final GlobalEventListener instance = new GlobalEventListener();
-    private int tickCounter = 0;
     private int clientTickCounter = 0;
     private static GuiScreen lastGuiScreen = null;
     private boolean wasPlayerDeadLastTick = false;
@@ -102,20 +98,6 @@ public class GlobalEventListener {
             }
         }
 
-        if (event.phase == TickEvent.Phase.END) {
-            tickCounter++;
-            if (ArenaItemHandler.arenaProcessingEnabled && ArenaItemHandler.dropMode == DropMode.TIMED) {
-                if (tickCounter % (ArenaItemHandler.timedDropIntervalSeconds * 20) == 0) {
-                    // 竞技场物品处理性能监控
-                    PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("warehouse");
-                    try {
-                        ArenaItemHandler.processItems();
-                    } finally {
-                        timer.stop();
-                    }
-                }
-            }
-        }
     }
 
     @SubscribeEvent
@@ -156,20 +138,6 @@ public class GlobalEventListener {
             } catch (Exception e) {
                 zszlScriptMod.LOGGER.error("通过反射修改聊天输入框长度失败！", e);
             }
-        }
-
-        if (event.getGui() instanceof GuiChest &&
-                ArenaItemHandler.arenaProcessingEnabled &&
-                ArenaItemHandler.dropMode == DropMode.ON_CHEST_OPEN) {
-
-            ModUtils.DelayScheduler.instance.schedule(() -> {
-                PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("warehouse");
-                try {
-                    ArenaItemHandler.processItems();
-                } finally {
-                    timer.stop();
-                }
-            }, 10);
         }
 
         if (event.getGui() instanceof GuiChest) {

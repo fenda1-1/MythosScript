@@ -26,7 +26,7 @@ import com.zszl.zszlScriptMod.system.BlockReplacementRule;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 
 /** Native two-pane workbench for block replacement rules. */
 public final class ModernBlockReplacementWorkbenchTab implements ModernSettingsTab {
@@ -58,10 +58,12 @@ public final class ModernBlockReplacementWorkbenchTab implements ModernSettingsT
     private String corner1Draft = "";
     private String corner2Draft = "";
 
-    private GuiTextField searchField;
-    private GuiTextField categoryNameField;
-    private GuiTextField sourceField;
-    private GuiTextField targetField;
+    private ModernTextField searchField;
+    private ModernTextField categoryNameField;
+    private ModernTextField sourceField;
+    private ModernTextField targetField;
+    /** The entry field focused before the render-only visibility reset. */
+    private ModernTextField focusedEntryFieldBeforeLayoutReset;
 
     private ModernMainLayout.Rect bounds;
     private ModernMainLayout.Rect navigationBounds;
@@ -194,6 +196,7 @@ public final class ModernBlockReplacementWorkbenchTab implements ModernSettingsT
         entriesBounds = null;
         entryListBounds = null;
         entryHits.clear();
+        focusedEntryFieldBeforeLayoutReset = findFocusedEntryField();
         sourceField.setVisible(false);
         targetField.setVisible(false);
 
@@ -203,6 +206,7 @@ public final class ModernBlockReplacementWorkbenchTab implements ModernSettingsT
         }
         drawFooter(fontRenderer, mouseX, mouseY);
         navigationActions.drawOverlay(mouseX, mouseY);
+        focusedEntryFieldBeforeLayoutReset = null;
     }
 
 
@@ -579,13 +583,16 @@ public final class ModernBlockReplacementWorkbenchTab implements ModernSettingsT
         drawButton(fontRenderer, entryApplyBounds, "gui.modern.replace_wb.u032", false, true, false, mouseX, mouseY);
     }
 
-    private void drawCustomTextField(FontRenderer fontRenderer, GuiTextField field, ModernMainLayout.Rect rect,
+    private void drawCustomTextField(FontRenderer fontRenderer, ModernTextField field, ModernMainLayout.Rect rect,
             boolean invalid) {
         if (field == null || rect == null || rect.width <= 0 || rect.height <= 0) {
             return;
         }
         field.setVisible(true);
         field.setEnabled(true);
+        if (field == focusedEntryFieldBeforeLayoutReset) {
+            field.setFocused(true);
+        }
         field.x = rect.x;
         field.y = rect.y;
         field.width = rect.width;
@@ -600,7 +607,7 @@ public final class ModernBlockReplacementWorkbenchTab implements ModernSettingsT
         ModernUiRenderer.drawTextField(field);
     }
 
-    private void hideField(GuiTextField field) {
+    private void hideField(ModernTextField field) {
         if (field != null) {
             field.setVisible(false);
             field.setFocused(false);
@@ -831,7 +838,7 @@ public final class ModernBlockReplacementWorkbenchTab implements ModernSettingsT
         return true;
     }
 
-    private void focusEntryField(GuiTextField field, GuiTextField other, int mouseX, int mouseY) {
+    private void focusEntryField(ModernTextField field, ModernTextField other, int mouseX, int mouseY) {
         if (other != null) {
             other.setFocused(false);
         }
@@ -1865,27 +1872,37 @@ public final class ModernBlockReplacementWorkbenchTab implements ModernSettingsT
         }
     }
 
+    private ModernTextField findFocusedEntryField() {
+        if (sourceField != null && sourceField.isVisible() && sourceField.isFocused()) {
+            return sourceField;
+        }
+        if (targetField != null && targetField.isVisible() && targetField.isFocused()) {
+            return targetField;
+        }
+        return null;
+    }
+
     private void clearPendingDeletes() {
         pendingDelete = null;
         pendingCategoryDelete = null;
         pendingEntryDelete = null;
     }
 
-    private static GuiTextField createField(FontRenderer fontRenderer, int id, int maxLength) {
-        GuiTextField field = new GuiTextField(id, fontRenderer, 0, 0, 1, 13);
+    private static ModernTextField createField(FontRenderer fontRenderer, int id, int maxLength) {
+        ModernTextField field = new ModernTextField(id, fontRenderer, 0, 0, 1, 13);
         field.setMaxStringLength(maxLength);
         field.setCanLoseFocus(true);
         field.setEnableBackgroundDrawing(false);
         return field;
     }
 
-    private static void updateCursor(GuiTextField field) {
+    private static void updateCursor(ModernTextField field) {
         if (field != null) {
             field.updateCursorCounter();
         }
     }
 
-    private static void setTextIfDifferent(GuiTextField field, String value) {
+    private static void setTextIfDifferent(ModernTextField field, String value) {
         if (field != null && !safe(field.getText()).equals(safe(value))) {
             field.setText(safe(value));
         }

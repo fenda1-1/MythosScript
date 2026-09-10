@@ -30,7 +30,7 @@ import com.zszl.zszlScriptMod.utils.PinyinSearchHelper;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.entity.Entity;
 
 /** Native list-detail editor for automatic follow rules. */
@@ -89,7 +89,7 @@ public final class ModernAutoFollowWorkbenchTab implements ModernSettingsTab {
     private AutoFollowRule editorRule;
     private EditorDraft editorDraft;
     private String originalArea = "";
-    private GuiTextField searchField;
+    private ModernTextField searchField;
     private AutoEscapeSequencePicker sequencePicker;
 
     private ModernMainLayout.Rect bounds;
@@ -124,7 +124,7 @@ public final class ModernAutoFollowWorkbenchTab implements ModernSettingsTab {
             layoutPreferencesLoaded = true;
         }
         if (searchField == null) {
-            searchField = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+            searchField = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
             searchField.setEnableBackgroundDrawing(false);
             searchField.setMaxStringLength(120);
         }

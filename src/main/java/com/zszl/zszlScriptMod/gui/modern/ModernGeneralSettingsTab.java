@@ -5,7 +5,6 @@ import java.util.List;
 
 import com.zszl.zszlScriptMod.gui.DetachedSwingWindowManager;
 import com.zszl.zszlScriptMod.gui.GuiInventory;
-import com.zszl.zszlScriptMod.gui.GuiOtherFeaturesHudPosition;
 import com.zszl.zszlScriptMod.gui.MainUiLayoutManager;
 import com.zszl.zszlScriptMod.gui.modern.core.ModernScreenContext;
 import com.zszl.zszlScriptMod.gui.modern.core.ModernTabDescriptor;
@@ -24,7 +23,7 @@ import com.zszl.zszlScriptMod.utils.guiinspect.GuiElementInspector;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.client.resources.I18n;
 
 /** Compact, cross-cutting preferences page for the modern control center. */
@@ -72,7 +71,7 @@ public final class ModernGeneralSettingsTab implements ModernSettingsTab {
     private final List<ModernMainLayout.Rect> statePageBounds = new ArrayList<>();
     private final List<String> statePageCommands = new ArrayList<>();
     private final List<ModernTabDescriptor> statePages = new ArrayList<>();
-    private GuiTextField stateRecordingSearch;
+    private ModernTextField stateRecordingSearch;
     private ModernMainLayout.Rect panelBounds;
     private ModernMainLayout.Rect appearanceBounds;
     private ModernMainLayout.Rect behaviorBounds;
@@ -138,7 +137,7 @@ public final class ModernGeneralSettingsTab implements ModernSettingsTab {
             statePagesLoaded = true;
         }
         if (stateRecordingSearch == null) {
-            stateRecordingSearch = new GuiTextField(0, fontRenderer, 0, 0, 1, 12);
+            stateRecordingSearch = new ModernTextField(0, fontRenderer, 0, 0, 1, 12);
             stateRecordingSearch.setEnableBackgroundDrawing(false);
             stateRecordingSearch.setMaxStringLength(96);
             stateRecordingSearch.setTextColor(ModernUiRenderer.TEXT);
@@ -605,7 +604,9 @@ public final class ModernGeneralSettingsTab implements ModernSettingsTab {
             return true;
         }
         if (editFeatureHudBounds != null && editFeatureHudBounds.contains(mouseX, mouseY)) {
-            GuiOtherFeaturesHudPosition.open(minecraft);
+            if (routeRequest != null) {
+                routeRequest.accept("other_feature_hud_position");
+            }
             return true;
         }
         if (resetLayoutBounds != null && resetLayoutBounds.contains(mouseX, mouseY)) {

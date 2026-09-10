@@ -165,7 +165,6 @@ public final class ActionEditorFieldHelp {
         aliases.put("timeoutTicks", "timeout_ticks");
         aliases.put("timeoutSkipCount", "timeout_skip_count");
         aliases.put("foodKeywordsText", "food_keywords_text");
-        aliases.put("setName", "set_name");
         aliases.put("sourceScope", "spread_source_scope");
         aliases.put("sourceSlotsText", "spread_source_slots");
         aliases.put("targetScope", "spread_target_scope");

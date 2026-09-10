@@ -22,7 +22,7 @@ import com.zszl.zszlScriptMod.gui.modern.core.ModernConfirmationState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import com.zszl.zszlScriptMod.gui.modern.form.ModernFormI18n;
 
 /**
@@ -67,7 +67,7 @@ public final class ModernMemorySettingsTab implements ModernSettingsTab {
     private final List<SnapshotHit> snapshotHits = new ArrayList<>();
     private final ModernConfirmationState destructiveConfirmation = new ModernConfirmationState();
 
-    private GuiTextField snapshotNameField;
+    private ModernTextField snapshotNameField;
     private List<MemorySnapshot> snapshots = Collections.emptyList();
     private List<ComparisonLine> comparisonLines = Collections.emptyList();
     private MemoryManager.ComparisonResult comparisonResult;
@@ -114,7 +114,7 @@ public final class ModernMemorySettingsTab implements ModernSettingsTab {
             return;
         }
         snapshotRatio = MainUiLayoutManager.getModernSplitRatio("memory.snapshot_list", snapshotRatio);
-        snapshotNameField = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+        snapshotNameField = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
         snapshotNameField.setEnableBackgroundDrawing(false);
         snapshotNameField.setMaxStringLength(96);
         snapshotNameField.setTextColor(ModernUiRenderer.TEXT);

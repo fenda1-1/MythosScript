@@ -1168,7 +1168,13 @@ public final class PathConfigValidator {
                 break;
             case "pickup_nearby_items":
                 List<String> pickupExpressions = InventoryItemFilterExpressionEngine.readExpressions(params);
-                if (pickupExpressions.isEmpty()) {
+                boolean inheritsKillAuraRules = !params.has("pickupFilterMode")
+                        ? pickupExpressions.isEmpty()
+                        : !"CUSTOM".equalsIgnoreCase(params.get("pickupFilterMode").getAsString());
+                if (inheritsKillAuraRules) {
+                    // The action inherits the live Kill Aura rule set; no local
+                    // expression is required in this mode.
+                } else if (pickupExpressions.isEmpty()) {
                     issues.add(new Issue(Severity.ERROR, "pickup_nearby_filter_missing", sequenceName, stepIndex,
                             actionIndex, "拾取附近掉落物缺少过滤条件", "请至少添加一条物品过滤表达式。"));
                 } else {
@@ -1974,7 +1980,6 @@ public final class PathConfigValidator {
             case "move_inventory_items_to_chest_slots":
             case "spread_inventory_item":
             case "warehouse_auto_deposit":
-            case "transferitemstowarehouse":
             case "move_inventory_item_to_hotbar":
             case "switch_hotbar_slot":
             case "silentuse":

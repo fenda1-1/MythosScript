@@ -8,7 +8,6 @@ import net.minecraft.client.resources.I18n;
  * 定义所有可以被快捷键绑定的【调试】动作。
  */
 public enum BindableDebugAction {
-    TOGGLE_AUTO_EQUIP("keybind.debug_action.toggle_auto_equip.name", "keybind.debug_action.toggle_auto_equip.desc"),
     START_CHEST_RECORDING("keybind.debug_action.start_chest_recording.name",
             "keybind.debug_action.start_chest_recording.desc");
 

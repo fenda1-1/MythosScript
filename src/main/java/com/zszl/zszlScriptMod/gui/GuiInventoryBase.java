@@ -16,7 +16,6 @@ import java.util.function.Consumer;
 
 import org.lwjgl.input.Keyboard;
 
-import com.zszl.zszlScriptMod.config.ModConfig;
 import com.zszl.zszlScriptMod.gui.components.GuiTextInput;
 import com.zszl.zszlScriptMod.gui.components.GuiTheme;
 import com.zszl.zszlScriptMod.gui.components.ThemedButton;
@@ -645,13 +644,6 @@ abstract class GuiInventoryBase {
     protected static int maxOtherFeatureGroupScroll = 0;
     protected static boolean isDraggingOtherFeatureGroupScrollbar = false;
     protected static int otherFeatureScreenPage = 0;
-    protected static boolean masterStatusHudEditMode = false;
-    protected static boolean isDraggingMasterStatusHud = false;
-    protected static int masterStatusHudDragOffsetX = 0;
-    protected static int masterStatusHudDragOffsetY = 0;
-    protected static Rectangle masterStatusHudEditorBounds = null;
-    protected static Rectangle masterStatusHudExitButtonBounds = null;
-    protected static boolean masterStatusHudEditPreviousMouseDetached = false;
 
     protected static final class OtherFeatureCardLayout {
         protected final FeatureDef feature;
@@ -699,10 +691,6 @@ abstract class GuiInventoryBase {
         maxOtherFeatureGroupScroll = 0;
         isDraggingOtherFeatureGroupScrollbar = false;
         otherFeatureScreenPage = 0;
-        masterStatusHudEditMode = false;
-        isDraggingMasterStatusHud = false;
-        masterStatusHudEditorBounds = null;
-        masterStatusHudExitButtonBounds = null;
         isDraggingCategoryDivider = false;
         isDraggingCategoryRow = false;
         pressedCategoryRow = null;
@@ -829,37 +817,7 @@ abstract class GuiInventoryBase {
 
     public static boolean isAnyDragActive() {
         return isAnyScrollbarDragging() || pressedCustomSequence != null || isDraggingCustomSequenceCard
-                || pressedCategoryRow != null || isDraggingCategoryRow || isDraggingMasterStatusHud;
-    }
-
-    public static boolean isMasterStatusHudEditMode() {
-        return masterStatusHudEditMode;
-    }
-
-    public static void updateMasterStatusHudEditorBounds(Rectangle hudBounds, Rectangle exitButtonBounds) {
-        masterStatusHudEditorBounds = hudBounds;
-        masterStatusHudExitButtonBounds = exitButtonBounds;
-    }
-
-    protected static void setMasterStatusHudEditMode(boolean editing) {
-        Minecraft mc = Minecraft.getMinecraft();
-        masterStatusHudEditMode = editing;
-        if (editing) {
-            masterStatusHudEditPreviousMouseDetached = ModConfig.isMouseDetached;
-            ModConfig.isMouseDetached = true;
-            if (mc != null && zszlScriptMod.isGuiVisible && mc.currentScreen == null) {
-                GuiModernMainScreen.openMenu(mc);
-            }
-        }
-        if (!editing) {
-            isDraggingMasterStatusHud = false;
-            masterStatusHudEditorBounds = null;
-            masterStatusHudExitButtonBounds = null;
-            ModConfig.isMouseDetached = masterStatusHudEditPreviousMouseDetached;
-            if (!ModConfig.isMouseDetached && mc != null && mc.currentScreen == null) {
-                mc.mouseHelper.grabMouseCursor();
-            }
-        }
+                || pressedCategoryRow != null || isDraggingCategoryRow;
     }
 
     protected static String normalizeText(String value) {
@@ -1749,10 +1707,6 @@ abstract class GuiInventoryBase {
         setItems.add("toggle_kill_aura");
         setItemNames.add(I18n.format("gui.inventory.item.kill_aura.name"));
         itemTooltips.put("toggle_kill_aura", I18n.format("gui.inventory.item.kill_aura.tooltip"));
-        // setItems.add("arenaconfig");
-        // setItemNames.add(I18n.format("gui.inventory.item.arena_config.name"));
-        // itemTooltips.put("arenaconfig",
-        // I18n.format("gui.inventory.item.arena_config.tooltip"));
         setItems.add("conditional_execution");
         setItemNames.add(I18n.format("gui.inventory.item.conditional_execution.name"));
         itemTooltips.put("conditional_execution", I18n.format("gui.inventory.item.conditional_execution.tooltip"));
@@ -1917,7 +1871,6 @@ abstract class GuiInventoryBase {
 
     protected static void closeOverlay() {
         Minecraft mc = Minecraft.getMinecraft();
-        setMasterStatusHudEditMode(false);
         if (DetachedSwingWindowManager.isDetached()) {
             return;
         }

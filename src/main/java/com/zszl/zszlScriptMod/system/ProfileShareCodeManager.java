@@ -1298,8 +1298,6 @@ public final class ProfileShareCodeManager {
     private static Map<String, ProfileFileSpec> buildProfileFileSpecs() {
         LinkedHashMap<String, ProfileFileSpec> specs = new LinkedHashMap<>();
 
-        registerKnownShareableFile(specs, "arena_config.json", "竞技场设置");
-        registerKnownShareableFile(specs, "auto_equip_sets_v5.json", "自动穿戴配置集");
         registerKnownShareableFile(specs, "auto_pickup_rules.json", "自动拾取规则");
         registerKnownShareableFile(specs, "auto_use_item_rules.json", "静默使用物品规则");
         registerKnownShareableFile(specs, "autofollow_rules.json", "自动追怪规则");
@@ -1317,7 +1315,6 @@ public final class ProfileShareCodeManager {
         registerKnownShareableFile(specs, "keycommand_autoeat.json", "自动进食设置");
         registerKnownShareableFile(specs, "keycommand_leaveconfig.json", "撤离/重进设置");
         registerKnownShareableFile(specs, "loop_execution.json", "循环执行设置");
-        registerKnownShareableFile(specs, "node_editor_hotkeys.json", "节点编辑器快捷键");
         registerKnownShareableFile(specs, "packet_filter_config.json", "数据包过滤设置");
         registerKnownShareableFile(specs, "packet_intercept_rules.json", "数据包拦截规则");
         registerKnownShareableFile(specs, "path_categories.json", "路径分类");
@@ -1334,7 +1331,6 @@ public final class ProfileShareCodeManager {
         registerKnownShareableFile(specs, "legacy_action_templates.json", "动作模板");
         registerKnownShareableFile(specs, "legacy_sequence_trigger_rules.json", "路径序列触发器规则");
         registerKnownShareableFile(specs, "node_sequences.json", "节点序列");
-        registerKnownShareableFile(specs, "node_templates.json", "节点模板库");
         registerKnownShareableFile(specs, "other_features_block.json", "其他功能-方块");
         registerKnownShareableFile(specs, "other_features_item.json", "其他功能-物品");
         registerKnownShareableFile(specs, "other_features_misc.json", "其他功能-杂项");
@@ -1353,9 +1349,6 @@ public final class ProfileShareCodeManager {
         registerHiddenFile(specs, "gui_profile_manager_layout.json", "配置管理界面布局");
         registerHiddenFile(specs, "human_route_templates.json", "拟人路线模板（旧版）");
         registerHiddenFile(specs, "inventory_ui_layout.json", "主界面布局");
-        registerHiddenFile(specs, "node_audit_log.json", "节点审计日志");
-        registerHiddenFile(specs, "node_editor_drafts.json", "节点编辑器草稿");
-        registerHiddenFile(specs, "node_library_panel_state.json", "节点库面板状态");
 
         return Collections.unmodifiableMap(specs);
     }

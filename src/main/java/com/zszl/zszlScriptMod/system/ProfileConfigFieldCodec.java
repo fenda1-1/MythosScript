@@ -292,11 +292,6 @@ public final class ProfileConfigFieldCodec {
         labels.put("filters", "过滤条件");
         labels.put("settings", "设置");
         labels.put("item_name", "物品名称");
-        labels.put("leave_one", "保留一个");
-        labels.put("sequential_equip", "顺序装备");
-        labels.put("smart_activation_enabled", "智能激活");
-        labels.put("smart_activation_range", "智能激活范围");
-        labels.put("equip_interval_ticks", "装备间隔刻");
         return Collections.unmodifiableMap(labels);
     }
 

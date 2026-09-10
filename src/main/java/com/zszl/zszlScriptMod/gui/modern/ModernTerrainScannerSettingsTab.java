@@ -15,7 +15,7 @@ import com.zszl.zszlScriptMod.gui.MainUiLayoutManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.util.text.TextComponentString;
 import com.zszl.zszlScriptMod.gui.modern.form.ModernFormI18n;
@@ -53,8 +53,8 @@ public final class ModernTerrainScannerSettingsTab implements ModernSettingsTab 
 
     private final List<RecordHit> recordHits = new ArrayList<>();
 
-    private GuiTextField radiusField;
-    private GuiTextField renameField;
+    private ModernTextField radiusField;
+    private ModernTextField renameField;
     private List<String> scanFiles = Collections.emptyList();
     private List<String> rawContentLines = Collections.emptyList();
     private List<String> wrappedContentLines = Collections.emptyList();
@@ -644,7 +644,7 @@ public final class ModernTerrainScannerSettingsTab implements ModernSettingsTab 
                 setter);
     }
 
-    private void drawTextField(FontRenderer fontRenderer, GuiTextField field, ModernMainLayout.Rect bounds,
+    private void drawTextField(FontRenderer fontRenderer, ModernTextField field, ModernMainLayout.Rect bounds,
             String placeholder, int mouseX, int mouseY) {
         if (bounds == null) {
             return;
@@ -909,7 +909,7 @@ public final class ModernTerrainScannerSettingsTab implements ModernSettingsTab 
         wrappedContentWidth = width;
     }
 
-    private void focusField(GuiTextField focused, GuiTextField other) {
+    private void focusField(ModernTextField focused, ModernTextField other) {
         if (other != null) {
             other.setFocused(false);
         }
@@ -927,8 +927,8 @@ public final class ModernTerrainScannerSettingsTab implements ModernSettingsTab 
         }
     }
 
-    private GuiTextField createTextField(FontRenderer fontRenderer, int maxLength) {
-        GuiTextField field = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+    private ModernTextField createTextField(FontRenderer fontRenderer, int maxLength) {
+        ModernTextField field = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
         field.setEnableBackgroundDrawing(false);
         field.setMaxStringLength(maxLength);
         field.setTextColor(ModernUiRenderer.TEXT);

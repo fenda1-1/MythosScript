@@ -10,13 +10,16 @@ import com.zszl.zszlScriptMod.otherfeatures.handler.movement.MovementFeatureMana
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 
-/** Transparent screen that releases the cursor while positioning the other-features HUD. */
+/**
+ * Transparent screen for positioning the persistent other-features status HUD.
+ */
 public final class GuiOtherFeaturesHudPosition extends GuiScreen {
     private boolean dragging;
-    private int offsetX;
-    private int offsetY;
+    private int dragOffsetX;
+    private int dragOffsetY;
+    private Rectangle hudBounds;
 
-    /** Open the HUD positioning interaction without exposing its construction to the main shell. */
+    /** Opens the HUD positioning interaction and releases the control center. */
     public static void open(Minecraft minecraft) {
         if (minecraft != null) {
             minecraft.displayGuiScreen(new GuiOtherFeaturesHudPosition());
@@ -25,38 +28,26 @@ public final class GuiOtherFeaturesHudPosition extends GuiScreen {
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        if (dragging) {
-            movePanel(mouseX, mouseY);
-        }
-        OverlayGuiHandler.renderMasterStatusHudPreview();
+        // Draw exactly the same HUD that is shown during normal gameplay.
+        // There is deliberately no editor canvas, backdrop, hint, or button.
+        hudBounds = OverlayGuiHandler.renderMasterStatusHudForEditor();
     }
 
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
-        if (mouseButton != 0) {
+        if (mouseButton != 0 || hudBounds == null || !hudBounds.contains(mouseX, mouseY)) {
             return;
         }
-        Rectangle exit = GuiInventory.masterStatusHudExitButtonBounds;
-        if (exit != null && exit.contains(mouseX, mouseY)) {
-            mc.displayGuiScreen(null);
-            return;
-        }
-        Rectangle bounds = GuiInventory.masterStatusHudEditorBounds;
-        if (bounds != null && bounds.contains(mouseX, mouseY)) {
-            dragging = true;
-            offsetX = mouseX - MovementFeatureManager.getMasterStatusHudX();
-            offsetY = mouseY - MovementFeatureManager.getMasterStatusHudY();
-        }
+        dragging = true;
+        dragOffsetX = mouseX - MovementFeatureManager.getMasterStatusHudX();
+        dragOffsetY = mouseY - MovementFeatureManager.getMasterStatusHudY();
     }
 
-    private void movePanel(int mouseX, int mouseY) {
-        Rectangle bounds = GuiInventory.masterStatusHudEditorBounds;
-        if (bounds == null) {
-            return;
+    @Override
+    protected void mouseClickMove(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
+        if (clickedMouseButton == 0 && dragging) {
+            movePanel(mouseX, mouseY);
         }
-        MovementFeatureManager.setMasterStatusHudPositionTransient(
-                Math.max(4, Math.min(mouseX - offsetX, width - bounds.width + 4)),
-                Math.max(4, Math.min(mouseY - offsetY, height - bounds.height + 4)));
     }
 
     @Override
@@ -66,6 +57,15 @@ public final class GuiOtherFeaturesHudPosition extends GuiScreen {
             dragging = false;
             MovementFeatureManager.persistMasterStatusHudPosition();
         }
+    }
+
+    private void movePanel(int mouseX, int mouseY) {
+        if (hudBounds == null) {
+            return;
+        }
+        MovementFeatureManager.setMasterStatusHudPositionTransient(
+                Math.max(4, Math.min(mouseX - dragOffsetX, width - hudBounds.width + 4)),
+                Math.max(4, Math.min(mouseY - dragOffsetY, height - hudBounds.height + 4)));
     }
 
     @Override
@@ -79,7 +79,6 @@ public final class GuiOtherFeaturesHudPosition extends GuiScreen {
     public void onGuiClosed() {
         dragging = false;
         MovementFeatureManager.persistMasterStatusHudPosition();
-        GuiInventory.updateMasterStatusHudEditorBounds(null, null);
     }
 
     @Override

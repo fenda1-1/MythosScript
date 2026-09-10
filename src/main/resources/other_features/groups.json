@@ -296,7 +296,7 @@
         {
           "id": "auto_equip",
           "name": "自动装备",
-          "description": "自动穿戴更好的装备，并可打开现有自动穿戴配置。左键快速开关，右键打开物品设置。"
+          "description": "自动穿戴更好的装备。左键快速开关，右键打开物品设置。"
         },
         {
           "id": "always_critical",

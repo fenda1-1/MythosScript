@@ -1039,7 +1039,8 @@ public final class ModernUiRenderer {
         }
         FontRenderer font = Minecraft.getMinecraft().fontRenderer;
         if (font == null) {
-            field.drawTextBox();
+            // Modern fields must never fall back to GuiTextField's native
+            // renderer, which has a different cursor/background style.
             return;
         }
         int padX = 5;

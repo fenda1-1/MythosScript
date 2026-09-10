@@ -5,7 +5,7 @@ import com.google.gson.*;
 import com.zszl.zszlScriptMod.gui.MainUiLayoutManager;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.client.resources.I18n;
 import org.lwjgl.input.Keyboard;
 import java.text.SimpleDateFormat;
@@ -20,7 +20,7 @@ public final class ModernMcpSettingsTab implements ModernSettingsTab {
     private final ModernHoverScrollbar detailBar = new ModernHoverScrollbar();
     private final ModernHoverScrollbar horizontalBar = new ModernHoverScrollbar(ModernHoverScrollbar.Axis.HORIZONTAL);
     private final ModernScrollableDropdown eventFilterDropdown = new ModernScrollableDropdown();
-    private GuiTextField port, search;
+    private ModernTextField port, search;
     private List<McpCallHistory.Entry> visible = Collections.emptyList();
     private McpCallHistory.Entry selected;
     private long selectedId = -1, version = -1;
@@ -43,10 +43,10 @@ public final class ModernMcpSettingsTab implements ModernSettingsTab {
     @Override public void ensureInitialized(FontRenderer font) {
         if (port != null) return;
         recordsRatio = MainUiLayoutManager.getModernSplitRatio(RECORDS_SPLIT_KEY, recordsRatio);
-        port = new GuiTextField(7101, font, 0, 0, 62, 20);
+        port = new ModernTextField(7101, font, 0, 0, 62, 20);
         port.setMaxStringLength(5);
         port.setText(String.valueOf(MythosScriptMcpServer.settings().port));
-        search = new GuiTextField(7102, font, 0, 0, 100, 20);
+        search = new ModernTextField(7102, font, 0, 0, 100, 20);
         search.setMaxStringLength(512);
     }
     @Override public void updateScreen() {
@@ -577,7 +577,7 @@ public final class ModernMcpSettingsTab implements ModernSettingsTab {
     private static int entryColor(McpCallHistory.Entry entry) {
         return entry.pending() ? ModernUiRenderer.WARNING : entry.failed ? ModernUiRenderer.DANGER : ModernUiRenderer.SUCCESS;
     }
-    private static void drawInput(GuiTextField field) {
+    private static void drawInput(ModernTextField field) {
         flat(rect(field.x, field.y, field.width, field.height), ModernUiRenderer.INPUT_SURFACE,
                 field.isFocused() ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
         ModernUiRenderer.drawTextField(field);

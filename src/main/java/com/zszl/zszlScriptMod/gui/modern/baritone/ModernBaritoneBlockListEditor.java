@@ -19,7 +19,7 @@ import com.zszl.zszlScriptMod.shadowbaritone.api.utils.BlockUtils;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.text.TextFormatting;
@@ -38,7 +38,7 @@ final class ModernBaritoneBlockListEditor {
     private final List<BlockEntry> filteredCatalog = new ArrayList<>();
     private final Consumer<String> onConfirm;
 
-    private GuiTextField searchField;
+    private ModernTextField searchField;
     private FontRenderer fontRenderer;
     private ModernMainLayout.Rect modalBounds;
     private ModernMainLayout.Rect catalogBounds;
@@ -91,7 +91,7 @@ final class ModernBaritoneBlockListEditor {
             return;
         }
         this.fontRenderer = fontRenderer;
-        this.searchField = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+        this.searchField = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
         this.searchField.setMaxStringLength(128);
         this.searchField.setEnableBackgroundDrawing(false);
         this.searchField.setTextColor(ModernUiRenderer.TEXT);

@@ -22,7 +22,7 @@ import com.zszl.zszlScriptMod.mcp.McpJson;
 import com.zszl.zszlScriptMod.mcp.McpNotes;
 
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.client.resources.I18n;
 
 /** Full in-game Markdown notebook with searchable server groups. */
@@ -95,9 +95,9 @@ public final class ModernNotesTab implements ModernSettingsTab {
     private ModernMainLayout.Rect dialogCancelBounds;
     private final ModernMainLayout.Rect[] formatBounds = new ModernMainLayout.Rect[FORMAT_ACTIONS.length];
 
-    private GuiTextField searchField;
-    private GuiTextField newGroupField;
-    private GuiTextField renameField;
+    private ModernTextField searchField;
+    private ModernTextField newGroupField;
+    private ModernTextField renameField;
     private String searchText = "";
     private String currentServerKey = McpNotes.SINGLEPLAYER;
     private String key = McpNotes.SINGLEPLAYER;
@@ -130,8 +130,8 @@ public final class ModernNotesTab implements ModernSettingsTab {
         load(currentServerKey);
     }
 
-    private GuiTextField createField(FontRenderer fontRenderer, int maxLength) {
-        GuiTextField field = new GuiTextField(0, fontRenderer, 0, 0, 1, 20);
+    private ModernTextField createField(FontRenderer fontRenderer, int maxLength) {
+        ModernTextField field = new ModernTextField(0, fontRenderer, 0, 0, 1, 20);
         field.setMaxStringLength(maxLength);
         field.setEnableBackgroundDrawing(false);
         field.setTextColor(ModernUiRenderer.TEXT);

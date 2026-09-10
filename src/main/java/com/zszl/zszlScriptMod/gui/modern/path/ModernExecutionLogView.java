@@ -11,7 +11,7 @@ import com.zszl.zszlScriptMod.path.runtime.log.ExecutionLogManager.ExecutionEven
 import com.zszl.zszlScriptMod.path.runtime.log.ExecutionLogManager.SessionSnapshot;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import org.lwjgl.input.Keyboard;
 
 import java.nio.file.Path;
@@ -40,7 +40,7 @@ final class ModernExecutionLogView {
     private final List<String> types = new ArrayList<>();
     private final List<Action> actions = new ArrayList<>();
     private ModernDropdown typeDropdown;
-    private GuiTextField search;
+    private ModernTextField search;
     private FontRenderer font;
     private Rect bounds, list, detail, divider, filter, infoButton, variables;
     private Rect infoPopupBounds, infoPopupViewport, infoPopupCloseBounds;
@@ -140,7 +140,7 @@ final class ModernExecutionLogView {
         sessionHits.clear();
         eventHits.clear();
         if (search == null) {
-            search = new GuiTextField(7810, font, 0, 0, 1, 20);
+            search = new ModernTextField(7810, font, 0, 0, 1, 20);
             search.setMaxStringLength(256);
             search.setEnableBackgroundDrawing(false);
         }

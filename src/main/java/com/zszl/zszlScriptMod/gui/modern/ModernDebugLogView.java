@@ -22,7 +22,7 @@ import com.zszl.zszlScriptMod.gui.modern.core.ModernConfirmationState;
 
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.util.text.TextFormatting;
 import com.zszl.zszlScriptMod.gui.modern.form.ModernFormI18n;
 
@@ -127,8 +127,8 @@ final class ModernDebugLogView implements ModernSettingsTab {
     private final Map<DebugModule, Integer> moduleCounts = new EnumMap<>(DebugModule.class);
 
     private FontRenderer fontRenderer;
-    private GuiTextField searchField;
-    private GuiTextField retentionField;
+    private ModernTextField searchField;
+    private ModernTextField retentionField;
 
     private ModernMainLayout.Rect contentBounds;
     private ModernMainLayout.Rect panelBounds;
@@ -193,8 +193,8 @@ final class ModernDebugLogView implements ModernSettingsTab {
         initialized = true;
     }
 
-    private GuiTextField createField(int maxLength) {
-        GuiTextField field = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+    private ModernTextField createField(int maxLength) {
+        ModernTextField field = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
         field.setMaxStringLength(maxLength);
         field.setEnableBackgroundDrawing(false);
         field.setTextColor(ModernUiRenderer.TEXT);
@@ -780,7 +780,7 @@ final class ModernDebugLogView implements ModernSettingsTab {
                 hovered ? ModernUiRenderer.TEXT : ModernUiRenderer.SUBTLE_TEXT, Math.max(10, bounds.width - 12));
     }
 
-    private void drawInputField(GuiTextField field, ModernMainLayout.Rect bounds, String placeholder, int mouseX,
+    private void drawInputField(ModernTextField field, ModernMainLayout.Rect bounds, String placeholder, int mouseX,
             int mouseY) {
         if (field == null || bounds == null) {
             return;
@@ -1198,10 +1198,8 @@ final class ModernDebugLogView implements ModernSettingsTab {
         case ITEM_FILTER:
         case CONDITIONAL_EXECUTION:
         case AUTO_PICKUP:
-        case AUTO_EQUIP:
             return Group.AUTOMATION;
         case AHK_EXECUTION:
-        case ARENA_HANDLER:
         case CHEST_ANALYSIS:
         case WAREHOUSE_ANALYSIS:
         default:
@@ -1218,9 +1216,9 @@ final class ModernDebugLogView implements ModernSettingsTab {
                     DebugModule.KILL_AURA_ORBIT_TRACE };
         case AUTOMATION:
             return new DebugModule[] { DebugModule.AUTO_EAT, DebugModule.ITEM_FILTER,
-                    DebugModule.CONDITIONAL_EXECUTION, DebugModule.AUTO_PICKUP, DebugModule.AUTO_EQUIP };
+                    DebugModule.CONDITIONAL_EXECUTION, DebugModule.AUTO_PICKUP };
         case INTERACTION:
-            return new DebugModule[] { DebugModule.AHK_EXECUTION, DebugModule.ARENA_HANDLER,
+            return new DebugModule[] { DebugModule.AHK_EXECUTION,
                     DebugModule.CHEST_ANALYSIS, DebugModule.WAREHOUSE_ANALYSIS };
         default:
             return new DebugModule[0];
@@ -1263,12 +1261,10 @@ final class ModernDebugLogView implements ModernSettingsTab {
         case AUTO_EAT: return "gui.modern.debuglog.u047";
         case ITEM_FILTER: return "gui.modern.debuglog.u048";
         case AHK_EXECUTION: return "gui.modern.debuglog.u049";
-        case ARENA_HANDLER: return "gui.modern.debuglog.u050";
         case CHEST_ANALYSIS: return "gui.modern.debuglog.u051";
         case WAREHOUSE_ANALYSIS: return "gui.modern.debuglog.u052";
         case CONDITIONAL_EXECUTION: return "gui.modern.debuglog.u053";
         case AUTO_PICKUP: return "gui.modern.debuglog.u054";
-        case AUTO_EQUIP: return "gui.modern.debuglog.u055";
         case TRIGGER_RULES: return "gui.modern.debuglog.u056";
         case BARITONE: return "gui.modern.debuglog.u057";
         case KILL_AURA_TELEPORT: return "gui.modern.debuglog.u058";

@@ -5,7 +5,6 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import com.zszl.zszlScriptMod.zszlScriptMod;
 import com.zszl.zszlScriptMod.gui.GuiModernMainScreen;
-import com.zszl.zszlScriptMod.handlers.AutoEquipHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.util.text.TextComponentString;
@@ -36,19 +35,6 @@ public class DebugKeybindManager {
             return;
 
         switch (action) {
-            case TOGGLE_AUTO_EQUIP:
-                // 直接控制自动穿戴开关，而不是总开关
-                AutoEquipHandler.enabled = !AutoEquipHandler.enabled;
-                if (AutoEquipHandler.enabled) {
-                    AutoEquipHandler.masterSwitchEnabled = true;
-                }
-                String status = AutoEquipHandler.enabled ? I18n.format("gui.common.enabled")
-                        : I18n.format("gui.common.disabled");
-                mc.player.sendMessage(
-                        new TextComponentString(
-                                TextFormatting.AQUA + I18n.format("msg.debug_keybind.auto_equip_status", status)));
-                AutoEquipHandler.saveConfig();
-                break;
             case START_CHEST_RECORDING:
                 mc.player.sendMessage(
                         new TextComponentString(

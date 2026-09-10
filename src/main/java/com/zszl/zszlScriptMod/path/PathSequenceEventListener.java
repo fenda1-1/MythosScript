@@ -1195,7 +1195,6 @@ public class PathSequenceEventListener {
             case "spread_inventory_item":
             case "stack_inventory_item":
             case "warehouse_auto_deposit":
-            case "transferitemstowarehouse":
             case "move_inventory_item_to_hotbar":
             case "switch_hotbar_slot":
             case "silentuse":
@@ -2806,7 +2805,6 @@ public class PathSequenceEventListener {
             NearbyItemPickupActionHandler.cancel();
         }
         if ("move_inventory_items_to_chest_slots".equals(this.pendingAsyncActionType)
-                || "transferitemstowarehouse".equals(this.pendingAsyncActionType)
                 || "warehouse_auto_deposit".equals(this.pendingAsyncActionType)) {
             ItemFilterHandler.cancelMoveChestTransfer();
         }
@@ -2836,8 +2834,7 @@ public class PathSequenceEventListener {
 
     private boolean handleAsyncAction(EntityPlayerSP player, ActionData actionData, Consumer<EntityPlayerSP> action) {
         String type = actionData == null || actionData.type == null ? "" : actionData.type.trim().toLowerCase(Locale.ROOT);
-        if (!"transferitemstowarehouse".equals(type)
-                && !"move_inventory_items_to_chest_slots".equals(type)
+        if (!"move_inventory_items_to_chest_slots".equals(type)
                 && !"spread_inventory_item".equals(type)
                 && !"stack_inventory_item".equals(type)
                 && !"pickup_nearby_items".equals(type)
@@ -2890,9 +2887,6 @@ public class PathSequenceEventListener {
     }
 
     private boolean isAsyncActionInProgress(String actionType) {
-        if ("transferitemstowarehouse".equals(actionType)) {
-            return ItemFilterHandler.isWarehouseTransferInProgress();
-        }
         if ("move_inventory_items_to_chest_slots".equals(actionType)) {
             return ItemFilterHandler.isWarehouseTransferInProgress();
         }

@@ -13,7 +13,7 @@ import com.zszl.zszlScriptMod.gui.modern.ModernUiRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.GuiTextField;
+import com.zszl.zszlScriptMod.gui.modern.components.ModernTextField;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.JsonToNBT;
 import net.minecraft.nbt.NBTBase;
@@ -32,8 +32,8 @@ public final class ModernNbtEditorSettingsTab implements ModernSettingsTab {
         private String key;
         private String value;
         private final String type;
-        private GuiTextField keyField;
-        private GuiTextField valueField;
+        private ModernTextField keyField;
+        private ModernTextField valueField;
 
         private EntryDraft(String key, String value, String type) {
             this.key = key == null ? "" : key;
@@ -60,8 +60,8 @@ public final class ModernNbtEditorSettingsTab implements ModernSettingsTab {
     private final List<RowHit> rowHits = new ArrayList<>();
 
     private FontRenderer fontRenderer;
-    private GuiTextField itemNameField;
-    private GuiTextField itemCountField;
+    private ModernTextField itemNameField;
+    private ModernTextField itemCountField;
     private ModernMainLayout.Rect contentBounds;
     private ModernMainLayout.Rect panelBounds;
     private ModernMainLayout.Rect itemBounds;
@@ -108,8 +108,8 @@ public final class ModernNbtEditorSettingsTab implements ModernSettingsTab {
         initialized = true;
     }
 
-    private GuiTextField createField(int maxLength) {
-        GuiTextField field = new GuiTextField(0, fontRenderer, 0, 0, 1, 18);
+    private ModernTextField createField(int maxLength) {
+        ModernTextField field = new ModernTextField(0, fontRenderer, 0, 0, 1, 18);
         field.setEnableBackgroundDrawing(false);
         field.setMaxStringLength(maxLength);
         field.setTextColor(ModernUiRenderer.TEXT);
@@ -376,7 +376,7 @@ public final class ModernNbtEditorSettingsTab implements ModernSettingsTab {
         }
     }
 
-    private void drawTextField(GuiTextField field, ModernMainLayout.Rect bounds, String placeholder, int mouseX,
+    private void drawTextField(ModernTextField field, ModernMainLayout.Rect bounds, String placeholder, int mouseX,
             int mouseY) {
         if (field == null || bounds == null) {
             return;
@@ -515,7 +515,7 @@ public final class ModernNbtEditorSettingsTab implements ModernSettingsTab {
         return true;
     }
 
-    private void focusField(GuiTextField field, int mouseX, int mouseY, int mouseButton) {
+    private void focusField(ModernTextField field, int mouseX, int mouseY, int mouseButton) {
         if (field == null || !field.getVisible()) {
             return;
         }
@@ -629,7 +629,7 @@ public final class ModernNbtEditorSettingsTab implements ModernSettingsTab {
             listScrollbar.endDrag();
             return true;
         }
-        for (GuiTextField field : allFields()) {
+        for (ModernTextField field : allFields()) {
             if (field != null && field.getVisible() && field.isFocused() && field.textboxKeyTyped(typedChar, keyCode)) {
                 dirty = true;
                 return true;
@@ -726,7 +726,7 @@ public final class ModernNbtEditorSettingsTab implements ModernSettingsTab {
     }
 
     private boolean hasFocusedField() {
-        for (GuiTextField field : allFields()) {
+        for (ModernTextField field : allFields()) {
             if (field != null && field.isFocused()) {
                 return true;
             }
@@ -735,15 +735,15 @@ public final class ModernNbtEditorSettingsTab implements ModernSettingsTab {
     }
 
     private void clearFieldFocus() {
-        for (GuiTextField field : allFields()) {
+        for (ModernTextField field : allFields()) {
             if (field != null) {
                 field.setFocused(false);
             }
         }
     }
 
-    private List<GuiTextField> allFields() {
-        List<GuiTextField> fields = new ArrayList<>();
+    private List<ModernTextField> allFields() {
+        List<ModernTextField> fields = new ArrayList<>();
         fields.add(itemNameField);
         fields.add(itemCountField);
         for (EntryDraft entry : entries) {
