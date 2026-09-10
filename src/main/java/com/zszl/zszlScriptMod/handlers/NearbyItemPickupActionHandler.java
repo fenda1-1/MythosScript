@@ -1,0 +1,241 @@
+package com.zszl.zszlScriptMod.handlers;
+
+import com.google.gson.JsonObject;
+import com.zszl.zszlScriptMod.path.InventoryItemFilterExpressionEngine;
+import com.zszl.zszlScriptMod.zszlScriptMod;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.item.EntityItem;
+import net.minecraft.item.EnumRarity;
+import net.minecraft.item.ItemStack;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/** Executes the action that walks to and collects matching nearby drops. */
+public final class NearbyItemPickupActionHandler {
+    private static final Minecraft MC = Minecraft.getMinecraft();
+    private static final int GOTO_INTERVAL_TICKS = 5;
+    private static final int MAX_SCANNED_ITEM_ENTITIES = 512;
+
+    private static boolean running;
+    private static List<String> expressions = new ArrayList<>();
+    private static double centerX;
+    private static double centerY;
+    private static double centerZ;
+    private static double searchRadius;
+    private static double reachDistanceSq;
+    private static int maxItems;
+    private static int timeoutTicks;
+    private static int startTick;
+    private static int pickedCount;
+    private static int targetEntityId = Integer.MIN_VALUE;
+    private static int lastGotoTick = -99999;
+
+    private NearbyItemPickupActionHandler() {
+    }
+
+    public static synchronized void start(EntityPlayerSP player, JsonObject params) {
+        cancel();
+        if (player == null || player.world == null) {
+            return;
+        }
+
+        List<String> configuredExpressions = InventoryItemFilterExpressionEngine.readExpressions(params);
+        if (configuredExpressions.isEmpty()) {
+            zszlScriptMod.LOGGER.warn("[pickup_nearby_items] 缺少物品过滤表达式，动作取消。");
+            return;
+        }
+
+        expressions = new ArrayList<>(configuredExpressions);
+        centerX = player.posX;
+        centerY = player.posY;
+        centerZ = player.posZ;
+        searchRadius = readPositiveDouble(params, "searchRadius", 16.0D);
+        double reachDistance = readPositiveDouble(params, "reachDistance", 0.5D);
+        reachDistanceSq = reachDistance * reachDistance;
+        maxItems = readNonNegativeInt(params, "maxItems", 0);
+        timeoutTicks = readNonNegativeInt(params, "timeoutSeconds", 30) * 20;
+        startTick = player.ticksExisted;
+        pickedCount = 0;
+        targetEntityId = Integer.MIN_VALUE;
+        lastGotoTick = -99999;
+        running = true;
+        update(player);
+    }
+
+    public static synchronized boolean isRunning() {
+        if (running) {
+            update(MC.player);
+        }
+        return running;
+    }
+
+    public static synchronized void cancel() {
+        if (running) {
+            EmbeddedNavigationHandler.INSTANCE.stop();
+        }
+        running = false;
+        expressions = new ArrayList<>();
+        targetEntityId = Integer.MIN_VALUE;
+        lastGotoTick = -99999;
+    }
+
+    private static void update(EntityPlayerSP player) {
+        if (!running || player == null || player.world == null) {
+            finish();
+            return;
+        }
+        if (timeoutTicks > 0 && player.ticksExisted - startTick >= timeoutTicks) {
+            zszlScriptMod.LOGGER.info("[pickup_nearby_items] 动作超时，已拾取 {} 个物品。", pickedCount);
+            finish();
+            return;
+        }
+        if (maxItems > 0 && pickedCount >= maxItems) {
+            finish();
+            return;
+        }
+
+        EntityItem target = resolveCurrentTarget(player);
+        if (maxItems > 0 && pickedCount >= maxItems) {
+            finish();
+            return;
+        }
+        if (target == null) {
+            target = findNearestMatchingItem(player);
+            if (target == null) {
+                finish();
+                return;
+            }
+            targetEntityId = target.getEntityId();
+            lastGotoTick = -99999;
+        }
+
+        if (player.getDistanceSq(target) <= reachDistanceSq) {
+            EmbeddedNavigationHandler.INSTANCE.stop();
+            return;
+        }
+
+        int nowTick = player.ticksExisted;
+        if (nowTick - lastGotoTick < GOTO_INTERVAL_TICKS) {
+            return;
+        }
+        AutoPickupHandler.INSTANCE.startNavigationToPickupItem(target);
+        lastGotoTick = nowTick;
+    }
+
+    private static EntityItem resolveCurrentTarget(EntityPlayerSP player) {
+        if (targetEntityId == Integer.MIN_VALUE || player.world == null) {
+            return null;
+        }
+        Entity entity = player.world.getEntityByID(targetEntityId);
+        if (!(entity instanceof EntityItem) || entity.isDead) {
+            pickedCount++;
+            targetEntityId = Integer.MIN_VALUE;
+            lastGotoTick = -99999;
+            return null;
+        }
+        EntityItem item = (EntityItem) entity;
+        if (isEligible(item, player)) {
+            return item;
+        }
+        targetEntityId = Integer.MIN_VALUE;
+        lastGotoTick = -99999;
+        return null;
+    }
+
+    private static EntityItem findNearestMatchingItem(EntityPlayerSP player) {
+        EntityItem nearest = null;
+        double bestDistanceSq = Double.MAX_VALUE;
+        int scanned = 0;
+        for (Entity entity : player.world.loadedEntityList) {
+            if (!(entity instanceof EntityItem)) {
+                continue;
+            }
+            EntityItem item = (EntityItem) entity;
+            if (!isEligible(item, player)) {
+                continue;
+            }
+            double distanceSq = player.getDistanceSq(item);
+            if (distanceSq < bestDistanceSq) {
+                bestDistanceSq = distanceSq;
+                nearest = item;
+            }
+            if (++scanned >= MAX_SCANNED_ITEM_ENTITIES) {
+                break;
+            }
+        }
+        return nearest;
+    }
+
+    private static boolean isEligible(EntityItem item, EntityPlayerSP player) {
+        if (item == null || item.isDead || !item.onGround) {
+            return false;
+        }
+        double dx = item.posX - centerX;
+        double dy = item.posY - centerY;
+        double dz = item.posZ - centerZ;
+        if (dx * dx + dy * dy + dz * dz > searchRadius * searchRadius) {
+            return false;
+        }
+
+        ItemStack stack = item.getItem();
+        if (stack == null || stack.isEmpty()) {
+            return false;
+        }
+        double playerDistance = Math.sqrt(player.getDistanceSq(item));
+        String rarity = getRarityToken(stack);
+        for (String expression : expressions) {
+            try {
+                if (InventoryItemFilterExpressionEngine.matches(stack, -1, expression, rarity, playerDistance)) {
+                    return true;
+                }
+            } catch (RuntimeException e) {
+                zszlScriptMod.LOGGER.warn("[pickup_nearby_items] 物品过滤表达式解析失败: {}", expression, e);
+            }
+        }
+        return false;
+    }
+
+    private static String getRarityToken(ItemStack stack) {
+        EnumRarity rarity = stack.getRarity();
+        if (rarity == EnumRarity.UNCOMMON) {
+            return "uncommon";
+        }
+        if (rarity == EnumRarity.RARE) {
+            return "rare";
+        }
+        if (rarity == EnumRarity.EPIC) {
+            return "epic";
+        }
+        return "common";
+    }
+
+    private static double readPositiveDouble(JsonObject params, String key, double fallback) {
+        try {
+            double value = params != null && params.has(key) ? params.get(key).getAsDouble() : fallback;
+            return value > 0.0D ? value : fallback;
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private static int readNonNegativeInt(JsonObject params, String key, int fallback) {
+        try {
+            int value = params != null && params.has(key) ? params.get(key).getAsInt() : fallback;
+            return Math.max(0, value);
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private static void finish() {
+        if (running) {
+            EmbeddedNavigationHandler.INSTANCE.stop();
+        }
+        running = false;
+        targetEntityId = Integer.MIN_VALUE;
+        lastGotoTick = -99999;
+    }
+}

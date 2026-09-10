@@ -1,0 +1,8 @@
+# ShadowBaritone module: command_explore
+
+shadowbaritone.command.explore.status.exploring_from=Exploring from %s
+shadowbaritone.command.explore.short_desc=Explore
+shadowbaritone.command.explore.long_desc.1=The explore command makes Baritone explore randomly. If you used explorefilter beforehand, that filter will be applied.
+shadowbaritone.command.explore.long_desc.usage=Usage:
+shadowbaritone.command.explore.long_desc.example.default=> explore - Explore from your current position.
+shadowbaritone.command.explore.long_desc.example.xz=> explore <x> <z> - Explore from the specified X and Z coordinates.

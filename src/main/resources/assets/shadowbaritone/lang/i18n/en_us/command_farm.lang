@@ -1,0 +1,11 @@
+# ShadowBaritone module: command_farm
+
+shadowbaritone.command.farm.error.no_waypoints=No waypoints found
+shadowbaritone.command.farm.error.multiple_waypoints=Multiple waypoints found
+shadowbaritone.command.farm.status.farming=Farming started.
+shadowbaritone.command.farm.short_desc=Harvest nearby crops
+shadowbaritone.command.farm.long_desc.1=The farm command starts farming nearby plants. It harvests mature crops and replants them.
+shadowbaritone.command.farm.long_desc.usage=Usage:
+shadowbaritone.command.farm.long_desc.example.default=> farm - Harvest all crops it can find.
+shadowbaritone.command.farm.long_desc.example.range=> farm <range> - Harvest crops within range of the starting position.
+shadowbaritone.command.farm.long_desc.example.waypoint=> farm <range> <waypoint> - Harvest crops within range of the specified waypoint.

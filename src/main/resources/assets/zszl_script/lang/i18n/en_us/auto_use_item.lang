@@ -1,0 +1,19 @@
+# zszl_script i18n module: auto_use_item
+gui.autouseitem.manager.title=Rules for using items silently
+gui.autouseitem.manager.add=Add new rule
+gui.autouseitem.manager.edit=Edit rules
+gui.autouseitem.manager.delete=delete rule
+gui.autouseitem.manager.toggle=Enable/disable rules
+gui.autouseitem.manager.empty=There are no rules yet, click "Add Rule" to start configuration.
+gui.autouseitem.manager.rule_line=%s §f%d. %s §7| Pattern: %s §7| Match: %s §7| Interval: %sms
+gui.autouseitem.edit.title=Edit silent use item rules
+gui.autouseitem.edit.name=Item name (supports Chinese)
+gui.autouseitem.edit.enabled=Rule status: %s
+gui.autouseitem.edit.use_mode=Usage: %s
+gui.autouseitem.edit.match_mode=Name match: %s
+gui.autouseitem.edit.interval=Usage interval (milliseconds)
+gui.autouseitem.rule.default_name=Example items
+gui.autouseitem.mode.left=left click
+gui.autouseitem.mode.right=Right click
+gui.autouseitem.match.contains=contains
+gui.autouseitem.match.exact=exactly the same

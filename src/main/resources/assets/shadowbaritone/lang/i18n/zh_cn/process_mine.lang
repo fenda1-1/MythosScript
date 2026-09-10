@@ -1,0 +1,8 @@
+# ShadowBaritone module: process_mine
+
+shadowbaritone.process.mine.status.have_valid_items=当前拥有 %s 个有效物品
+shadowbaritone.process.mine.error.no_path_blacklisting=无法找到通往 %s 的路径，正在将最近的疑似不可达实例加入黑名单...
+shadowbaritone.process.mine.error.no_path_canceling=无法找到通往 %s 的路径，已取消挖掘。
+shadowbaritone.process.mine.error.no_locations_known=没有已知位置：%s，已取消。
+shadowbaritone.process.mine.error.allow_break_false=allowBreak=false 且目标方块不在 allowBreakAnyway 中，无法挖掘！
+shadowbaritone.process.mine.display.mining=挖掘 %s

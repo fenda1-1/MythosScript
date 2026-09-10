@@ -1,0 +1,416 @@
+[
+  {
+    "id": "BaritoneSettingsConfig",
+    "class": "com.zszl.zszlScriptMod.config.BaritoneSettingsConfig",
+    "reload": [
+      "load"
+    ],
+    "save": [
+      "save"
+    ]
+  },
+  {
+    "id": "ChatOptimizationConfig",
+    "class": "com.zszl.zszlScriptMod.config.ChatOptimizationConfig",
+    "reload": [
+      "load"
+    ],
+    "save": [
+      "save"
+    ]
+  },
+  {
+    "id": "DebugLogManager",
+    "class": "com.zszl.zszlScriptMod.config.DebugLogManager",
+    "reload": [],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "FlightPathingConfig",
+    "class": "com.zszl.zszlScriptMod.config.FlightPathingConfig",
+    "reload": [
+      "load"
+    ],
+    "save": [
+      "save"
+    ]
+  },
+  {
+    "id": "HumanLikeMovementConfig",
+    "class": "com.zszl.zszlScriptMod.config.HumanLikeMovementConfig",
+    "reload": [
+      "load"
+    ],
+    "save": [
+      "save"
+    ]
+  },
+  {
+    "id": "KeybindActionConfig",
+    "class": "com.zszl.zszlScriptMod.config.KeybindActionConfig",
+    "reload": [
+      "load"
+    ],
+    "save": [
+      "save"
+    ]
+  },
+  {
+    "id": "LoopExecutionConfig",
+    "class": "com.zszl.zszlScriptMod.config.LoopExecutionConfig",
+    "reload": [
+      "load"
+    ],
+    "save": [
+      "save"
+    ]
+  },
+  {
+    "id": "ModConfig",
+    "class": "com.zszl.zszlScriptMod.config.ModConfig",
+    "reload": [
+      "loadAllConfigs"
+    ],
+    "save": []
+  },
+  {
+    "id": "MainUiLayoutManager",
+    "class": "com.zszl.zszlScriptMod.gui.MainUiLayoutManager",
+    "reload": [
+      "reload"
+    ],
+    "save": [
+      "save"
+    ]
+  },
+  {
+    "id": "PacketFilterConfig",
+    "class": "com.zszl.zszlScriptMod.gui.packet.PacketFilterConfig",
+    "reload": [
+      "load"
+    ],
+    "save": [
+      "save"
+    ]
+  },
+  {
+    "id": "PacketInterceptConfig",
+    "class": "com.zszl.zszlScriptMod.gui.packet.PacketInterceptConfig",
+    "reload": [
+      "load"
+    ],
+    "save": [
+      "save"
+    ]
+  },
+  {
+    "id": "ThemeConfigManager",
+    "class": "com.zszl.zszlScriptMod.gui.theme.ThemeConfigManager",
+    "reload": [
+      "load"
+    ],
+    "save": [
+      "save"
+    ]
+  },
+  {
+    "id": "ArenaItemHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.ArenaItemHandler",
+    "reload": [
+      "loadArenaConfig"
+    ],
+    "save": [
+      "saveArenaConfig"
+    ]
+  },
+  {
+    "id": "AutoEatHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.AutoEatHandler",
+    "reload": [
+      "loadAutoEatConfig"
+    ],
+    "save": [
+      "saveAutoEatConfig"
+    ]
+  },
+  {
+    "id": "AutoEquipHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.AutoEquipHandler",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "AutoEscapeHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.AutoEscapeHandler",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "AutoFishingHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.AutoFishingHandler",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "AutoFollowHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.AutoFollowHandler",
+    "reload": [
+      "loadFollowConfig"
+    ],
+    "save": [
+      "saveFollowConfig"
+    ]
+  },
+  {
+    "id": "AutoPickupHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.AutoPickupHandler",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "AutoUseItemHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.AutoUseItemHandler",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "BlockReplacementHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.BlockReplacementHandler",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "ConditionalExecutionHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.ConditionalExecutionHandler",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "DungeonWarehouseHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.DungeonWarehouseHandler",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "FlyHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.FlyHandler",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "ItemFilterHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.ItemFilterHandler",
+    "reload": [
+      "loadFilterConfig"
+    ],
+    "save": [
+      "saveFilterConfig"
+    ]
+  },
+  {
+    "id": "KillAuraHandler",
+    "class": "com.zszl.zszlScriptMod.handlers.KillAuraHandler",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "WarehouseManager",
+    "class": "com.zszl.zszlScriptMod.handlers.WarehouseManager",
+    "reload": [
+      "loadWarehouses"
+    ],
+    "save": [
+      "saveWarehouses"
+    ]
+  },
+  {
+    "id": "BlockFeatureManager",
+    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.block.BlockFeatureManager",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "ItemFeatureManager",
+    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.item.ItemFeatureManager",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "MiscFeatureManager",
+    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.misc.MiscFeatureManager",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "MovementFeatureManager",
+    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.movement.MovementFeatureManager",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "SpeedHandler",
+    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.movement.SpeedHandler",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "RenderFeatureManager",
+    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.render.RenderFeatureManager",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "WorldFeatureManager",
+    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.world.WorldFeatureManager",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "OtherFeatureGroupManager",
+    "class": "com.zszl.zszlScriptMod.otherfeatures.OtherFeatureGroupManager",
+    "reload": [
+      "reload"
+    ],
+    "save": []
+  },
+  {
+    "id": "LegacyActionTemplateManager",
+    "class": "com.zszl.zszlScriptMod.path.template.LegacyActionTemplateManager",
+    "reload": [
+      "reloadTemplates"
+    ],
+    "save": []
+  },
+  {
+    "id": "LegacySequenceTriggerManager",
+    "class": "com.zszl.zszlScriptMod.path.trigger.LegacySequenceTriggerManager",
+    "reload": [
+      "reloadRules"
+    ],
+    "save": []
+  },
+  {
+    "id": "PerformanceMonitor",
+    "class": "com.zszl.zszlScriptMod.PerformanceMonitor",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "DebugKeybindManager",
+    "class": "com.zszl.zszlScriptMod.system.DebugKeybindManager",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "KeybindManager",
+    "class": "com.zszl.zszlScriptMod.system.KeybindManager",
+    "reload": [
+      "loadConfig"
+    ],
+    "save": [
+      "saveConfig"
+    ]
+  },
+  {
+    "id": "CapturedIdRuleManager",
+    "class": "com.zszl.zszlScriptMod.utils.CapturedIdRuleManager",
+    "reload": [
+      "reloadRules"
+    ],
+    "save": []
+  },
+  {
+    "id": "PacketFieldRuleManager",
+    "class": "com.zszl.zszlScriptMod.utils.PacketFieldRuleManager",
+    "reload": [
+      "reloadRules"
+    ],
+    "save": []
+  },
+  {
+    "id": "PathSequenceManager",
+    "class": "com.zszl.zszlScriptMod.path.PathSequenceManager",
+    "reload": [
+      "initializePathSequences"
+    ],
+    "save": []
+  }
+]

@@ -1,0 +1,12 @@
+# ShadowBaritone module: command_explorefilter
+
+shadowbaritone.command.explorefilter.error.invert_or_nothing=“invert” or nothing
+shadowbaritone.command.explorefilter.error.file_not_found=File not found
+shadowbaritone.command.explorefilter.error.invalid_json=Invalid JSON syntax
+shadowbaritone.command.explorefilter.status.applied=Exploration filter applied. Inverted: %s
+shadowbaritone.command.explorefilter.short_desc=Explore chunks according to JSON rules
+shadowbaritone.command.explorefilter.long_desc.1=Apply an exploration filter before using explore to tell the exploration process which chunks have and have not been explored.
+shadowbaritone.command.explorefilter.long_desc.2=JSON file format: [{\"x\":0,\"z\":0},...]
+shadowbaritone.command.explorefilter.long_desc.3=If “invert” is specified, chunks listed in the file are treated as “unexplored” rather than “explored”.
+shadowbaritone.command.explorefilter.long_desc.usage=Usage:
+shadowbaritone.command.explorefilter.long_desc.example.default=> explorefilter <path> [invert] - Load the JSON file at the specified path. If specified, invert must be the literal word “invert”.

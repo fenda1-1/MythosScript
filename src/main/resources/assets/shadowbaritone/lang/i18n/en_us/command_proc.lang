@@ -1,0 +1,10 @@
+# ShadowBaritone module: command_proc
+
+shadowbaritone.command.proc.error.no_process=No process is currently being controlled
+shadowbaritone.command.proc.status.process_info=Class: %s\nPriority: %f\nTemporary process: %b\nDisplay name: %s\nRecent command: %s
+shadowbaritone.command.proc.value.none=None
+shadowbaritone.command.proc.short_desc=View process status information
+shadowbaritone.command.proc.long_desc.1=The proc command provides information about the process currently controlling Baritone.
+shadowbaritone.command.proc.long_desc.2=If you are unfamiliar with how Baritone works, you usually do not need to understand this information.
+shadowbaritone.command.proc.long_desc.usage=Usage:
+shadowbaritone.command.proc.long_desc.example.default=> proc - View the current process information (if available)

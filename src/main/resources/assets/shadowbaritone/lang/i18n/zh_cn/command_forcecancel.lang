@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_forcecancel
+
+shadowbaritone.command.forcecancel.status.canceled=已强制取消。
+shadowbaritone.command.forcecancel.short_desc=强制取消当前操作
+shadowbaritone.command.forcecancel.long_desc.1=类似 cancel，但会更强力地中断当前行为。
+shadowbaritone.command.forcecancel.long_desc.usage=用法：
+shadowbaritone.command.forcecancel.long_desc.example.default=> forcecancel

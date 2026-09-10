@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_repack
+
+shadowbaritone.command.repack.status.queued=已将 %d 个区块加入重新缓存队列
+shadowbaritone.command.repack.short_desc=重新缓存区块
+shadowbaritone.command.repack.long_desc.1=重新打包你周围的区块，本质上就是重新缓存这些区块。
+shadowbaritone.command.repack.long_desc.usage=用法：
+shadowbaritone.command.repack.long_desc.example.default=> repack - 重新缓存区块。

@@ -1,0 +1,11 @@
+# ShadowBaritone module: command_mine
+
+shadowbaritone.command.mine.status.mining=开始挖掘：%s
+shadowbaritone.command.mine.short_desc=挖掘一些方块
+shadowbaritone.command.mine.long_desc.1=mine 命令允许你让 Baritone 搜索并挖掘指定方块。
+shadowbaritone.command.mine.long_desc.2=指定的方块可以是矿石（通常会被缓存），也可以是其他任意方块。
+shadowbaritone.command.mine.long_desc.3=另请参阅 legitMine 设置（可使用 #set l legitMine 查看）。
+shadowbaritone.command.mine.long_desc.usage=用法：
+shadowbaritone.command.mine.long_desc.example.diamond=> mine diamond_ore - 挖掘它能找到的所有钻石矿。
+shadowbaritone.command.mine.long_desc.example.redstone=> mine redstone_ore lit_redstone_ore - 挖掘红石矿。
+shadowbaritone.command.mine.long_desc.example.log=> mine log:0 - 仅挖掘橡木原木。

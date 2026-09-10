@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_repack
+
+shadowbaritone.command.repack.status.queued=Queued %d chunks for repacking
+shadowbaritone.command.repack.short_desc=Repack chunks
+shadowbaritone.command.repack.long_desc.1=Repack the chunks around you; this is essentially caching them again.
+shadowbaritone.command.repack.long_desc.usage=Usage:
+shadowbaritone.command.repack.long_desc.example.default=> repack - Repack the chunks.

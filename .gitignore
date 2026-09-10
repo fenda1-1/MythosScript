@@ -1,0 +1,117 @@
+# ====================== 项目特定临时文件 ======================
+project_index.txt
+build_and_index.py
+test
+
+# ====================== 本地配置与凭证 ======================
+# Minecraft/Forge 运行实例会在这里写入配置、Token 和用户数据。
+/config/
+.env
+.env.*
+!.env.example
+
+# 本地 AI 客户端和代码现代化工具状态。
+.claude/settings.local.json
+/.github/modernize/java-upgrade/
+# Keep the profile sharing regression tests without exposing unrelated local tests.
+!src/test/
+src/test/**
+!src/test/**/
+!src/test/**/ProfileShare*Test.java
+!src/test/**/ProfileConfigFieldCodecTest.java
+!src/test/**/ChangelogDocumentTest.java
+!src/test/**/GuiTextPixelGridTest.java
+!src/test/**/Mcp*Test.java
+!src/test/**/AutoFollowUiListsTest.java
+!src/test/**/AutoFollowPickProjectionTest.java
+!src/test/**/AutoFollowJava8CompatibilityTest.java
+!src/test/**/AutoFollowReturnSelectionTest.java
+!src/test/**/AutoFollowWidgetStateTest.java
+!src/test/**/RuleSectionPagesTest.java
+!src/test/**/AutoPickupWorkbenchStateTest.java
+# ====================== IDE ======================
+# Eclipse
+bin/
+*.launch
+.settings/
+.metadata/
+.classpath
+.project
+novel-helper
+# IntelliJ IDEA
+out/
+*.ipr
+*.iws
+*.iml
+.idea/
+*.ipr
+*.iws
+
+# VS Code
+.vscode
+
+# ====================== Gradle & Build ======================
+.gradle
+.learnings
+.opencode
+docs
+tools
+!/tools/
+/tools/*
+!/tools/generate_mcp_catalog.py
+!/tools/test_mcp_watch.py
+.omo
+.codebase-index
+container
+.zcode
+# ====================== Forge / Minecraft 开发专用 ======================
+# Forge MDK 生成文件
+forge*changelog.txt
+run/                  
+eclipse/          
+libs/      
+
+# Minecraft 测试相关
+logs/
+crash-reports/
+saves/              
+screenshots/
+resourcepacks/
+shaderpacks/
+
+# Standalone Forge 1.12.2 test container runtime data
+/container/forge-1.12.2/game/
+/container/forge-1.12.2/launch.log
+
+# Gradle 用户目录
+.gradle-user-home
+
+# ====================== 通用临时文件 ======================
+# 操作系统
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+*.log
+
+# Python/Java 本地生成文件
+*.py[cod]
+.pytest_cache/
+*.class
+
+# 其他
+.classpath
+.project
+.settings/
+bin/
+out/
+run
+/build/
+# ====================== 防止意外提交 ======================
+# 忽略所有的 .jar 文件
+lib/junit-platform-console-standalone-*.jar
+# 忽略其他临时文件
+*.bak
+*.old
+*~
+__pycache__/

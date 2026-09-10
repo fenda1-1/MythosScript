@@ -1,0 +1,4 @@
+# ShadowBaritone module: process_farm
+
+shadowbaritone.process.farm.status.failed=Farming failed.
+shadowbaritone.process.farm.display.farming=Starting farming.

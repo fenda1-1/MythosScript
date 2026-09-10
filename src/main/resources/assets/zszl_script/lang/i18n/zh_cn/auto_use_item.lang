@@ -1,0 +1,19 @@
+# zszl_script i18n module: auto_use_item
+gui.autouseitem.manager.title=静默使用物品规则
+gui.autouseitem.manager.add=新增规则
+gui.autouseitem.manager.edit=编辑规则
+gui.autouseitem.manager.delete=删除规则
+gui.autouseitem.manager.toggle=启用/停用规则
+gui.autouseitem.manager.empty=暂无规则，点击“新增规则”开始配置。
+gui.autouseitem.manager.rule_line=%s §f%d. %s §7| 模式:%s §7| 匹配:%s §7| 间隔:%sms
+gui.autouseitem.edit.title=编辑静默使用物品规则
+gui.autouseitem.edit.name=物品名称（支持中文）
+gui.autouseitem.edit.enabled=规则状态: %s
+gui.autouseitem.edit.use_mode=使用方式: %s
+gui.autouseitem.edit.match_mode=名称匹配: %s
+gui.autouseitem.edit.interval=使用间隔（毫秒）
+gui.autouseitem.rule.default_name=示例物品
+gui.autouseitem.mode.left=左键
+gui.autouseitem.mode.right=右键
+gui.autouseitem.match.contains=包含
+gui.autouseitem.match.exact=完全相同

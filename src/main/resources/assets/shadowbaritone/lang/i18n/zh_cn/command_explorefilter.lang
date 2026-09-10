@@ -1,0 +1,12 @@
+# ShadowBaritone module: command_explorefilter
+
+shadowbaritone.command.explorefilter.error.invert_or_nothing=“invert” 或留空
+shadowbaritone.command.explorefilter.error.file_not_found=文件未找到
+shadowbaritone.command.explorefilter.error.invalid_json=JSON 语法无效
+shadowbaritone.command.explorefilter.status.applied=已应用探索过滤器。反向：%s
+shadowbaritone.command.explorefilter.short_desc=按 json 规则探索区块
+shadowbaritone.command.explorefilter.long_desc.1=在使用 explore 之前应用一个探索过滤器，用于告知探索进程哪些区块已探索、哪些未探索。
+shadowbaritone.command.explorefilter.long_desc.2=JSON 文件格式如下：[{\"x\":0,\"z\":0},...]
+shadowbaritone.command.explorefilter.long_desc.3=如果指定了 “invert”，则文件中列出的区块会被视为“未探索”，而不是“已探索”。
+shadowbaritone.command.explorefilter.long_desc.usage=用法：
+shadowbaritone.command.explorefilter.long_desc.example.default=> explorefilter <path> [invert] - 加载指定路径的 JSON 文件。若指定 invert，则它必须是字面量单词 “invert”。

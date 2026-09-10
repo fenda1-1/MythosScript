@@ -1,0 +1,9 @@
+# ShadowBaritone module: command_build
+
+shadowbaritone.command.build.error.load_failed=Unable to load the schematic. Make sure to use the full filename, including the extension (for example, blah.schematic).
+shadowbaritone.command.build.status.loaded=Loaded schematic successfully\nOrigin: %s
+shadowbaritone.command.build.short_desc=Build a schematic
+shadowbaritone.command.build.long_desc.1=Load and build a schematic from a file.
+shadowbaritone.command.build.long_desc.usage=Usage:
+shadowbaritone.command.build.long_desc.example.default=> build <filename> - Load and build '<filename>.schematic'
+shadowbaritone.command.build.long_desc.example.position=> build <filename> <x> <y> <z> - Build at a custom position

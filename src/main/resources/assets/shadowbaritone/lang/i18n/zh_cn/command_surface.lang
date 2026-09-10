@@ -1,0 +1,11 @@
+# ShadowBaritone module: command_surface
+
+shadowbaritone.command.surface.status.already_at_surface=已在地表。
+shadowbaritone.command.surface.status.going_to=正在前往：%s
+shadowbaritone.command.surface.status.no_higher_location=未找到更高位置。
+shadowbaritone.command.surface.short_desc=用于离开洞穴、矿坑等场景
+shadowbaritone.command.surface.long_desc.1=surface/top 命令会让 Baritone 朝最近的类似地表区域前进。
+shadowbaritone.command.surface.long_desc.2=这可能是真正的地表，也可能是在当前环境下可到达的最高空气空间。
+shadowbaritone.command.surface.long_desc.usage=用法：
+shadowbaritone.command.surface.long_desc.example.surface=> surface - 用于离开洞穴、矿坑等场景
+shadowbaritone.command.surface.long_desc.example.top=> top - 用于离开洞穴、矿坑等场景

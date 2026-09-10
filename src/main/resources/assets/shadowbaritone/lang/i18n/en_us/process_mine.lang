@@ -1,0 +1,8 @@
+# ShadowBaritone module: process_mine
+
+shadowbaritone.process.mine.status.have_valid_items=Currently have %s valid items
+shadowbaritone.process.mine.error.no_path_blacklisting=Unable to find a path to %s; blacklisting the nearest suspected unreachable instance...
+shadowbaritone.process.mine.error.no_path_canceling=Unable to find a path to %s; canceled mining.
+shadowbaritone.process.mine.error.no_locations_known=No known locations for %s; canceled.
+shadowbaritone.process.mine.error.allow_break_false=Cannot mine: allowBreak=false and the target block is not in allowBreakAnyway!
+shadowbaritone.process.mine.display.mining=Mining %s

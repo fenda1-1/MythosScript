@@ -1,0 +1,3 @@
+# ShadowBaritone module: pathing_warning
+
+shadowbaritone.pathing.warning.illegal_state_discard_invalid_path=警告：PathingBehavior 状态非法！已丢弃无效路径！

@@ -1,0 +1,9 @@
+# ShadowBaritone module: command_blacklist
+
+shadowbaritone.command.blacklist.error.not_active=No get-to-block process is currently active
+shadowbaritone.command.blacklist.error.no_known_locations=There are no known locations to blacklist
+shadowbaritone.command.blacklist.status.blacklisted_closest=Blacklisted the closest target.
+shadowbaritone.command.blacklist.short_desc=Blacklist the closest block
+shadowbaritone.command.blacklist.long_desc.1=When going to a block, this command blacklists the closest target block so Baritone will no longer try to reach it.
+shadowbaritone.command.blacklist.long_desc.usage=Usage:
+shadowbaritone.command.blacklist.long_desc.example.default=> blacklist

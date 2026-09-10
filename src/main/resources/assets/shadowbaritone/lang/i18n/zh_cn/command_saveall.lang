@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_saveall
+
+shadowbaritone.command.saveall.status.saved=已保存
+shadowbaritone.command.saveall.short_desc=保存本世界的 Baritone 缓存
+shadowbaritone.command.saveall.long_desc.1=saveall 命令会保存 Baritone 的世界缓存。
+shadowbaritone.command.saveall.long_desc.usage=用法：
+shadowbaritone.command.saveall.long_desc.example.default=> saveall

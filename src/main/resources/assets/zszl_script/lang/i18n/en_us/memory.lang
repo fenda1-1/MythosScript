@@ -1,0 +1,25 @@
+# zszl_script i18n module: memory
+gui.memory.tools.title=Advanced memory tools
+gui.memory.tools.force_gc=Force GC
+gui.memory.tools.reload_chunks=Simulate reload block (F3+A)
+msg.memory.tools.gc_done=[Memory Tools] Garbage collection has been performed. Memory usage ranges from %s MB -> %s MB.
+msg.memory.tools.reloading_chunks=[Memory Tool] Reloading all blocks...
+gui.memory.manager.title=Memory Manager (Ctrl+Click to multiple select)
+gui.memory.manager.create_snapshot=§a creates snapshot
+gui.memory.manager.compare_selected=§b Compare Selected
+gui.memory.manager.delete_selected=§cDelete selected
+gui.memory.manager.clear_all=§eClear all
+gui.memory.manager.advanced_tools=Advanced memory tools...
+gui.memory.manager.snapshot_prefix=Snapshot-
+gui.memory.manager.input_snapshot_name=Enter snapshot name
+gui.memory.compare.copy_report=§aCopy report
+gui.memory.compare.section.entities=§b--- Entities changes (memory / quantity) ---
+gui.memory.compare.section.tile_entities=§b--- Tile Entities changes (memory / quantity) ---
+gui.memory.compare.section.chunks=§b--- Chunks change (memory / quantity) ---
+gui.memory.compare.section.render_chunks=§b--- Render Chunks change (number) ---
+gui.memory.compare.no_changes=§7(no change)
+msg.memory.compare.report_copied=[Memory Manager] Compare report copied to clipboard.
+gui.memory.compare.title=Comparison: %s (%s) vs %s (%s)
+gui.memory.compare.jvm_usage=JVM total memory usage: %d MB -> %d MB (%s%d MB)
+gui.memory.compare.report_header=Memory comparison report: %s (%s) vs %s (%s)
+gui.memory.compare.jvm_usage_plain=JVM total memory usage: %d MB -> %d MB (%s%d MB)

@@ -1,0 +1,9 @@
+# ShadowBaritone module: command_pause
+
+shadowbaritone.command.pause.error.already_paused=Already paused
+shadowbaritone.command.pause.status.paused=Paused
+shadowbaritone.command.pause.short_desc=Pause Baritone until you use resume
+shadowbaritone.command.pause.long_desc.1=The pause command makes Baritone temporarily stop its current behavior.
+shadowbaritone.command.pause.long_desc.2=It can be used to pause pathing, building, following, or any other behavior. Use resume once to continue the previous operation.
+shadowbaritone.command.pause.long_desc.usage=Usage:
+shadowbaritone.command.pause.long_desc.example.default=> pause

@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_gc
+
+shadowbaritone.command.gc.status.called=Called System.gc()
+shadowbaritone.command.gc.short_desc=Call System.gc()
+shadowbaritone.command.gc.long_desc.1=Call System.gc().
+shadowbaritone.command.gc.long_desc.usage=Usage:
+shadowbaritone.command.gc.long_desc.example.default=> gc

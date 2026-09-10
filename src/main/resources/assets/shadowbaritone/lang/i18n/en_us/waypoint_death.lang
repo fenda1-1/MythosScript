@@ -1,0 +1,4 @@
+# ShadowBaritone module: waypoint_death
+
+shadowbaritone.waypoint.death.saved=Death location saved.
+shadowbaritone.waypoint.death.hover.goto=Click to go to the death location

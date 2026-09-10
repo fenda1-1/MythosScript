@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_reloadall
+
+shadowbaritone.command.reloadall.status.reloaded=已重载
+shadowbaritone.command.reloadall.short_desc=重载本世界的 Baritone 缓存
+shadowbaritone.command.reloadall.long_desc.1=reloadall 命令会重新加载 Baritone 的世界缓存。
+shadowbaritone.command.reloadall.long_desc.usage=用法：
+shadowbaritone.command.reloadall.long_desc.example.default=> reloadall

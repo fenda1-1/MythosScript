@@ -1,0 +1,7 @@
+# ShadowBaritone module: command_saveall
+
+shadowbaritone.command.saveall.status.saved=Saved
+shadowbaritone.command.saveall.short_desc=Save Baritone's cache for this world
+shadowbaritone.command.saveall.long_desc.1=The saveall command saves Baritone's world cache.
+shadowbaritone.command.saveall.long_desc.usage=Usage:
+shadowbaritone.command.saveall.long_desc.example.default=> saveall

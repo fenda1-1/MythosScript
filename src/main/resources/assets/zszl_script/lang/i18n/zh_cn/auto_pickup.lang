@@ -1,0 +1,37 @@
+# zszl_script i18n module: auto_pickup
+gui.autopickup.manager.title=自动拾取规则管理器
+gui.autopickup.manager.empty=暂无规则，点击“新增规则”创建
+gui.autopickup.manager.add=§a新增规则
+gui.autopickup.manager.edit=§e编辑
+gui.autopickup.manager.delete=§c删除
+gui.autopickup.manager.toggle=激活/停用
+gui.autopickup.manager.save_close=§a保存并关闭
+gui.autopickup.manager.toggle_on=§a激活
+gui.autopickup.manager.toggle_off=§c停用
+gui.autopickup.manager.rule=%s §f%d. %s §7(半径: %.0f) -> §e%s
+gui.autopickup.edit.title=编辑自动拾取规则
+gui.autopickup.rule_name=规则名称:
+gui.autopickup.center_xy=中心点 X / Y:
+gui.autopickup.center_zr=中心点 Z / 半径:
+gui.autopickup.delay=拾取后延迟 (秒):
+gui.autopickup.btn.enabled=规则开关: %s
+gui.autopickup.btn.select_seq=§e点击选择后续序列...
+gui.autopickup.btn.get_coords=获取当前坐标为中心点
+gui.autopickup.btn.stop_on_exit=离开范围后停止: %s
+gui.pickup.title=§f拿取设置 (单位: Ticks, 20 ticks = 1秒)
+gui.pickup.initial_delay=初始延迟:
+gui.pickup.items_per_batch=每批次点击数:
+gui.pickup.batch_interval=批次间隔:
+msg.pickup.saved=§a[竞技场] 拿取设置已保存！
+msg.pickup.invalid_number=§c[竞技场] 输入的数字格式不正确！
+gui.autopickup.tip.add=§a新增规则§r
+gui.autopickup.tip.add.1=§7创建一个新的自动拾取区域。
+gui.autopickup.tip.edit=§e编辑规则§r
+gui.autopickup.tip.edit.1=§7修改选中规则的名称、区域和后续操作。
+gui.autopickup.tip.delete=§c删除规则§r
+gui.autopickup.tip.delete.1=§7永久删除选中的规则。
+gui.autopickup.tip.toggle=§b激活/停用§r
+gui.autopickup.tip.toggle.1=§7切换选中规则的开关状态。
+gui.autopickup.tip.toggle.2=§7可以有多个规则同时处于激活状态。
+gui.autopickup.tip.save=§a保存并关闭§r
+gui.autopickup.tip.save.1=§7将所有更改写入配置文件并返回主菜单。
