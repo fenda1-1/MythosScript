@@ -10,6 +10,7 @@ import com.zszl.zszlScriptMod.otherfeatures.handler.movement.SpeedHandler;
 import com.zszl.zszlScriptMod.otherfeatures.handler.render.RenderFeatureManager;
 import com.zszl.zszlScriptMod.otherfeatures.handler.world.WorldFeatureManager;
 import net.minecraft.client.resources.I18n;
+import com.zszl.zszlScriptMod.gui.modern.path.editor.ExpressionEditorPreview;
 
 /**
  * Shared modern tab for the additional-feature catalog.
@@ -148,8 +149,8 @@ public final class ModernOtherFeatureSettingsTab {
                     .integer(text("gui.other_feature.execution_interval", "执行间隔"), text("gui.other_feature.execution_interval_tip", "按功能限制范围调整 tick 间隔。"), access.itemTimingValue(),
                             access.itemTimingMinimum(), access.itemTimingMaximum());
             if ("drop_all".equals(access.id)) {
-                builder.text(text("gui.other_feature.drop_expression", "丢弃表达式"), text("gui.other_feature.drop_expression_tip", "每行一条过滤表达式；命中任意表达式的物品会被自动丢弃。"),
-                        access.dropExpressionsValue(), "示例: name contains 垃圾", 2048);
+                builder.custom(new ModernExpressionFieldWidget(access.dropExpressionsValue(),
+                        ExpressionEditorPreview.Mode.ITEM_FILTER));
             }
         } else if (access.kind == Kind.MISC && "auto_reconnect".equals(access.id)) {
             builder.section(text("gui.other_feature.reconnect_strategy", "重连策略"), text("gui.other_feature.reconnect_strategy_tip", "配置断线后的等待时间、尝试上限和持续重试方式。"))

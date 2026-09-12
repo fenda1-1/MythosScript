@@ -622,12 +622,34 @@ public class ModUtils {
         }
 
         if (nearest != null) {
-            Minecraft.getMinecraft().playerController.interactWithEntity(player, nearest, EnumHand.MAIN_HAND);
+            rightClickEntity(player, nearest);
             zszlScriptMod.LOGGER.info("Right clicked entity {} at {} preserveView={}", nearest.getName(), pos,
                     preserveView);
         } else {
             zszlScriptMod.LOGGER.warn("No entity found near: " + pos);
         }
+    }
+
+    /** Reproduces vanilla entity use: send INTERACT_AT at the entity hit point,
+     * allowing server-side NPCs that require a precise hit location to respond. */
+    public static void rightClickEntity(EntityPlayerSP player, Entity target) {
+        if (player == null || target == null) return;
+        net.minecraft.util.math.Vec3d eye = new net.minecraft.util.math.Vec3d(player.posX,
+                player.posY + player.getEyeHeight(), player.posZ);
+        net.minecraft.util.math.AxisAlignedBB box = target.getEntityBoundingBox();
+        net.minecraft.util.math.Vec3d hit = box == null ? new net.minecraft.util.math.Vec3d(target.posX,
+                target.posY + target.height * 0.5D, target.posZ)
+                : eye.add(target.getPositionVector().subtract(eye).scale(0.0D));
+        if (box != null) {
+            double x = Math.max(box.minX, Math.min(eye.x, box.maxX));
+            double y = Math.max(box.minY, Math.min(eye.y, box.maxY));
+            double z = Math.max(box.minZ, Math.min(eye.z, box.maxZ));
+            hit = new net.minecraft.util.math.Vec3d(x, y, z);
+        }
+        net.minecraft.util.math.Vec3d relative = hit.subtract(target.posX, target.posY, target.posZ);
+        player.swingArm(EnumHand.MAIN_HAND);
+        player.connection.sendPacket(new net.minecraft.network.play.client.CPacketUseEntity(target, EnumHand.MAIN_HAND, relative));
+        target.applyPlayerInteraction(player, relative, EnumHand.MAIN_HAND);
     }
 
     /**
