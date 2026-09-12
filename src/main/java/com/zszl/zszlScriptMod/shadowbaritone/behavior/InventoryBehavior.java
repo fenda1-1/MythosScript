@@ -168,24 +168,19 @@ public final class InventoryBehavior extends Behavior implements Helper {
     }
 
     public boolean selectThrowawayForLocation(boolean select, int x, int y, int z) {
-        return selectThrowawayForLocation(select, x, y, z, Baritone.settings().allowInventory.value);
-    }
-
-    /** With allowInventory=false, only reports blocks that can be used immediately. */
-    public boolean selectThrowawayForLocation(boolean select, int x, int y, int z, boolean allowInventory) {
         IBlockState maybe = baritone.getBuilderProcess().placeAt(x, y, z, baritone.bsi.get0(x, y, z));
         if (maybe != null && throwaway(select, stack -> stack.getItem() instanceof ItemBlock
                 && maybe.equals(((ItemBlock) stack.getItem()).getBlock().getStateForPlacement(ctx.world(),
                         ctx.playerFeet(), EnumFacing.UP, (float) ctx.player().posX, (float) ctx.player().posY,
-                        (float) ctx.player().posZ, stack.getItem().getMetadata(stack.getMetadata()), ctx.player())), allowInventory)) {
+                        (float) ctx.player().posZ, stack.getItem().getMetadata(stack.getMetadata()), ctx.player())))) {
             return true; // gotem
         }
         if (maybe != null && throwaway(select, stack -> stack.getItem() instanceof ItemBlock
-                && ((ItemBlock) stack.getItem()).getBlock().equals(maybe.getBlock()), allowInventory)) {
+                && ((ItemBlock) stack.getItem()).getBlock().equals(maybe.getBlock()))) {
             return true;
         }
         for (Item item : Baritone.settings().acceptableThrowawayItems.value) {
-            if (throwaway(select, stack -> item.equals(stack.getItem()), allowInventory)) {
+            if (throwaway(select, stack -> item.equals(stack.getItem()))) {
                 return true;
             }
         }
