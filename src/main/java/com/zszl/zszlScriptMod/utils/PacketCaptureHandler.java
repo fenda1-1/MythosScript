@@ -63,7 +63,8 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
     private static final int MAX_CAPTURED_DERIVED_CHARS = 256 * 1024;
     private static final AtomicLong droppedPacketProcessTaskCount = new AtomicLong();
     private static final AtomicLong packetProcessRetainedBytes = new AtomicLong();
-    private static final ThreadPoolExecutor PACKET_PROCESS_EXECUTOR = new ThreadPoolExecutor(2, 2, 0L,
+    // A later trigger packet must not overtake the parameter packets before it.
+    private static final ThreadPoolExecutor PACKET_PROCESS_EXECUTOR = new ThreadPoolExecutor(1, 1, 0L,
             TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(MAX_PACKET_PROCESS_QUEUE), r -> {
                 Thread t = new Thread(r, "zszl-packet-processor");
                 t.setDaemon(true);
@@ -787,13 +788,11 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
                     if (needsCapturedIdRules || needsFieldRules) {
                         executePacketProcessTask(() -> {
                             try {
+                                String decodedForRules = PacketPayloadDecoder.decodeForRules(finalRawData, finalDecoded);
                                 if (needsCapturedIdRules) {
-                                    CapturedIdRuleManager.processPacket(finalChannel, false, finalRawData, finalDecoded);
+                                    CapturedIdRuleManager.processPacket(finalChannel, false, finalRawData, decodedForRules);
                                 }
                                 if (needsFieldRules) {
-                                    String decodedForRules = finalDecoded != null && !finalDecoded.trim().isEmpty()
-                                            ? finalDecoded
-                                            : decodePayloadFull(finalRawData);
                                     PacketFieldRuleManager.processPacket(finalChannel, false, finalRawData,
                                             decodedForRules,
                                             packetClassName);

@@ -313,6 +313,12 @@ public final class ExpressionTemplateCatalog {
 
     public static List<ExpressionTemplateCard> buildItemFilterCards() {
         List<ExpressionTemplateCard> cards = new ArrayList<ExpressionTemplateCard>();
+        cards.add(card("经验球名称", "nameContains(\"经验球\")",
+                "匹配经验球；该规则可用于杀戮光环掉落物、自动拾取和附近掉落物动作。",
+                "nameContains(\"经验球\")", "只命中经验球", "经验球", "xp_orb"));
+        cards.add(card("经验球注册名", "id == \"minecraft:xp_orb\"",
+                "按经验球的稳定注册名匹配，不依赖当前语言。",
+                "id == \"minecraft:xp_orb\"", "只命中经验球", "xp_orb", "experience_orb"));
         cards.add(card("名称完全匹配", "name == \"雷霆护手\"", "按物品显示名精确匹配，会自动忽略颜色符号、空格和大小写。",
                 "name == \"物品名\"", "匹配显示名为雷霆护手的物品", "name", "equals"));
         cards.add(card("名称包含", "nameContains(\"雷霆\")", "按物品显示名做包含匹配，适合模糊筛选同系列装备。",

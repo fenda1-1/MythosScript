@@ -24,10 +24,16 @@ public class ChestData {
     public boolean sortEnabled = false;
 
     public Set<String> designatedItems = new HashSet<>();
+    public List<String> depositItemOrder = new ArrayList<>();
+    public boolean depositItemsConfigured = false;
 
     // !! 核心新增：为每个箱子添加独立的自动存入设置 !!
     public boolean autoDepositEnabled = false;
     public int depositFrequency = 100; // 默认点击间隔100ms
+    public List<Integer> depositInventorySlots = new ArrayList<>();
+    public boolean spreadAfterDeposit = false;
+    public String spreadItemNames = "";
+    public String postDepositSequence = "";
 
     public ChestData() {
     }

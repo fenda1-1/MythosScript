@@ -6,6 +6,7 @@ import com.google.gson.reflect.TypeToken;
 import com.zszl.zszlScriptMod.PerformanceMonitor;
 import com.zszl.zszlScriptMod.config.DebugModule;
 import com.zszl.zszlScriptMod.config.ModConfig;
+import com.zszl.zszlScriptMod.path.DroppedPickupTarget;
 import com.zszl.zszlScriptMod.path.LegacyActionRuntime;
 import com.zszl.zszlScriptMod.path.PathSequenceEventListener;
 import com.zszl.zszlScriptMod.path.PathSequenceManager;
@@ -1983,7 +1984,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
                     && AutoPickupHandler.INSTANCE.shouldPrioritizeNavigation(player);
             boolean autoPickupRuleAreaActive = !teleportAttackMode
                     && AutoPickupHandler.INSTANCE.isPlayerInsideEnabledRule(player);
-            EntityItem huntPriorityPickupItem = (!isTeleportAttackMode() && !autoPickupRuleAreaActive
+            Entity huntPriorityPickupItem = (!isTeleportAttackMode() && !autoPickupRuleAreaActive
                     && isHuntEnabled() && huntPickupItemsEnabled)
                             ? findHuntPriorityPickupItem(player)
                             : null;
@@ -6948,7 +6949,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         }
     }
 
-    private EntityItem findHuntPriorityPickupItem(EntityPlayerSP player) {
+    private Entity findHuntPriorityPickupItem(EntityPlayerSP player) {
         if (player == null || player.world == null || !isHuntEnabled() || huntRadius <= 0.05F) {
             return null;
         }
@@ -6959,7 +6960,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         }
         double radiusSq = huntRadius * huntRadius;
         if (nowTick - lastHuntPickupSearchTick < HUNT_PICKUP_SEARCH_INTERVAL_TICKS) {
-            EntityItem cached = resolveCachedHuntPickupItem(player, radiusSq);
+            Entity cached = resolveCachedHuntPickupItem(player, radiusSq);
             if (cached != null) {
                 return cached;
             }
@@ -6968,27 +6969,26 @@ public class KillAuraHandler implements AbstractGameEventListener {
             }
         }
 
-        EntityItem bestItem = null;
+        Entity bestItem = null;
         double bestDistSq = Double.MAX_VALUE;
         int bestPriority = Integer.MIN_VALUE;
         boolean hasAllowRules = hasEnabledHuntPickupAllowRules();
 
         for (Entity entity : player.world.loadedEntityList) {
-            if (!(entity instanceof EntityItem)) {
+            if (!DroppedPickupTarget.isSupported(entity)) {
                 continue;
             }
 
-            EntityItem item = (EntityItem) entity;
-            if (item.isDead) {
+            if (!DroppedPickupTarget.isAlive(entity)) {
                 continue;
             }
 
-            double playerDistSq = player.getDistanceSq(item);
+            double playerDistSq = player.getDistanceSq(entity);
             if (playerDistSq > radiusSq) {
                 continue;
             }
 
-            HuntPickupRuleDecision decision = evaluateHuntPickupItem(player, item, Math.sqrt(playerDistSq),
+            HuntPickupRuleDecision decision = evaluateHuntPickupItem(player, entity, Math.sqrt(playerDistSq),
                     hasAllowRules);
             if (!decision.allowed) {
                 continue;
@@ -6998,7 +6998,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
                     || (decision.priority == bestPriority && playerDistSq < bestDistSq)) {
                 bestPriority = decision.priority;
                 bestDistSq = playerDistSq;
-                bestItem = item;
+                bestItem = entity;
             }
         }
 
@@ -7008,14 +7008,14 @@ public class KillAuraHandler implements AbstractGameEventListener {
         return bestItem;
     }
 
-    private HuntPickupRuleDecision evaluateHuntPickupItem(EntityPlayerSP player, EntityItem item,
+    private HuntPickupRuleDecision evaluateHuntPickupItem(EntityPlayerSP player, Entity item,
             double playerDistance, boolean hasAllowRules) {
-        if (item == null || item.isDead) {
+        if (item == null || !DroppedPickupTarget.isAlive(item)) {
             return new HuntPickupRuleDecision(false, Integer.MIN_VALUE);
         }
 
-        ItemStack stack = item.getItem();
-        if (stack == null || stack.isEmpty()) {
+        if (!DroppedPickupTarget.isExperienceOrb(item)
+                && DroppedPickupTarget.getItemStack(item).isEmpty()) {
             return new HuntPickupRuleDecision(false, Integer.MIN_VALUE);
         }
 
@@ -7024,7 +7024,8 @@ public class KillAuraHandler implements AbstractGameEventListener {
             return new HuntPickupRuleDecision(true, 0);
         }
 
-        String rarity = normalizeHuntPickupRarityToken(getHuntPickupRarityToken(stack));
+        String rarity = DroppedPickupTarget.isExperienceOrb(item) ? HUNT_PICKUP_RARITY_COMMON
+                : normalizeHuntPickupRarityToken(getHuntPickupRarityToken(DroppedPickupTarget.getItemStack(item)));
         boolean allowMatched = false;
         int bestAllowPriority = Integer.MIN_VALUE;
 
@@ -7070,6 +7071,37 @@ public class KillAuraHandler implements AbstractGameEventListener {
         return !hasAllowRules || allowMatched;
     }
 
+    /** Applies the current Kill Aura pickup rules to an item or experience orb. */
+    public synchronized boolean matchesHuntPickupRulesForAction(Entity target, double playerDistance) {
+        if (target == null || !DroppedPickupTarget.isSupported(target)
+                || !DroppedPickupTarget.isEligibleForScan(target)) {
+            return false;
+        }
+        if (!DroppedPickupTarget.isExperienceOrb(target)
+                && DroppedPickupTarget.getItemStack(target).isEmpty()) {
+            return false;
+        }
+        List<HuntPickupRule> rules = huntPickupRules == null
+                ? new ArrayList<HuntPickupRule>() : huntPickupRules;
+        if (rules.isEmpty()) {
+            return true;
+        }
+        boolean hasAllowRules = hasEnabledHuntPickupAllowRules();
+        String rarity = DroppedPickupTarget.isExperienceOrb(target) ? HUNT_PICKUP_RARITY_COMMON
+                : normalizeHuntPickupRarityToken(getHuntPickupRarityToken(DroppedPickupTarget.getItemStack(target)));
+        boolean allowMatched = false;
+        for (HuntPickupRule rule : rules) {
+            if (!isMatchingHuntPickupTarget(target, rule, rarity, playerDistance)) {
+                continue;
+            }
+            if (HUNT_PICKUP_RULE_MODE_BLOCK.equals(rule.mode)) {
+                return false;
+            }
+            allowMatched = true;
+        }
+        return !hasAllowRules || allowMatched;
+    }
+
     private boolean hasEnabledHuntPickupAllowRules() {
         if (huntPickupRules == null || huntPickupRules.isEmpty()) {
             return false;
@@ -7082,10 +7114,38 @@ public class KillAuraHandler implements AbstractGameEventListener {
         return false;
     }
 
-    private boolean isMatchingHuntPickupRule(EntityItem item, HuntPickupRule rule, String rarity,
+    private boolean isMatchingHuntPickupRule(Entity item, HuntPickupRule rule, String rarity,
             double playerDistance) {
-        ItemStack stack = item == null ? ItemStack.EMPTY : item.getItem();
-        return isMatchingHuntPickupRuleStack(stack, rule, rarity, playerDistance);
+        return isMatchingHuntPickupTarget(item, rule, rarity, playerDistance);
+    }
+
+    private boolean isMatchingHuntPickupTarget(Entity target, HuntPickupRule rule, String rarity,
+            double playerDistance) {
+        if (rule == null || !rule.enabled || target == null || !DroppedPickupTarget.isSupported(target)) {
+            return false;
+        }
+        if (rule.maxDistance > 0.0F && playerDistance - rule.maxDistance > 0.0001D) {
+            return false;
+        }
+        if (DroppedPickupTarget.isExperienceOrb(target)) {
+            if (rule.itemFilterExpressions == null || rule.itemFilterExpressions.isEmpty()) {
+                return true;
+            }
+            for (String expression : rule.itemFilterExpressions) {
+                if (expression == null || expression.trim().isEmpty()) {
+                    continue;
+                }
+                try {
+                    if (InventoryItemFilterExpressionEngine.matches(target, expression, rarity, playerDistance)) {
+                        return true;
+                    }
+                } catch (RuntimeException ignored) {
+                }
+            }
+            return false;
+        }
+        return isMatchingHuntPickupRuleStack(DroppedPickupTarget.getItemStack(target), rule, rarity,
+                playerDistance);
     }
 
     private boolean isMatchingHuntPickupRuleStack(ItemStack stack, HuntPickupRule rule, String rarity,
@@ -7133,28 +7193,27 @@ public class KillAuraHandler implements AbstractGameEventListener {
         return HUNT_PICKUP_RARITY_COMMON;
     }
 
-    private EntityItem resolveCachedHuntPickupItem(EntityPlayerSP player, double radiusSq) {
+    private Entity resolveCachedHuntPickupItem(EntityPlayerSP player, double radiusSq) {
         if (player == null || player.world == null || lastHuntPickupSearchTargetEntityId == Integer.MIN_VALUE) {
             return null;
         }
         Entity entity = player.world.getEntityByID(lastHuntPickupSearchTargetEntityId);
-        if (!(entity instanceof EntityItem)) {
+        if (!DroppedPickupTarget.isSupported(entity)) {
             return null;
         }
-        EntityItem item = (EntityItem) entity;
-        if (item.isDead) {
+        if (!DroppedPickupTarget.isAlive(entity)) {
             return null;
         }
-        double distanceSq = player.getDistanceSq(item);
+        double distanceSq = player.getDistanceSq(entity);
         if (distanceSq > radiusSq) {
             return null;
         }
         boolean hasAllowRules = hasEnabledHuntPickupAllowRules();
-        HuntPickupRuleDecision decision = evaluateHuntPickupItem(player, item, Math.sqrt(distanceSq), hasAllowRules);
-        return decision.allowed ? item : null;
+        HuntPickupRuleDecision decision = evaluateHuntPickupItem(player, entity, Math.sqrt(distanceSq), hasAllowRules);
+        return decision.allowed ? entity : null;
     }
 
-    private void handleHuntPickupMovement(EntityPlayerSP player, EntityItem item) {
+    private void handleHuntPickupMovement(EntityPlayerSP player, Entity item) {
         if (player == null || item == null || item.isDead) {
             stopHuntPickupNavigation();
             return;
@@ -7187,7 +7246,8 @@ public class KillAuraHandler implements AbstractGameEventListener {
         boolean stalled = this.huntPickupNavigationActive
                 && itemId == this.lastHuntPickupTargetEntityId
                 && nowTick - this.huntPickupLastProgressTick >= HUNT_PICKUP_NAVIGATION_STALL_TICKS;
-        int gotoInterval = item.onGround ? HUNT_PICKUP_GOTO_INTERVAL_TICKS : HUNT_PICKUP_AIRBORNE_GOTO_INTERVAL_TICKS;
+        int gotoInterval = item instanceof EntityItem && item.onGround
+                ? HUNT_PICKUP_GOTO_INTERVAL_TICKS : HUNT_PICKUP_AIRBORNE_GOTO_INTERVAL_TICKS;
         boolean shouldSendGoto = !huntPickupNavigationActive
                 || itemId != this.lastHuntPickupTargetEntityId
                 || stalled
@@ -7223,26 +7283,33 @@ public class KillAuraHandler implements AbstractGameEventListener {
         }
     }
 
-    private boolean dispatchHuntPickupGoto(EntityItem item) {
+    private boolean dispatchHuntPickupGoto(Entity item) {
         if (item == null) {
             return false;
         }
-        if (item.onGround) {
+        if (DroppedPickupTarget.isExperienceOrb(item)) {
+            return EmbeddedNavigationHandler.INSTANCE.startGotoXZ(item.posX, item.posZ);
+        }
+        if (!(item instanceof EntityItem)) {
+            return false;
+        }
+        EntityItem itemEntity = (EntityItem) item;
+        if (itemEntity.onGround) {
             // Reuse the automatic pickup manager's exact local-goal resolver.
             // It navigates to a passable feet cell (or its direct upper cell),
             // rather than the item entity's often-unwalkable raw Y coordinate.
-            return AutoPickupHandler.INSTANCE.startNavigationToPickupItem(item);
+            return AutoPickupHandler.INSTANCE.startNavigationToPickupItem(itemEntity);
         }
 
         // An airborne ItemEntity does not provide a useful standable Y goal.
         // Approach its short-term horizontal landing trajectory, then vanilla
         // collision picks it up as soon as the item reaches the player.
-        double goalX = item.posX + item.motionX * HUNT_PICKUP_AIRBORNE_LEAD_TICKS;
-        double goalZ = item.posZ + item.motionZ * HUNT_PICKUP_AIRBORNE_LEAD_TICKS;
+        double goalX = itemEntity.posX + itemEntity.motionX * HUNT_PICKUP_AIRBORNE_LEAD_TICKS;
+        double goalZ = itemEntity.posZ + itemEntity.motionZ * HUNT_PICKUP_AIRBORNE_LEAD_TICKS;
         return EmbeddedNavigationHandler.INSTANCE.startGotoXZ(goalX, goalZ);
     }
 
-    private boolean hasReachedHuntPickupItem(EntityPlayerSP player, EntityItem item) {
+    private boolean hasReachedHuntPickupItem(EntityPlayerSP player, Entity item) {
         if (player == null || item == null || item.isDead) {
             return false;
         }

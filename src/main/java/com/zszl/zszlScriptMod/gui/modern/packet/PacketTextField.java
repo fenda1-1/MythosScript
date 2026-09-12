@@ -11,6 +11,10 @@ final class PacketTextField {
     private final int id;
     private final int maxLength;
     private ModernTextField field;
+    private boolean readOnly;
+    private int selectionAnchor;
+
+    void setReadOnly(boolean value) { readOnly = value; }
 
     PacketTextField(int id, int maxLength) {
         this.id = id;
@@ -28,7 +32,12 @@ final class PacketTextField {
         field.layout(bounds);
     }
 
-    void setText(String text) { if (field != null) field.setText(text == null ? "" : text); }
+    void setText(String text) {
+        if (field != null) {
+            field.setText(text == null ? "" : text);
+            if (readOnly) field.setCursorPositionZero();
+        }
+    }
     String text() { return field == null || field.getText() == null ? "" : field.getText(); }
     boolean initialized() { return field != null; }
     boolean focused() { return field != null && field.isFocused(); }
@@ -60,9 +69,25 @@ final class PacketTextField {
         field.click(mouseX, mouseY, button);
         if (!hit && button == 0 && activeField != null) activeField.focus(false);
         focus(hit && button == 0);
+        if (hit && button == 0) selectionAnchor = field.getCursorPosition();
         return hit;
     }
-    boolean key(char typedChar, int keyCode) { return field != null && field.isFocused() && field.textboxKeyTyped(typedChar, keyCode); }
+    boolean dragSelection(int mouseX, int button) {
+        if (!readOnly || !focused() || button != 0) return false;
+        com.zszl.zszlScriptMod.gui.modern.ModernUiRenderer.moveTextFieldCursorTo(field, mouseX);
+        int end = field.getCursorPosition();
+        field.setCursorPosition(selectionAnchor);
+        field.setSelectionPos(end);
+        return true;
+    }
+    boolean key(char typedChar, int keyCode) {
+        if (field == null || !field.isFocused()) return false;
+        if (readOnly && !net.minecraft.client.gui.GuiScreen.isKeyComboCtrlA(keyCode)
+                && !net.minecraft.client.gui.GuiScreen.isKeyComboCtrlC(keyCode)
+                && keyCode != org.lwjgl.input.Keyboard.KEY_LEFT && keyCode != org.lwjgl.input.Keyboard.KEY_RIGHT
+                && keyCode != org.lwjgl.input.Keyboard.KEY_HOME && keyCode != org.lwjgl.input.Keyboard.KEY_END) return true;
+        return field.textboxKeyTyped(typedChar, keyCode);
+    }
     void update() { if (field != null) field.updateCursorCounter(); }
     void draw() {
         if (field == null || !field.isVisible()) return;

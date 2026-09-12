@@ -20,6 +20,7 @@ package com.zszl.zszlScriptMod.shadowbaritone.launch.mixins;
 import com.zszl.zszlScriptMod.shadowbaritone.api.BaritoneAPI;
 import com.zszl.zszlScriptMod.otherfeatures.handler.movement.WallClimbFeatureHandler;
 import com.zszl.zszlScriptMod.otherfeatures.handler.movement.FreecamFeatureHandler;
+import com.zszl.zszlScriptMod.otherfeatures.handler.movement.MovementFeatureManager;
 import com.zszl.zszlScriptMod.shadowbaritone.api.IBaritone;
 import com.zszl.zszlScriptMod.shadowbaritone.api.event.events.RotationMoveEvent;
 import com.zszl.zszlScriptMod.shadowbaritone.api.utils.input.Input;
@@ -33,6 +34,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Optional;
 
@@ -44,6 +46,42 @@ import static org.objectweb.asm.Opcodes.GETFIELD;
  */
 @Mixin(EntityLivingBase.class)
 public abstract class MixinEntityLivingBase extends Entity {
+
+    @Inject(method = "canBePushed", at = @At("HEAD"), cancellable = true, require = 1)
+    private void zszl$excludePlayerFromPushCandidates(CallbackInfoReturnable<Boolean> ci) {
+        if (MovementFeatureManager.hasNoCollision((Entity) (Object) this)) {
+            ci.setReturnValue(false);
+        }
+    }
+
+    @Inject(method = "collideWithNearbyEntities", at = @At("HEAD"), cancellable = true, require = 1)
+    private void zszl$skipPlayerEntityCollisions(CallbackInfo ci) {
+        if (MovementFeatureManager.hasNoCollision((Entity) (Object) this)) {
+            ci.cancel();
+        }
+    }
+
+    @Unique private double zszl$beforeKnockbackX;
+    @Unique private double zszl$beforeKnockbackY;
+    @Unique private double zszl$beforeKnockbackZ;
+
+    @Inject(method = "knockBack", at = @At("HEAD"), cancellable = true, require = 1)
+    private void zszl$beforeKnockback(Entity attacker, float strength, double x, double z, CallbackInfo ci) {
+        if ((Object) this != net.minecraft.client.Minecraft.getMinecraft().player) return;
+        zszl$beforeKnockbackX = motionX;
+        zszl$beforeKnockbackY = motionY;
+        zszl$beforeKnockbackZ = motionZ;
+        if (MovementFeatureManager.getKnockbackResistance() >= 1.0D) ci.cancel();
+    }
+
+    @Inject(method = "knockBack", at = @At("RETURN"), require = 1)
+    private void zszl$afterKnockback(Entity attacker, float strength, double x, double z, CallbackInfo ci) {
+        if ((Object) this != net.minecraft.client.Minecraft.getMinecraft().player) return;
+        double resistance = MovementFeatureManager.getKnockbackResistance();
+        motionX += (zszl$beforeKnockbackX - motionX) * resistance;
+        motionY += (zszl$beforeKnockbackY - motionY) * resistance;
+        motionZ += (zszl$beforeKnockbackZ - motionZ) * resistance;
+    }
 
     /**
      * Event called to override the movement direction when jumping

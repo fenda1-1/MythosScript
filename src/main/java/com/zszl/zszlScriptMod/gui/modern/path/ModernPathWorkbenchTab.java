@@ -146,7 +146,8 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             "while_condition", "for_each_point", "for_each_list", "retry_block", "debug_print_var",
             "debug_print_nearby_entities", "debug_print_gui_summary", "skip_actions", "skip_steps",
             "repeat_actions", "restart_sequence", "no_stop_navigation", "autoeat", "autoequip", "autopickup",
-            "toggle_autoeat", "toggle_autofishing", "toggle_kill_aura", "toggle_fly",
+            "toggle_autoeat", "toggle_autofishing", "toggle_auto_pickup", "toggle_kill_aura",
+            "toggle_auto_follow", "toggle_fly",
             "toggle_conditional_execution", "toggle_auto_escape", "toggle_baritone_free_look",
             "toggle_baritone_human_like", "toggle_baritone_flight", "toggle_other_feature", "hunt",
             "follow_entity", "use_hotbar_item", "use_held_item", "move_inventory_item_to_hotbar",
@@ -2873,7 +2874,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             if (ActionEditorUxSupport.isCoordKey(field.key) || ActionEditorUxSupport.isViewCaptureKey(field.key)) {
                 ModernMainLayout.Rect capture = new ModernMainLayout.Rect(control.right() - 58, control.y, 58, 24);
                 control = new ModernMainLayout.Rect(control.x, control.y, Math.max(1, control.width - 64), 24);
-                drawField(font, fieldKey, control, parameterEnabled, field.hint, mouseX, mouseY);
+                drawField(font, fieldKey, control, parameterEnabled, ActionEditorFieldHelp.inputHint(field.key, field.hint), mouseX, mouseY);
                 drawButton(font, capture, "gui.modern.path.wb.u044", false, false, parameterEnabled, mouseX, mouseY);
                 parameterHits.add(new ParameterHit("capture:" + field.key, capture, field));
                 if (isScreenClickCoordinateField(field) && "x".equals(field.key)) {
@@ -2881,7 +2882,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                             ModernUiRenderer.MUTED_TEXT, Math.max(40, row.width - 20));
                 }
             } else {
-                drawField(font, fieldKey, control, parameterEnabled, field.hint, mouseX, mouseY);
+                drawField(font, fieldKey, control, parameterEnabled, ActionEditorFieldHelp.inputHint(field.key, field.hint), mouseX, mouseY);
             }
             if (isSystemMessageField(field)) {
                 drawSystemMessageShortcuts(font, row, mouseX, mouseY);
@@ -3847,9 +3848,9 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 Math.max(20, plus.x - minus.right() - 8), 24);
         drawSpinnerButton(font, minus, "-", enabled, mouseX, mouseY);
         drawSpinnerButton(font, plus, "+", enabled, mouseX, mouseY);
-        String display = value == null || value.trim().isEmpty() ? field.defaultValue : value;
+        String display = value == null ? field.defaultValue : value;
         String fieldKey = "param." + field.key;
-        ensureField(fieldKey, 32);
+        ensureField(fieldKey, 32767);
         setFieldTextIfUnchanged(fieldKey, display);
         drawField(font, fieldKey, valueRect, enabled, "gui.modern.path.wb.u065", mouseX, mouseY);
         parameterHits.add(new ParameterHit("spinner-:" + field.key, minus, field));
@@ -4509,6 +4510,11 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     }
 
     private String actionChoiceDisplay(String key, String value) {
+        if ("hiddenGuiId".equals(key)) {
+            if (safe(value).isEmpty()) return tr("gui.modern.path.schema.hidden_gui_latest");
+            String label = com.zszl.zszlScriptMod.handlers.GuiVisibilityHandler.getHiddenGuiChoices().get(value);
+            return label == null ? tr("gui.modern.path.schema.hidden_gui_unavailable") : label;
+        }
         if ("presetName".equals(key) && selectedAction != null
                 && "toggle_kill_aura".equalsIgnoreCase(selectedAction.type)) {
             return safe(value).isEmpty() ? tr("gui.modern.path.schema.kill_aura_current") : value;
@@ -5190,7 +5196,8 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         if (key == null || !key.startsWith("param.") || selectedAction == null) {
             return false;
         }
-        return ActionEditorJson.isNumericKey(selectedAction.type, key.substring("param.".length()));
+        // Action parameters also accept runtime references and incomplete text edits.
+        return false;
     }
 
     private boolean isDecimalInputFieldKey(String key) {
@@ -5403,7 +5410,11 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 syncActionIntegerField(fieldSpec, field);
                 continue;
             }
-            JsonElement parsed = parseParameterValue(field.getText(), current == null ? parseLiteral(fallback) : current);
+            boolean numeric = ActionEditorJson.isNumericKey(selectedAction.type, fieldSpec.key)
+                    || ActionEditorUxSupport.isRangeDelayKey(selectedAction.type, fieldSpec.key)
+                    || (current != null && current.isJsonPrimitive() && current.getAsJsonPrimitive().isNumber());
+            JsonElement parsed = numeric ? ActionEditorJson.numericDraft(field.getText())
+                    : parseParameterValue(field.getText(), current == null ? parseLiteral(fallback) : current);
             if (parsed == null) {
                 status(tr("gui.modern.path.wb.fmt.param_invalid", tr(fieldSpec.label)));
                 continue;
@@ -5415,7 +5426,10 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
 
     private void syncActionIntegerField(ModernActionEditorSchema.Field fieldSpec, ModernTextField field) {
         String raw = safe(field.getText()).trim();
-        if (raw.isEmpty()) {
+        JsonElement draft = ActionEditorJson.numericDraft(field.getText());
+        if (!draft.getAsJsonPrimitive().isNumber()) {
+            selectedAction.params.add(fieldSpec.key, draft);
+            dirty = true;
             return;
         }
         int min = ActionEditorUxSupport.spinnerMin(fieldSpec.key);
@@ -5424,16 +5438,22 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         try {
             value = Integer.parseInt(raw);
         } catch (NumberFormatException ignored) {
+            selectedAction.params.add(fieldSpec.key, draft);
+            dirty = true;
             status(tr("gui.modern.path.wb.fmt.param_int", tr(fieldSpec.label)));
             return;
         }
         if (value < min || value > max) {
+            selectedAction.params.add(fieldSpec.key, draft);
+            dirty = true;
             status(tr("gui.modern.path.wb.fmt.param_range", tr(fieldSpec.label), String.valueOf(min), String.valueOf(max)));
             return;
         }
         int current = ActionEditorJson.readInt(selectedAction.params, fieldSpec.key,
                 parseDefaultInt(fieldSpec.defaultValue, min), min, max);
-        if (value == current) {
+        JsonElement existing = selectedAction.params.get(fieldSpec.key);
+        if (value == current && existing != null && existing.isJsonPrimitive()
+                && existing.getAsJsonPrimitive().isNumber()) {
             return;
         }
         pushHistory("edit-param-" + fieldSpec.key);
@@ -5970,6 +5990,11 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     private void openParameterChoiceMenu(ModernActionEditorSchema.Field field, int mouseX, int mouseY) {
         if (field == null || field.choices.isEmpty()) return;
         List<String> choices = field.choices;
+        if ("hiddenGuiId".equals(field.key)) {
+            choices = new ArrayList<>();
+            choices.add("");
+            choices.addAll(com.zszl.zszlScriptMod.handlers.GuiVisibilityHandler.getHiddenGuiChoices().keySet());
+        }
         if ("presetName".equals(field.key) && "toggle_kill_aura".equalsIgnoreCase(selectedAction.type)) {
             choices = new ArrayList<>();
             choices.add("");

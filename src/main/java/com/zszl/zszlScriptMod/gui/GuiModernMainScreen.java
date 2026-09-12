@@ -8154,6 +8154,7 @@ public class GuiModernMainScreen extends GuiScreen
         if ("toggle_mouse_detach".equals(command)) return BindableAction.TOGGLE_MOUSE_DETACH;
         if ("toggle_fly".equals(command)) return BindableAction.TOGGLE_FLY;
         if ("toggle_kill_aura".equals(command)) return BindableAction.TOGGLE_KILL_AURA;
+        if ("followconfig".equals(command)) return BindableAction.TOGGLE_AUTO_FOLLOW;
         if ("toggle_auto_pickup".equals(command)) return BindableAction.TOGGLE_AUTO_PICKUP;
         if ("player_equipment_viewer".equals(command)) return BindableAction.OPEN_INVENTORY_VIEWER;
         if ("setloop".equals(command)) return BindableAction.SET_LOOP_COUNT;
@@ -8313,6 +8314,8 @@ public class GuiModernMainScreen extends GuiScreen
                 return BindableAction.TOGGLE_FLY;
             case "toggle_kill_aura":
                 return BindableAction.TOGGLE_KILL_AURA;
+            case "followconfig":
+                return BindableAction.TOGGLE_AUTO_FOLLOW;
             case "toggle_auto_pickup":
                 return BindableAction.TOGGLE_AUTO_PICKUP;
             case "setloop":

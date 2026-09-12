@@ -341,11 +341,71 @@ public class WarehouseManager {
                 warehouse.chests.add(new ChestData(pos));
                 newChests++;
             }
+            snapshotLoadedChest(warehouse, pos);
+        }
+
+        // The previous implementation only appended newly found records. That
+        // made removed chests stay visible forever. Remove records that are
+        // absent from loaded chunks; unloaded chunks remain unknown and are
+        // preserved until they can be inspected.
+        int removedChests = 0;
+        for (int i = warehouse.chests.size() - 1; i >= 0; i--) {
+            ChestData chest = warehouse.chests.get(i);
+            if (chest == null || chest.pos == null
+                    || (mc.world.isBlockLoaded(chest.pos) && !foundChestPositions.contains(chest.pos))) {
+                warehouse.chests.remove(i);
+                removedChests++;
+            }
         }
 
         mc.player.sendMessage(new TextComponentString(I18n.format("msg.warehouse.scan.done",
                 foundChestPositions.size(), newChests)));
+        if (removedChests > 0) {
+            mc.player.sendMessage(new TextComponentString(I18n.format("msg.warehouse.scan.removed", removedChests)));
+        }
         saveWarehouses();
+    }
+
+    /** Reads the currently loaded chest tile entities for existing records. */
+    public static int scanUnscannedChestsInWarehouse(Warehouse warehouse) {
+        if (warehouse == null || mc.world == null) {
+            return 0;
+        }
+        int scanned = 0;
+        for (ChestData chest : warehouse.chests) {
+            if (chest != null && !chest.hasBeenScanned && snapshotLoadedChest(warehouse, chest.pos)) {
+                scanned++;
+            }
+        }
+        if (scanned > 0) {
+            saveWarehouses();
+        }
+        return scanned;
+    }
+
+    /**
+     * Region scanning used to record only chest positions. That left every row
+     * marked “未扫描” until the player opened each chest manually. Loaded chest
+     * tile entities already expose their current inventory, so capture that data
+     * while scanning the region as well.
+     */
+    private static boolean snapshotLoadedChest(Warehouse warehouse, BlockPos pos) {
+        if (warehouse == null || pos == null || mc.world == null) {
+            return false;
+        }
+        ChestData data = warehouse.getChestAt(pos);
+        TileEntity tile = mc.world.getTileEntity(pos);
+        if (data == null || !(tile instanceof IInventory)) {
+            return false;
+        }
+        IInventory inventory = (IInventory) tile;
+        NonNullList<ItemStack> items = NonNullList.withSize(inventory.getSizeInventory(), ItemStack.EMPTY);
+        for (int i = 0; i < inventory.getSizeInventory(); i++) {
+            ItemStack stack = inventory.getStackInSlot(i);
+            items.set(i, stack == null ? ItemStack.EMPTY : stack.copy());
+        }
+        data.snapshotContents(items);
+        return true;
     }
 
     public static void checkBrokenChests(Warehouse warehouse) {

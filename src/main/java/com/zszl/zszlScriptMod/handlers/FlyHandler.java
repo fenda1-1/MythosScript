@@ -32,7 +32,7 @@ public class FlyHandler {
     public static boolean stopMotionOnDisable = true;
     public static boolean enableNoCollision = true;
     public static boolean enableAntiKnockback = true;
-    public static boolean enableAntiKick = false;
+    public static boolean enableAntiKick = true;
 
     public static float horizontalSpeed = 0.85F;
     public static float verticalSpeed = 0.42F;
@@ -67,7 +67,7 @@ public class FlyHandler {
         stopMotionOnDisable = true;
         enableNoCollision = true;
         enableAntiKnockback = true;
-        enableAntiKick = false;
+        enableAntiKick = true;
         horizontalSpeed = 0.85F;
         verticalSpeed = 0.42F;
         glideFallSpeed = 0.04F;

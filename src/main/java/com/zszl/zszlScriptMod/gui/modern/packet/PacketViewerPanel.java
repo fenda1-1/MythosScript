@@ -23,6 +23,7 @@ import net.minecraft.client.gui.FontRenderer;
 
 /** Sent/received viewer with search, timeline correlation and replay actions. */
 final class PacketViewerPanel extends PacketPanelBase {
+    private final SimpleDateFormat captureTimeFormat = new SimpleDateFormat("HH:mm:ss.SSS");
     private enum Mode { SENT, RECEIVED }
     private enum TimelineFilter { ALL, KEYBOARD, MOUSE, LEFT, RIGHT, MIDDLE }
     private enum Window { ALL, MS50, MS100, MS200, MS500 }
@@ -296,7 +297,13 @@ final class PacketViewerPanel extends PacketPanelBase {
                 int step = packetLineStep(), textX = cardX + 7, textWidth = Math.max(1, cardWidth - 14);
                 int previewMax = textScale == TextScale.LARGE ? 58 : textScale == TextScale.SMALL ? 92 : 76;
                 String id = packet.isFmlPacket ? "FML " + safe(packet.channel) : "ID " + (packet.packetId == null ? "?" : String.format("0x%02X", packet.packetId));
-                text(renderer, "#" + (i + 1) + "  " + safe(packet.packetClassName), textX, rowY + 4, ModernUiRenderer.TEXT, textWidth);
+                String captureTime = captureTimeFormat.format(new Date(packet.timestamp));
+                int timeWidth = Math.min(textWidth, renderer.getStringWidth(captureTime) + 2);
+                int titleWidth = Math.max(0, textWidth - timeWidth - 8);
+                if (titleWidth > 0) text(renderer, "#" + (i + 1) + "  " + safe(packet.packetClassName),
+                        textX, rowY + 4, ModernUiRenderer.TEXT, titleWidth);
+                text(renderer, captureTime, textX + textWidth - timeWidth, rowY + 4,
+                        ModernUiRenderer.SUBTLE_TEXT, timeWidth);
                 text(renderer, id, textX, rowY + 4 + step, ModernUiRenderer.SUBTLE_TEXT, textWidth);
                 text(renderer, "HEX " + inline(packet.getHexData(), previewMax), textX, rowY + 4 + step * 2, ModernUiRenderer.SUBTLE_TEXT, textWidth);
                 text(renderer, tr("gui.modern.pktview.fmt.decode", inline(packet.getDecodedData(), previewMax)), textX, rowY + 4 + step * 3, ModernUiRenderer.SUBTLE_TEXT, textWidth);

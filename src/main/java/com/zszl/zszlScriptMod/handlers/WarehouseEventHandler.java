@@ -5,15 +5,13 @@ import com.zszl.zszlScriptMod.PerformanceMonitor;
 import com.zszl.zszlScriptMod.zszlScriptMod;
 import com.zszl.zszlScriptMod.config.DebugModule;
 import com.zszl.zszlScriptMod.config.ModConfig;
-import com.zszl.zszlScriptMod.gui.modern.ModernTooltipSupport;
-import com.zszl.zszlScriptMod.gui.modern.ModernUiRenderer;
 import com.zszl.zszlScriptMod.system.dungeon.ChestData;
+import com.zszl.zszlScriptMod.system.dungeon.WarehouseDepositPolicy;
 import com.zszl.zszlScriptMod.system.dungeon.Warehouse;
 import com.zszl.zszlScriptMod.utils.ModUtils;
 import net.minecraft.block.BlockChest;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen; // !! 修复：添加缺失的导入
 import net.minecraft.client.gui.inventory.GuiChest;
 import net.minecraft.client.renderer.GlStateManager;
@@ -56,6 +54,153 @@ public class WarehouseEventHandler extends Gui {
     // 自动按高亮箱子逐个存入流程
     private static final Deque<BlockPos> autoDepositRouteQueue = new ArrayDeque<>();
     private static boolean autoDepositRouteRunning = false;
+    private static final Deque<BlockPos> scanRouteQueue = new ArrayDeque<>();
+    private static boolean scanRouteRunning = false;
+    private static BlockPos scanRouteCurrentTarget = null;
+    private static int scanRouteWaitTicks = 0;
+    private static final java.util.LinkedHashSet<ChestData> completedDepositPolicies = new java.util.LinkedHashSet<>();
+    private static final Deque<com.google.gson.JsonObject> postDepositSpreads = new ArrayDeque<>();
+    private static final Deque<String> postDepositSequences = new ArrayDeque<>();
+    private static boolean postDepositRunning;
+    private static final Set<String> routeSpreadNames = new LinkedHashSet<>();
+    private static int spreadWindowId = -1;
+    private static boolean openChestPolicyCompleted;
+    private static String activePostSequence = "";
+    private static Map<String, Integer> completedInventory = Collections.emptyMap();
+    private static int depositIdleTicks;
+
+    private static Map<String, Integer> inventoryCounts() {
+        Map<String, Integer> counts = new HashMap<>();
+        if (mc.player != null) for (ItemStack stack : mc.player.inventory.mainInventory) {
+            if (!stack.isEmpty()) counts.merge(INSTANCE.getUniqueItemKey(stack) + ":" + stack.getMetadata(), stack.getCount(), Integer::sum);
+        }
+        return counts;
+    }
+    private static final Deque<com.google.gson.JsonObject> postDepositStacks = new ArrayDeque<>();
+    private static final java.util.LinkedHashSet<String> pendingSpreadNames = new java.util.LinkedHashSet<>();
+
+    public static java.util.List<String> spreadNames(ChestData chest) {
+        return WarehouseDepositPolicy.parseNames(chest != null && chest.spreadAfterDeposit ? chest.spreadItemNames : null);
+    }
+
+    public static java.util.List<String> orderedDepositNames(ChestData chest) {
+        java.util.LinkedHashSet<String> names = new java.util.LinkedHashSet<>();
+        if (chest.depositItemOrder != null) {
+            for (String name : chest.depositItemOrder) {
+                if (chest.designatedItems != null && chest.designatedItems.contains(name)) names.add(name);
+            }
+        }
+        if (chest.designatedItems != null) {
+            java.util.List<String> remaining = new ArrayList<>(chest.designatedItems);
+            java.util.Collections.sort(remaining);
+            names.addAll(remaining);
+        }
+        return new ArrayList<>(names);
+    }
+
+    private int depositableCount(ChestData chest, Slot slot) {
+        int raw = slot.getSlotIndex();
+        if (raw < 0 || raw >= 36 || !slot.getHasStack()) return 0;
+        if (!WarehouseDepositPolicy.includesSlot(chest.depositInventorySlots, raw)) return 0;
+        ItemStack stack = slot.getStack();
+        Set<String> reservedNames = new HashSet<>(spreadNames(chest));
+        if (autoDepositRouteRunning) reservedNames.addAll(routeSpreadNames);
+        if (!reservedNames.contains(net.minecraft.util.text.TextFormatting.getTextWithoutFormattingCodes(stack.getDisplayName()))
+                && !reservedNames.contains(stack.getDisplayName())) return stack.getCount();
+        int reserved = stack.getMaxStackSize();
+        for (int i = 0; i < raw && reserved > 0; i++) {
+            ItemStack previous = mc.player.inventory.getStackInSlot(i);
+            if (!previous.isEmpty() && previous.getDisplayName().equals(stack.getDisplayName())) {
+                reserved -= previous.getCount();
+            }
+        }
+        return WarehouseDepositPolicy.excess(stack.getCount(), stack.getMaxStackSize() - reserved, stack.getMaxStackSize());
+    }
+
+    private static com.google.gson.JsonObject spreadParams(String name) {
+        com.google.gson.JsonObject params = new com.google.gson.JsonObject();
+        params.addProperty("itemName", name);
+        params.addProperty("matchMode", "EXACT");
+        params.addProperty("sourceScope", "INVENTORY");
+        params.addProperty("targetScope", "INVENTORY");
+        params.addProperty("spreadMode", "ONE_PER_SLOT");
+        params.addProperty("remainderMode", "RETURN_SOURCE");
+        params.addProperty("onlyEmptySlots", true);
+        params.addProperty("preserveSourceSlot", true);
+        params.addProperty("continueOnInsufficient", true);
+        return params;
+    }
+
+    private void beginPostDeposit() {
+        for (ChestData chest : completedDepositPolicies) {
+            pendingSpreadNames.addAll(spreadNames(chest));
+            if (chest.postDepositSequence != null && !chest.postDepositSequence.trim().isEmpty()
+                    && !postDepositSequences.contains(chest.postDepositSequence.trim())) {
+                postDepositSequences.add(chest.postDepositSequence.trim());
+            }
+        }
+        completedDepositPolicies.clear();
+        for (String name : pendingSpreadNames) postDepositStacks.add(spreadParams(name));
+        postDepositRunning = !postDepositStacks.isEmpty() || !postDepositSequences.isEmpty();
+        spreadWindowId = mc.player.openContainer.windowId;
+        completedInventory = inventoryCounts();
+    }
+
+    private void tickPostDeposit() {
+        if (!activePostSequence.isEmpty()) {
+            if (com.zszl.zszlScriptMod.path.PathSequenceEventListener.isSequenceActiveForMcp(activePostSequence)) return;
+            activePostSequence = "";
+        }
+        if (ItemSpreadHandler.isSpreadInProgress() || ItemSpreadHandler.isStackInProgress()) return;
+        if (!mc.player.inventory.getItemStack().isEmpty()
+                || (!postDepositStacks.isEmpty() || !postDepositSpreads.isEmpty() || !pendingSpreadNames.isEmpty())
+                && mc.player.openContainer.windowId != spreadWindowId) {
+            postDepositStacks.clear();
+            postDepositSpreads.clear();
+            pendingSpreadNames.clear();
+            postDepositSequences.clear();
+            postDepositRunning = false;
+            return;
+        }
+        if (!postDepositStacks.isEmpty()) {
+            ItemSpreadHandler.stackInventoryItems(postDepositStacks.removeFirst());
+            return;
+        }
+        if (!pendingSpreadNames.isEmpty()) {
+            java.util.List<Integer> empty = new ArrayList<>();
+            for (int i = 0; i < 36; i++) if (mc.player.inventory.getStackInSlot(i).isEmpty()) empty.add(i);
+            int index = 0;
+            List<List<Integer>> groups = WarehouseDepositPolicy.divideSlots(empty, pendingSpreadNames.size());
+            for (String name : pendingSpreadNames) {
+                List<Integer> group = groups.get(index++);
+                com.google.gson.JsonObject params = spreadParams(name);
+                com.google.gson.JsonArray targets = new com.google.gson.JsonArray();
+                for (Integer slot : group) targets.add(slot);
+                if (!group.isEmpty()) {
+                    params.add("targetSlots", targets);
+                    postDepositSpreads.add(params);
+                }
+            }
+            pendingSpreadNames.clear();
+        }
+        if (!postDepositSpreads.isEmpty()) {
+            ItemSpreadHandler.spreadInventoryItem(postDepositSpreads.removeFirst());
+            return;
+        }
+        if (!postDepositSequences.isEmpty()) {
+            String sequence = postDepositSequences.removeFirst();
+            if (com.zszl.zszlScriptMod.path.PathSequenceManager.hasSequence(sequence)
+                    && !com.zszl.zszlScriptMod.path.PathSequenceEventListener.isSequenceActiveForMcp(sequence)) {
+                activePostSequence = sequence;
+                com.google.gson.JsonObject params = new com.google.gson.JsonObject();
+                params.addProperty("sequenceName", sequence);
+                com.zszl.zszlScriptMod.path.PathSequenceManager.parseAction("run_sequence", params).accept(mc.player);
+            }
+            return;
+        }
+        postDepositRunning = false;
+        completedInventory = inventoryCounts();
+    }
     private static BlockPos autoDepositCurrentTarget = null;
     private static int autoDepositOpenWaitTicks = 0;
 
@@ -65,23 +210,72 @@ public class WarehouseEventHandler extends Gui {
     private static final int AUTO_DEPOSIT_INTERVAL_TICKS = 2;
 
     // --- 滚动条和选择状态 ---
-    private static int designatedItemScrollOffset = 0;
-    private static int maxDesignatedItemScroll = 0;
-    private static boolean isDraggingDesignatedScrollbar = false;
 
     // --- 按钮引用 ---
-    private static GuiButton autoDepositToggleButton;
 
-    private int scrollClickY;
 
     private WarehouseEventHandler() {
+    }
+
+    /** Starts a one-click route that opens every recorded unscanned chest. */
+    public static boolean startScanUnscannedChests(Warehouse warehouse) {
+        if (mc.player == null || mc.world == null || warehouse == null) {
+            return false;
+        }
+        if (scanRouteRunning || autoDepositRouteRunning || postDepositRunning) {
+            mc.player.sendMessage(new TextComponentString("§e[仓库] 已有自动仓库流程正在运行。"));
+            return false;
+        }
+
+        // Capture any records whose chunks are already loaded before creating
+        // the navigation queue. Remaining records are opened through the
+        // existing GoToAndOpenHandler so the server sends a fresh inventory.
+        WarehouseManager.scanUnscannedChestsInWarehouse(warehouse);
+        scanRouteQueue.clear();
+        for (ChestData chest : warehouse.chests) {
+            if (chest != null && chest.pos != null && !chest.hasBeenScanned) {
+                scanRouteQueue.addLast(chest.pos);
+            }
+        }
+        if (scanRouteQueue.isEmpty()) {
+            return false;
+        }
+        scanRouteRunning = true;
+        scanRouteCurrentTarget = null;
+        scanRouteWaitTicks = 0;
+        startNextScanRouteChest();
+        return true;
+    }
+
+    private static void startNextScanRouteChest() {
+        if (!scanRouteRunning || mc.player == null) {
+            return;
+        }
+        while (!scanRouteQueue.isEmpty()) {
+            BlockPos next = scanRouteQueue.removeFirst();
+            Warehouse current = WarehouseManager.findWarehouseForPos(next);
+            ChestData chest = current == null ? null : current.getChestAt(next);
+            if (chest == null || chest.hasBeenScanned) {
+                continue;
+            }
+            if (!GoToAndOpenHandler.start(next)) {
+                continue;
+            }
+            scanRouteCurrentTarget = next;
+            scanRouteWaitTicks = 0;
+            mc.player.sendMessage(new TextComponentString("§b[仓库] 前往扫描箱子: " + next));
+            return;
+        }
+        scanRouteRunning = false;
+        scanRouteCurrentTarget = null;
+        mc.player.sendMessage(new TextComponentString("§a[仓库] 未扫描箱子处理完成。"));
     }
 
     public static void startAutoDepositByHighlights() {
         if (mc.player == null || mc.world == null) {
             return;
         }
-        if (autoDepositRouteRunning) {
+        if (isAutoDepositRouteRunning()) {
             mc.player.sendMessage(new TextComponentString("§e[仓库] 自动存入流程已在运行中。"));
             return;
         }
@@ -115,6 +309,12 @@ public class WarehouseEventHandler extends Gui {
         }));
 
         autoDepositRouteQueue.clear();
+        completedDepositPolicies.clear();
+        routeSpreadNames.clear();
+        for (BlockPos pos : sorted) {
+            ChestData policy = WarehouseManager.currentWarehouse.getChestAt(pos);
+            if (policy != null) routeSpreadNames.addAll(spreadNames(policy));
+        }
         autoDepositRouteQueue.addAll(sorted);
         autoDepositRouteRunning = true;
         autoDepositCurrentTarget = null;
@@ -124,7 +324,7 @@ public class WarehouseEventHandler extends Gui {
     }
 
     public static boolean isAutoDepositRouteRunning() {
-        return autoDepositRouteRunning;
+        return autoDepositRouteRunning || postDepositRunning || scanRouteRunning;
     }
 
     private void stopAutoDepositRoute(String reason) {
@@ -135,6 +335,7 @@ public class WarehouseEventHandler extends Gui {
         autoDepositCurrentTarget = null;
         autoDepositOpenWaitTicks = 0;
         autoDepositRouteQueue.clear();
+        beginPostDeposit();
     }
 
     private void startNextAutoDepositTarget() {
@@ -177,6 +378,16 @@ public class WarehouseEventHandler extends Gui {
         if (chestData == null || playerItemKeys.isEmpty()) {
             return false;
         }
+        if (chestData.depositItemsConfigured || chestData.designatedItems != null && !chestData.designatedItems.isEmpty()) {
+            List<String> names = orderedDepositNames(chestData);
+            for (Slot slot : mc.player.inventoryContainer.inventorySlots) {
+                if (slot.inventory == mc.player.inventory && slot.getHasStack()
+                        && slot.getSlotIndex() >= 0 && slot.getSlotIndex() < 36
+                        && (depositableCount(chestData, slot) > 0 || spreadNames(chestData).contains(slot.getStack().getDisplayName()))
+                        && depositPriority(slot.getStack(), names) != Integer.MAX_VALUE) return true;
+            }
+            return false;
+        }
 
         // 与“高亮箱子”使用同一判定口径：玩家背包物品Key 与 箱子快照物品Key 交集
         // 避免因 designatedItems 文本匹配失败，导致路线在首个目标就被误判为“可存入物品为空”。
@@ -205,6 +416,7 @@ public class WarehouseEventHandler extends Gui {
             if (slot.inventory != mc.player.inventory || !slot.getHasStack()) {
                 continue;
             }
+            if (depositableCount(currentOpenChestData, slot) <= 0) continue;
             ItemStack playerStack = slot.getStack();
             String playerItemName = playerStack.getDisplayName();
 
@@ -228,11 +440,47 @@ public class WarehouseEventHandler extends Gui {
     }
 
     @SubscribeEvent
+    public void onWorldUnload(net.minecraftforge.event.world.WorldEvent.Unload event) {
+        if (!event.getWorld().isRemote) return;
+        autoDepositRouteRunning = postDepositRunning = false;
+        scanRouteRunning = false;
+        autoDepositCurrentTarget = null;
+        scanRouteCurrentTarget = null;
+        autoDepositRouteQueue.clear();
+        scanRouteQueue.clear();
+        completedDepositPolicies.clear();
+        postDepositStacks.clear();
+        postDepositSpreads.clear();
+        postDepositSequences.clear();
+        pendingSpreadNames.clear();
+        routeSpreadNames.clear();
+        activePostSequence = "";
+        chestPanel = null;
+        currentOpenChestData = null;
+    }
+
+    @SubscribeEvent
     public void onPlayerTick(TickEvent.PlayerTickEvent event) {
         PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("warehouse");
         try {
-        if (event.phase != TickEvent.Phase.END || mc.player == null)
+        if (event.phase != TickEvent.Phase.END || mc.player == null || event.player != mc.player)
             return;
+        if (scanRouteRunning && scanRouteCurrentTarget != null) {
+            scanRouteWaitTicks++;
+            if (scanRouteWaitTicks > 700) {
+                mc.player.sendMessage(new TextComponentString("§e[仓库] 扫描箱子超时，尝试下一个目标。"));
+                scanRouteCurrentTarget = null;
+                scanRouteWaitTicks = 0;
+                startNextScanRouteChest();
+            }
+        }
+        if (postDepositRunning) {
+            tickPostDeposit();
+            return;
+        }
+        if (openChestPolicyCompleted && !completedInventory.equals(inventoryCounts())) {
+            openChestPolicyCompleted = false;
+        }
 
         if (mc.player.ticksExisted % 20 == 0) {
             WarehouseManager.updateCurrentWarehouse();
@@ -248,13 +496,29 @@ public class WarehouseEventHandler extends Gui {
         }
 
         if (isStandardChestGui && currentOpenChestData != null && currentOpenChestData.autoDepositEnabled
+                && !openChestPolicyCompleted
                 && mc.player.openContainer instanceof ContainerChest) {
             if (autoDepositCooldown > 0) {
                 autoDepositCooldown--;
             } else {
+                Map<String, Integer> before = inventoryCounts();
                 executeAutoDeposit((ContainerChest) mc.player.openContainer);
+                depositIdleTicks = before.equals(inventoryCounts()) ? depositIdleTicks + AUTO_DEPOSIT_INTERVAL_TICKS : 0;
                 // 需求：固定每 2 tick 执行一次存入
                 autoDepositCooldown = Math.max(0, AUTO_DEPOSIT_INTERVAL_TICKS - 1);
+            }
+            if (!hasDepositableItemsInOpenContainer((ContainerChest) mc.player.openContainer)) {
+                openChestPolicyCompleted = true;
+                completedDepositPolicies.add(currentOpenChestData);
+                if (!autoDepositRouteRunning) beginPostDeposit();
+                completedInventory = inventoryCounts();
+            } else if (depositIdleTicks >= 200) {
+                currentOpenChestData.autoDepositEnabled = false;
+                autoDepositRouteRunning = false;
+                autoDepositCurrentTarget = null;
+                autoDepositRouteQueue.clear();
+                completedDepositPolicies.clear();
+                mc.player.sendMessage(new TextComponentString(net.minecraft.client.resources.I18n.format("gui.modern.warehouse.deposit_stalled")));
             }
         }
 
@@ -292,8 +556,11 @@ public class WarehouseEventHandler extends Gui {
         PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("warehouse");
         try {
         isStandardChestGui = false;
+        openChestPolicyCompleted = false;
+        depositIdleTicks = 0;
         currentOpenChestData = null;
-        designatedItemScrollOffset = 0;
+        chestPanel = null;
+        panelOwner = null;
 
         if (!(event.getGui() instanceof GuiChest))
             return;
@@ -303,7 +570,9 @@ public class WarehouseEventHandler extends Gui {
         IInventory chestInventory = container.getLowerChestInventory();
         String title = chestInventory.getDisplayName().getUnformattedText();
 
-        if (title.equals("箱子") || title.equals("大型箱子")) {
+        if (title.equals("箱子") || title.equals("大型箱子")
+                || title.equals(net.minecraft.client.resources.I18n.format("container.chest"))
+                || title.equals(net.minecraft.client.resources.I18n.format("container.chestDouble"))) {
             isStandardChestGui = true;
         }
         if (title.contains("副本仓库:")) {
@@ -348,10 +617,24 @@ public class WarehouseEventHandler extends Gui {
                 currentOpenChestData = targetWarehouse.getChestAt(finalChestPos);
 
                 if (isStandardChestGui && currentOpenChestData != null) {
-                    updateDesignatedItems(currentOpenChestData, container);
+                    if (!currentOpenChestData.depositItemsConfigured
+                            && (currentOpenChestData.designatedItems == null || currentOpenChestData.designatedItems.isEmpty())) {
+                        updateDesignatedItems(currentOpenChestData, container);
+                    }
+                    currentOpenChestData.depositItemsConfigured = true;
                     if (oneClickDepositMode || autoDepositRouteRunning) {
                         currentOpenChestData.autoDepositEnabled = true;
                     }
+                }
+                if (scanRouteRunning && finalChestPos.equals(scanRouteCurrentTarget)) {
+                    scanRouteCurrentTarget = null;
+                    scanRouteWaitTicks = 0;
+                    ModUtils.DelayScheduler.instance.schedule(() -> {
+                        if (mc.currentScreen instanceof GuiChest) {
+                            mc.displayGuiScreen(null);
+                        }
+                        startNextScanRouteChest();
+                    }, 8);
                 }
             }
             } finally {
@@ -418,6 +701,10 @@ public class WarehouseEventHandler extends Gui {
             return;
 
         for (ChestData chestData : WarehouseManager.currentWarehouse.chests) {
+            if (chestData.depositItemsConfigured || chestData.designatedItems != null && !chestData.designatedItems.isEmpty()) {
+                if (hasAnyDepositableForChest(chestData)) chestsToHighlight.add(chestData.pos);
+                continue;
+            }
             if (!chestData.hasBeenScanned) {
                 if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS)) {
                     zszlScriptMod.LOGGER.info("[高亮调试] 跳过箱子 @ {}: 未被扫描过。", chestData.pos);
@@ -448,223 +735,42 @@ public class WarehouseEventHandler extends Gui {
         }
     }
 
-    @SubscribeEvent
-    public void onDrawScreenPost(GuiScreenEvent.DrawScreenEvent.Post event) {
-        PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("warehouse");
-        try {
-        if (!(event.getGui() instanceof GuiChest) || !isStandardChestGui || currentOpenChestData == null) {
-            return;
+    private com.zszl.zszlScriptMod.gui.modern.WarehouseChestPanel chestPanel;
+    private ChestData panelOwner;
+
+    private com.zszl.zszlScriptMod.gui.modern.WarehouseChestPanel chestPanel() {
+        if (panelOwner != currentOpenChestData || chestPanel == null) {
+            panelOwner = currentOpenChestData;
+            chestPanel = new com.zszl.zszlScriptMod.gui.modern.WarehouseChestPanel(currentOpenChestData);
         }
-
-        GuiChest gui = (GuiChest) event.getGui();
-        int guiLeft = (gui.width - 176) / 2;
-
-        int panelWidth = 120;
-        int panelX = guiLeft - panelWidth - 5;
-        int panelY = 0;
-        int panelHeight = gui.height;
-
-        drawRect(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xC0000000);
-
-        int itemHeight = 15;
-
-        // --- 上半部分：指定存放物品 ---
-        int designatedListY = panelY + 5;
-        int designatedListHeight = panelHeight / 2 - 10;
-        drawString(mc.fontRenderer, "§e指定存放物品:", panelX + 5, designatedListY, 0xFFFFFF);
-        drawRect(panelX + 5, designatedListY + 15, panelX + panelWidth - 5, designatedListY + 15 + designatedListHeight,
-                0x80000000);
-
-        List<String> items = new ArrayList<>(currentOpenChestData.designatedItems);
-        int visibleDesignatedItems = designatedListHeight / itemHeight;
-        maxDesignatedItemScroll = Math.max(0, items.size() - visibleDesignatedItems);
-
-        for (int i = 0; i < visibleDesignatedItems; i++) {
-            int index = i + designatedItemScrollOffset;
-            if (index >= items.size())
-                break;
-            drawString(mc.fontRenderer, "§f- " + items.get(index), panelX + 8, designatedListY + 17 + i * itemHeight,
-                    0xFFFFFF);
-        }
-        if (maxDesignatedItemScroll > 0) {
-            int scrollbarX = panelX + panelWidth - 9;
-            int listTop = designatedListY + 15;
-            drawRect(scrollbarX, listTop, scrollbarX + 4, listTop + designatedListHeight, 0xFF101010);
-            int thumbHeight = Math.max(10,
-                    (int) ((float) visibleDesignatedItems / items.size() * designatedListHeight));
-            int thumbY = listTop + (int) ((float) designatedItemScrollOffset / maxDesignatedItemScroll
-                    * (designatedListHeight - thumbHeight));
-            drawRect(scrollbarX, thumbY, scrollbarX + 4, thumbY + thumbHeight, 0xFF888888);
-        }
-
-        // --- 下半部分：自动存入功能 ---
-        int sortPanelY = designatedListY + designatedListHeight + 20;
-        int sortPanelHeight = panelHeight - sortPanelY - 5;
-        drawString(mc.fontRenderer, "§e自动存入功能:", panelX + 5, sortPanelY, 0xFFFFFF);
-
-        int sortListY = sortPanelY + 15;
-        drawRect(panelX + 5, sortListY, panelX + panelWidth - 5, sortListY + sortPanelHeight - 20, 0x80000000);
-
-        int funcY = sortListY + 45;
-        initializeAndDrawButtons(panelX, funcY, panelWidth, event.getMouseX(), event.getMouseY(),
-                event.getRenderPartialTicks());
-
-        // 状态固定显示在面板最底部
-        String status = currentOpenChestData.autoDepositEnabled ? "§a开" : "§c关";
-        String route = autoDepositRouteRunning ? "§a运行中" : "§7未运行";
-        drawString(mc.fontRenderer, "§f状态: 自动存入 " + status, panelX + 8, panelY + panelHeight - 22, 0xFFFFFF);
-        drawString(mc.fontRenderer, "§f流程: " + route, panelX + 8, panelY + panelHeight - 10, 0xFFFFFF);
-
-        // 提示改为悬浮显示：仅在鼠标停留“自动存入：开/关”按钮时出现
-        if (autoDepositToggleButton != null && autoDepositToggleButton.isMouseOver()) {
-            String tooltip = "打开此箱子后自动存入\n匹配“指定存放物品”的背包物品。";
-            int iconX = Math.max(4, Math.min(gui.width - 16, autoDepositToggleButton.x
-                    + autoDepositToggleButton.width + 4));
-            int iconY = Math.max(4, Math.min(gui.height - 16,
-                    autoDepositToggleButton.y + (autoDepositToggleButton.height - 11) / 2));
-            // Publish the feature-specific explanation through the shared
-            // anchor pass. The global renderer supplies the common delay.
-            ModernTooltipSupport.registerInfoIcon(gui, iconX, iconY, 11, 11, tooltip);
-            ModernUiRenderer.drawInfoIcon(iconX, iconY, ModernUiRenderer.SUBTLE_TEXT);
-        }
-        } finally {
-            timer.stop();
-        }
+        return chestPanel;
     }
 
-    private void initializeAndDrawButtons(int panelX, int funcY, int panelWidth, int mouseX, int mouseY,
-            float partialTicks) {
-        int btnWidth = panelWidth - 10;
-
-        autoDepositToggleButton = new GuiButton(9010, panelX + 5, funcY, btnWidth, 20,
-                "自动存入: " + (currentOpenChestData.autoDepositEnabled ? "§a开" : "§c关"));
-
-        autoDepositToggleButton.drawButton(mc, mouseX, mouseY, partialTicks);
+    @SubscribeEvent
+    public void onDrawScreenPost(GuiScreenEvent.DrawScreenEvent.Post event) {
+        if (event.getGui() instanceof GuiChest && isStandardChestGui && currentOpenChestData != null) {
+            chestPanel().draw(event.getGui(), event.getMouseX(), event.getMouseY());
+        }
     }
 
     @SubscribeEvent
     public void onMouseInputPre(GuiScreenEvent.MouseInputEvent.Pre event) throws IOException {
-        PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("warehouse");
-        try {
-        if (!(event.getGui() instanceof GuiChest) || !isStandardChestGui || currentOpenChestData == null)
-            return;
-
-        GuiChest gui = (GuiChest) event.getGui();
-        int mouseX = Mouse.getEventX() * gui.width / mc.displayWidth;
-        int mouseY = gui.height - Mouse.getEventY() * gui.height / mc.displayHeight - 1;
-
-        if (Mouse.getEventButtonState() && Mouse.getEventButton() == 0) {
-            int guiLeft = (gui.width - 176) / 2;
-            int panelWidth = 120;
-            int panelX = guiLeft - panelWidth - 5;
-
-            // 检查按钮点击
-            if (autoDepositToggleButton != null && autoDepositToggleButton.mousePressed(mc, mouseX, mouseY)) {
-                currentOpenChestData.autoDepositEnabled = !currentOpenChestData.autoDepositEnabled;
-                WarehouseManager.saveWarehouses();
-                event.setCanceled(true);
-                return;
-            }
-        }
-        } finally {
-            timer.stop();
+        if (!(event.getGui() instanceof GuiChest) || !isStandardChestGui || currentOpenChestData == null) return;
+        GuiScreen gui = event.getGui();
+        int x = Mouse.getEventX() * gui.width / mc.displayWidth;
+        int y = gui.height - Mouse.getEventY() * gui.height / mc.displayHeight - 1;
+        if (chestPanel().mouse(x, y, Mouse.getEventButton(), Mouse.getEventButtonState(), Mouse.getEventDWheel())) {
+            event.setCanceled(true);
         }
     }
 
     @SubscribeEvent
     public void onKeyboardInputPre(GuiScreenEvent.KeyboardInputEvent.Pre event) {
-        // 自动存入频率已固定为 2 tick，不处理频率输入
-    }
-
-    // !! 核心修复：添加完整的鼠标输入处理，包括滚轮和拖拽 !!
-    @SubscribeEvent
-    public void onMouseInput(GuiScreenEvent.MouseInputEvent.Post event) {
-        PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("warehouse");
-        try {
-        if (!(event.getGui() instanceof GuiChest) || !isStandardChestGui)
-            return;
-
-        int dWheel = Mouse.getEventDWheel();
-        if (dWheel != 0) {
-            handleMouseWheel(event.getGui(), dWheel);
+        if (event.getGui() instanceof GuiChest && isStandardChestGui && currentOpenChestData != null
+                && org.lwjgl.input.Keyboard.getEventKeyState()
+                && chestPanel().key(org.lwjgl.input.Keyboard.getEventCharacter(), org.lwjgl.input.Keyboard.getEventKey())) {
+            event.setCanceled(true);
         }
-
-        if (Mouse.getEventButton() == 0) {
-            if (Mouse.getEventButtonState()) {
-                // 检查是否点击了滚动条
-                handleScrollbarClick(event.getGui());
-            } else {
-                // 释放鼠标
-                isDraggingDesignatedScrollbar = false;
-            }
-        }
-
-        if (isDraggingDesignatedScrollbar) {
-            handleMouseDrag(event.getGui());
-        }
-        } finally {
-            timer.stop();
-        }
-    }
-
-    private void handleScrollbarClick(GuiScreen gui) {
-        int mouseX = Mouse.getX() * gui.width / mc.displayWidth;
-        int mouseY = gui.height - Mouse.getY() * gui.height / mc.displayHeight - 1;
-        int guiLeft = (gui.width - 176) / 2;
-        int panelWidth = 120;
-        int panelX = guiLeft - panelWidth - 5;
-        int panelY = 0;
-        int panelHeight = gui.height;
-
-        int designatedListY = panelY + 5;
-        int designatedListHeight = panelHeight / 2 - 10;
-        int designatedListTop = designatedListY + 15;
-        int designatedScrollbarX = panelX + panelWidth - 9;
-        if (mouseX >= designatedScrollbarX && mouseX < designatedScrollbarX + 4 && mouseY >= designatedListTop
-                && mouseY < designatedListTop + designatedListHeight) {
-            isDraggingDesignatedScrollbar = true;
-            scrollClickY = mouseY;
-        }
-
-    }
-
-    private void handleMouseWheel(GuiScreen gui, int dWheel) {
-        int mouseX = Mouse.getX() * gui.width / mc.displayWidth;
-        int mouseY = gui.height - Mouse.getY() * gui.height / mc.displayHeight - 1;
-
-        int guiLeft = (gui.width - 176) / 2;
-        int panelWidth = 120;
-        int panelX = guiLeft - panelWidth - 5;
-        int panelY = 0;
-        int panelHeight = gui.height;
-
-        int designatedListY = panelY + 5;
-        int designatedListHeight = panelHeight / 2 - 10;
-        int designatedListTop = designatedListY + 15;
-
-        if (mouseX >= panelX && mouseX < panelX + panelWidth) {
-            if (mouseY >= designatedListTop && mouseY < designatedListTop + designatedListHeight) {
-                if (dWheel > 0)
-                    designatedItemScrollOffset = Math.max(0, designatedItemScrollOffset - 1);
-                else
-                    designatedItemScrollOffset = Math.min(maxDesignatedItemScroll, designatedItemScrollOffset + 1);
-            }
-        }
-    }
-
-    private void handleMouseDrag(GuiScreen gui) {
-        int mouseY = gui.height - Mouse.getY() * gui.height / mc.displayHeight - 1;
-        int panelHeight = gui.height;
-
-        if (isDraggingDesignatedScrollbar) {
-            int designatedListHeight = panelHeight / 2 - 10;
-            int listTop = 5 + 15;
-            float percent = (float) (mouseY - listTop) / designatedListHeight;
-            designatedItemScrollOffset = (int) (percent * (maxDesignatedItemScroll + 1));
-            designatedItemScrollOffset = Math.max(0, Math.min(maxDesignatedItemScroll, designatedItemScrollOffset));
-        }
-
-        // 仅保留“指定存放物品”滚动拖拽
     }
 
     private void updateDesignatedItems(ChestData chest, ContainerChest container) {
@@ -723,6 +829,7 @@ public class WarehouseEventHandler extends Gui {
 
         for (Slot slot : container.inventorySlots) {
             if (slot.inventory == mc.player.inventory && slot.getHasStack()) {
+                if (depositableCount(currentOpenChestData, slot) <= 0) continue;
                 ItemStack playerStack = slot.getStack();
                 String playerItemName = playerStack.getDisplayName();
 
@@ -764,12 +871,59 @@ public class WarehouseEventHandler extends Gui {
         }
 
         if (!slotsToClick.isEmpty()) {
+            final List<String> priority = orderedDepositNames(currentOpenChestData);
+            slotsToClick.sort(Comparator.comparingInt(index -> depositPriority(container.getSlot(index).getStack(), priority)));
             int slotToClick = slotsToClick.get(0);
-            mc.playerController.windowClick(container.windowId, slotToClick, 0, ClickType.QUICK_MOVE, mc.player);
+            Slot source = container.getSlot(slotToClick);
+            int count = depositableCount(currentOpenChestData, source);
+            if (count >= source.getStack().getCount()) {
+                mc.playerController.windowClick(container.windowId, slotToClick, 0, ClickType.QUICK_MOVE, mc.player);
+            } else if (mc.player.inventory.getItemStack().isEmpty()) {
+                // Keep the reserved part in its original slot while moving only the excess.
+                int reserve = source.getStack().getCount() - count;
+                mc.playerController.windowClick(container.windowId, slotToClick, 0, ClickType.PICKUP, mc.player);
+                for (int i = 0; i < reserve; i++) {
+                    mc.playerController.windowClick(container.windowId, slotToClick, 1, ClickType.PICKUP, mc.player);
+                }
+                for (Slot target : container.inventorySlots) {
+                    if (target.inventory == mc.player.inventory || mc.player.inventory.getItemStack().isEmpty()) continue;
+                    ItemStack cursor = mc.player.inventory.getItemStack();
+                    if (target.isItemValid(cursor) && (!target.getHasStack()
+                            || ItemStack.areItemsEqual(target.getStack(), cursor)
+                            && ItemStack.areItemStackTagsEqual(target.getStack(), cursor))) {
+                        mc.playerController.windowClick(container.windowId, target.slotNumber, 0, ClickType.PICKUP, mc.player);
+                    }
+                }
+                if (!mc.player.inventory.getItemStack().isEmpty()) {
+                    mc.playerController.windowClick(container.windowId, slotToClick, 0, ClickType.PICKUP, mc.player);
+                }
+            }
             if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && mc.player != null) {
                 mc.player.sendMessage(new TextComponentString(String.format("§d[调试] §b执行存入操作，点击槽位: %d", slotToClick)));
             }
         }
+    }
+
+    private int depositPriority(ItemStack stack, List<String> names) {
+        int rank = names.indexOf(stack.getDisplayName());
+        if (stack.getItem() instanceof ItemShulkerBox) {
+            NBTTagCompound nbt = stack.getSubCompound("BlockEntityTag");
+            if (nbt != null) {
+                NonNullList<ItemStack> items = NonNullList.withSize(27, ItemStack.EMPTY);
+                ItemStackHelper.loadAllItems(nbt, items);
+                for (ItemStack item : items) {
+                    int nestedRank = item.isEmpty() ? -1 : names.indexOf(item.getDisplayName());
+                    if (nestedRank >= 0 && (rank < 0 || nestedRank < rank)) rank = nestedRank;
+                }
+            }
+        }
+        return rank < 0 ? Integer.MAX_VALUE : rank;
+    }
+
+    public static void restartOpenChestDeposit() {
+        openChestPolicyCompleted = false;
+        depositIdleTicks = 0;
+        if (currentOpenChestData != null) currentOpenChestData.autoDepositEnabled = true;
     }
 
     private void renderHighlightBox(BlockPos pos, float partialTicks) {

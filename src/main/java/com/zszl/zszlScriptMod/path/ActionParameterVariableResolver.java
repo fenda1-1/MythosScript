@@ -203,6 +203,9 @@ public final class ActionParameterVariableResolver {
 
     public static String normalizeReference(String rawText) {
         String text = safe(rawText).trim();
+        if (text.startsWith("${") && text.endsWith("}")) {
+            text = text.substring(2, text.length() - 1).trim();
+        }
         if (text.isEmpty()) {
             return "";
         }

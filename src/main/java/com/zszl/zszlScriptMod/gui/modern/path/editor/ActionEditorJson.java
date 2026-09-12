@@ -24,6 +24,25 @@ public final class ActionEditorJson {
     private ActionEditorJson() {
     }
 
+    // Keep incomplete edits as strings; validation runs on the completed action.
+    public static JsonElement numericDraft(String raw) {
+        String text = raw == null ? "" : raw;
+        String trimmed = text.trim();
+        try {
+            if (trimmed.matches("[-+]?\\d+")) {
+                return new JsonPrimitive(Long.parseLong(trimmed));
+            }
+            if (trimmed.matches("[-+]?(?:\\d+\\.\\d+|\\.\\d+|\\d+)(?:[eE][-+]?\\d+)?")) {
+                double number = Double.parseDouble(trimmed);
+                if (Double.isFinite(number)) {
+                    return new JsonPrimitive(number);
+                }
+            }
+        } catch (NumberFormatException ignored) {
+        }
+        return new JsonPrimitive(text);
+    }
+
     public static int readInt(JsonObject params, String key, int fallback, int min, int max) {
         if (params == null || !params.has(key) || !params.get(key).isJsonPrimitive()) {
             return clamp(fallback, min, max);

@@ -42,10 +42,32 @@ public class CapturedIdRuleManager {
     private static final String RULE_SHARE_PREFIX = "CIDR1.";
     private static final String CATEGORY_UNGROUPED = "未分组";
 
-    private static final List<CaptureRule> rules = new CopyOnWriteArrayList<>();
+    private static volatile List<CaptureRule> rules = Collections.emptyList();
     private static final Map<String, byte[]> capturedValues = new ConcurrentHashMap<>();
     private static final Map<String, Long> capturedUpdateVersions = new ConcurrentHashMap<>();
     private static final Map<String, Long> capturedRecaptureVersions = new ConcurrentHashMap<>();
+    private static final Map<String, RuntimeStatus> runtimeStatus = new ConcurrentHashMap<>();
+
+    private static final class RuntimeStatus {
+        final long matchedAt, matches;
+        final String result;
+        RuntimeStatus(long matchedAt, long matches, String result) {
+            this.matchedAt = matchedAt; this.matches = matches; this.result = result;
+        }
+    }
+
+    public static String getRuntimeStatus(String key) {
+        RuntimeStatus status = runtimeStatus.get(canonicalKey(key));
+        if (status == null) return "尚无实时命中";
+        String time = new java.text.SimpleDateFormat("HH:mm:ss.SSS").format(new java.util.Date(status.matchedAt));
+        return "实时命中 " + time + "（" + status.matches + " 次） | " + status.result;
+    }
+
+    private static void recordRuntimeStatus(String key, String message, boolean newMatch) {
+        runtimeStatus.compute(canonicalKey(key), (name, old) -> new RuntimeStatus(
+                newMatch || old == null ? System.currentTimeMillis() : old.matchedAt,
+                (old == null ? 0 : old.matches) + (newMatch ? 1 : 0), message));
+    }
     private static final List<String> customCategories = new CopyOnWriteArrayList<>();
     private static volatile boolean initialized = false;
 
@@ -141,7 +163,6 @@ public class CapturedIdRuleManager {
     public static synchronized void reloadRules() {
         ensureCustomConfigExists();
 
-        rules.clear();
         customCategories.clear();
 
         ConfigRoot customRoot = loadCustomConfigRoot();
@@ -153,7 +174,7 @@ public class CapturedIdRuleManager {
                 }
             }
         }
-        loadRulesFromRoot(customRoot);
+        rules = loadRulesFromRoot(customRoot);
         resetUpdateSequenceRuntimeState();
         clearStaleCapturedValues();
     }
@@ -190,14 +211,16 @@ public class CapturedIdRuleManager {
                 }
 
                 markRecaptured(rule.name);
+                recordRuntimeStatus(rule.name, "已匹配", true);
 
                 String sequenceMode = normalizeUpdateSequenceMode(rule.updateSequenceMode);
                 if ("recapture".equals(sequenceMode)) {
-                    triggerUpdateSequenceForRule(canonicalKey(rule.name), true);
+                    triggerUpdateSequenceForRule(rule, true);
                     continue;
                 }
 
                 if (matcher.groupCount() < rule.group) {
+                    recordRuntimeStatus(rule.name, "捕获分组不存在：" + rule.group, false);
                     continue;
                 }
 
@@ -207,9 +230,14 @@ public class CapturedIdRuleManager {
                     if ("hex".equalsIgnoreCase(rule.valueType)) {
                         parsed = applyRuleOffset(parsed, rule.offset);
                     }
-                    setCapturedId(rule.name, parsed);
+                    boolean changed = storeCapturedId(rule.name, parsed);
+                    recordRuntimeStatus(rule.name, changed ? "数值已保存" : "数值相同，更新模式不触发", false);
+                    if (changed) triggerUpdateSequenceForRule(rule, false);
+                } else {
+                    recordRuntimeStatus(rule.name, "捕获组无法转换为数值", false);
                 }
             } catch (Exception e) {
+                recordRuntimeStatus(rule.name, "处理失败：" + e.getMessage(), false);
                 zszlScriptMod.LOGGER.error("[CapturedId] 规则执行失败: {}", rule.name, e);
             }
         }
@@ -235,21 +263,26 @@ public class CapturedIdRuleManager {
 
     public static void setCapturedId(String key, byte[] value) {
         initialize();
+        if (storeCapturedId(key, value)) triggerUpdateSequenceForRule(canonicalKey(resolveRuleName(key)));
+    }
+
+    private static boolean storeCapturedId(String key, byte[] value) {
         if (isBlank(key)) {
-            return;
+            return false;
         }
         String resolvedKey = canonicalKey(resolveRuleName(key));
         if (value == null || value.length == 0) {
             capturedValues.remove(resolvedKey);
-            return;
+            return false;
         }
         byte[] oldValue = capturedValues.get(resolvedKey);
         byte[] newValue = Arrays.copyOf(value, value.length);
         capturedValues.put(resolvedKey, newValue);
         if (!Arrays.equals(oldValue, newValue)) {
             markUpdated(resolvedKey);
-            triggerUpdateSequenceForRule(resolvedKey);
+            return true;
         }
+        return false;
     }
 
     public static byte[] getCapturedIdBytes(String key) {
@@ -272,6 +305,7 @@ public class CapturedIdRuleManager {
         capturedValues.clear();
         capturedUpdateVersions.clear();
         capturedRecaptureVersions.clear();
+        runtimeStatus.clear();
         resetUpdateSequenceRuntimeState();
     }
 
@@ -591,7 +625,7 @@ public class CapturedIdRuleManager {
         return copy;
     }
 
-    private static byte[] parseValue(String rawValue, String valueType, int byteLength) {
+    static byte[] parseValue(String rawValue, String valueType, int byteLength) {
         if (isBlank(rawValue)) {
             return null;
         }
@@ -633,7 +667,7 @@ public class CapturedIdRuleManager {
         return out;
     }
 
-    private static byte[] applyRuleOffset(byte[] baseValue, String offsetText) {
+    static byte[] applyRuleOffset(byte[] baseValue, String offsetText) {
         if (baseValue == null || baseValue.length == 0 || isBlank(offsetText)) {
             return baseValue;
         }
@@ -719,53 +753,65 @@ public class CapturedIdRuleManager {
     }
 
     private static void triggerUpdateSequenceForRule(String canonicalRuleName) {
-        triggerUpdateSequenceForRule(canonicalRuleName, false);
+        for (CaptureRule rule : rules) {
+            if (canonicalKey(rule.name).equals(canonicalRuleName)) {
+                triggerUpdateSequenceForRule(rule, false);
+                return;
+            }
+        }
     }
 
-    private static void triggerUpdateSequenceForRule(String canonicalRuleName, boolean forceRecapture) {
-        if (isBlank(canonicalRuleName)) {
+    private static void triggerUpdateSequenceForRule(CaptureRule rule, boolean forceRecapture) {
+        if (isBlank(rule.updateSequenceName)) {
+            recordRuntimeStatus(rule.name, "未绑定更新序列", false);
             return;
         }
-        for (CaptureRule rule : rules) {
-            if (rule == null || isBlank(rule.name)) {
-                continue;
-            }
-            if (!canonicalRuleName.equals(canonicalKey(rule.name))) {
-                continue;
-            }
-            if (isBlank(rule.updateSequenceName) || !PathSequenceManager.hasSequence(rule.updateSequenceName)) {
-                return;
-            }
-            long now = System.currentTimeMillis();
-            String mode = normalizeUpdateSequenceMode(rule.updateSequenceMode);
-            if (forceRecapture) {
-                if (!"recapture".equals(mode)) {
-                    return;
-                }
-            } else if ("recapture".equals(mode)) {
-                return;
-            }
-            if ("first".equals(mode)) {
-                if (rule.updateSequenceTriggered) {
-                    return;
-                }
-                rule.updateSequenceTriggered = true;
-            } else if ("cooldown".equals(mode)) {
-                if (now < rule.nextUpdateSequenceAllowedAt) {
-                    return;
-                }
-                rule.nextUpdateSequenceAllowedAt = now + Math.max(1, rule.updateSequenceCooldownMs);
-            }
-            Minecraft.getMinecraft().addScheduledTask(() -> {
+        final String sequenceName = rule.updateSequenceName.trim();
+        final String mode = normalizeUpdateSequenceMode(rule.updateSequenceMode);
+        if (forceRecapture != "recapture".equals(mode)) return;
+        recordRuntimeStatus(rule.name, "已排队启动：" + sequenceName, false);
+        Minecraft.getMinecraft().addScheduledTask(() -> {
                 try {
-                    PathSequenceManager.runPathSequence(rule.updateSequenceName);
+                    if (!rules.contains(rule) || !rule.enabled) {
+                        recordRuntimeStatus(rule.name, "规则已重新加载或停用，旧触发取消", false);
+                        return;
+                    }
+                    PathSequenceManager.PathSequence sequence = PathSequenceManager.getSequence(sequenceName);
+                    if (sequence == null || sequence.getSteps().isEmpty()) {
+                        recordRuntimeStatus(rule.name, "启动失败：序列不存在或没有步骤：" + sequenceName, false);
+                        zszlScriptMod.LOGGER.warn("[CapturedId] 序列不存在或没有步骤: {} -> {}", rule.name, sequenceName);
+                        return;
+                    }
+                    Minecraft mc = Minecraft.getMinecraft();
+                    if (mc.player == null || mc.world == null) {
+                        recordRuntimeStatus(rule.name, "启动失败：当前不在游戏世界", false);
+                        return;
+                    }
+                    synchronized (rule) {
+                        long now = System.currentTimeMillis();
+                        if ("first".equals(mode)) {
+                            if (rule.updateSequenceTriggered) {
+                                recordRuntimeStatus(rule.name, "首次更新模式已触发过", false);
+                                return;
+                            }
+                            rule.updateSequenceTriggered = true;
+                        } else if ("cooldown".equals(mode)) {
+                            if (now < rule.nextUpdateSequenceAllowedAt) {
+                                recordRuntimeStatus(rule.name, "冷却中", false);
+                                return;
+                            }
+                            rule.nextUpdateSequenceAllowedAt = now + Math.max(1, rule.updateSequenceCooldownMs);
+                        }
+                    }
+                    PathSequenceManager.runPathSequenceOnce(sequenceName);
+                    recordRuntimeStatus(rule.name, "已调用序列启动（1次）：" + sequenceName, false);
+                    zszlScriptMod.LOGGER.info("[CapturedId] 实时匹配后启动一次序列: {} -> {}", rule.name, sequenceName);
                 } catch (Exception e) {
+                    recordRuntimeStatus(rule.name, "启动异常：" + e.getMessage(), false);
                     zszlScriptMod.LOGGER.error("[CapturedId] 更新值后执行序列失败: {} -> {}", rule.name,
                             rule.updateSequenceName, e);
                 }
             });
-            return;
-        }
     }
 
     private static ConfigRoot loadConfigRoot(Path path) {
@@ -846,6 +892,7 @@ public class CapturedIdRuleManager {
         capturedValues.keySet().removeIf(key -> !validKeys.contains(key));
         capturedUpdateVersions.keySet().removeIf(key -> !validKeys.contains(key));
         capturedRecaptureVersions.keySet().removeIf(key -> !validKeys.contains(key));
+        runtimeStatus.keySet().removeIf(key -> !validKeys.contains(key));
     }
 
     private static List<String> parseAliasesCsv(String csv) {
@@ -943,23 +990,24 @@ public class CapturedIdRuleManager {
         return normalized;
     }
 
-    private static boolean matchesChannel(String expected, String actual) {
+    static boolean matchesChannel(String expected, String actual) {
         if (isBlank(expected)) {
             return true;
         }
         return expected.equalsIgnoreCase(actual);
     }
 
-    private static boolean matchesDirection(String expected, String actual) {
+    static boolean matchesDirection(String expected, String actual) {
         if (isBlank(expected) || "both".equalsIgnoreCase(expected)) {
             return true;
         }
         return expected.equalsIgnoreCase(actual);
     }
 
-    private static void loadRulesFromRoot(ConfigRoot root) {
+    private static List<CaptureRule> loadRulesFromRoot(ConfigRoot root) {
+        List<CaptureRule> loaded = new ArrayList<>();
         if (root == null || root.rules == null) {
-            return;
+            return loaded;
         }
 
         int customOrder = 0;
@@ -971,11 +1019,12 @@ public class CapturedIdRuleManager {
             try {
                 rule.compiledPattern = Pattern.compile(rule.pattern, Pattern.CASE_INSENSITIVE);
                 rule.customIndex = customOrder++;
-                rules.add(rule);
+                loaded.add(rule);
             } catch (Exception e) {
                 zszlScriptMod.LOGGER.error("[CapturedId] 编译规则失败: {}", rule.name, e);
             }
         }
+        return Collections.unmodifiableList(loaded);
     }
 
     private static void ensureCustomConfigExists() {

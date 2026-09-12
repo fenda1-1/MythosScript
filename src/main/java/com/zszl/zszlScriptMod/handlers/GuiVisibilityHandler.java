@@ -2,6 +2,10 @@ package com.zszl.zszlScriptMod.handlers;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
+import com.zszl.zszlScriptMod.utils.guiinspect.GuiElementInspector;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Best-effort cache for temporarily hiding and later restoring the current GUI.
@@ -9,7 +13,9 @@ import net.minecraft.client.gui.GuiScreen;
  */
 public final class GuiVisibilityHandler {
 
-    private static GuiScreen hiddenGui;
+    private static final Map<String, GuiScreen> hiddenGuis = new LinkedHashMap<>();
+    private static final Map<String, String> hiddenGuiLabels = new LinkedHashMap<>();
+    private static String latestHiddenGuiId;
 
     private GuiVisibilityHandler() {
     }
@@ -19,27 +25,58 @@ public final class GuiVisibilityHandler {
         if (mc == null || mc.currentScreen == null) {
             return false;
         }
-        hiddenGui = mc.currentScreen;
+        recordHiddenGui(mc.currentScreen, GuiElementInspector.getCurrentGuiTitle(mc));
         mc.displayGuiScreen(null);
         return true;
     }
 
     public static boolean showHiddenGui() {
+        return showHiddenGui("");
+    }
+
+    public static boolean showHiddenGui(String id) {
         Minecraft mc = Minecraft.getMinecraft();
-        if (mc == null || hiddenGui == null) {
+        GuiScreen guiToRestore = findHiddenGui(id);
+        if (mc == null || guiToRestore == null) {
             return false;
         }
-        GuiScreen guiToRestore = hiddenGui;
-        hiddenGui = null;
         mc.displayGuiScreen(guiToRestore);
         return true;
     }
 
-    public static boolean hasHiddenGui() {
-        return hiddenGui != null;
+    static synchronized String recordHiddenGui(GuiScreen screen, String title) {
+        if (screen == null) return null;
+        for (Map.Entry<String, GuiScreen> entry : hiddenGuis.entrySet()) {
+            if (entry.getValue() == screen) {
+                latestHiddenGuiId = entry.getKey();
+                return latestHiddenGuiId;
+            }
+        }
+        String id = UUID.randomUUID().toString();
+        String name = screen.getClass().getSimpleName();
+        if (name.isEmpty()) name = screen.getClass().getName();
+        String label = title == null || title.trim().isEmpty() ? name : title + " (" + name + ")";
+        hiddenGuis.put(id, screen);
+        hiddenGuiLabels.put(id, label + " #" + hiddenGuis.size());
+        latestHiddenGuiId = id;
+        return id;
     }
 
-    public static void reset() {
-        hiddenGui = null;
+    static synchronized GuiScreen findHiddenGui(String id) {
+        return hiddenGuis.get(id == null || id.trim().isEmpty() ? latestHiddenGuiId : id);
+    }
+
+    public static synchronized Map<String, String> getHiddenGuiChoices() {
+        return new LinkedHashMap<>(hiddenGuiLabels);
+    }
+
+    public static synchronized boolean hasHiddenGui() {
+        return !hiddenGuis.isEmpty();
+    }
+
+    public static synchronized void reset() {
+        hiddenGuis.clear();
+        hiddenGuiLabels.clear();
+        latestHiddenGuiId = null;
     }
 }

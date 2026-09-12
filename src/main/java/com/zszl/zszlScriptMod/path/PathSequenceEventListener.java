@@ -1203,6 +1203,7 @@ public class PathSequenceEventListener {
             case "autoeat":
             case "autoequip":
             case "autopickup":
+            case "toggle_auto_pickup":
                 resources.add(ResourceLockManager.Resource.INVENTORY);
                 break;
             case "pickup_nearby_items":
@@ -1227,6 +1228,7 @@ public class PathSequenceEventListener {
             case "hunt":
             case "follow_entity":
             case "toggle_kill_aura":
+            case "toggle_auto_follow":
                 resources.add(ResourceLockManager.Resource.COMBAT);
                 resources.add(ResourceLockManager.Resource.LOOK);
                 resources.add(ResourceLockManager.Resource.MOVE);
@@ -2672,6 +2674,10 @@ public class PathSequenceEventListener {
                 }
 
                 if (handleRuntimeControlAction(player, actions, actionData, resolvedActionData)) {
+                    if (tracking && "set_var".equalsIgnoreCase(resolvedActionData.type)
+                            && canContinueImmediateActionBurst(resolvedActionData, tickDelay, ++immediateBurstCount)) {
+                        continue;
+                    }
                     return;
                 }
 
@@ -2814,13 +2820,16 @@ public class PathSequenceEventListener {
     }
 
     private boolean canContinueImmediateActionBurst(ActionData actionData, int currentDelayTicks, int burstCount) {
-        if (!isZeroDelayAutoChestClick(actionData) || currentDelayTicks > 0) {
+        boolean immediateAction = isZeroDelayAutoChestClick(actionData)
+                || (actionData != null && ("set_var".equalsIgnoreCase(actionData.type)
+                        || "delay".equalsIgnoreCase(actionData.type)));
+        if (!immediateAction || currentDelayTicks > 0 || isPaused) {
             return false;
         }
         if (burstCount < 128) {
             return true;
         }
-        zszlScriptMod.LOGGER.warn("连续执行零延迟点击箱子格子动作过多，已切到下一 tick 继续。");
+        zszlScriptMod.LOGGER.warn("连续执行零延迟动作过多，已切到下一 tick 继续。");
         tickDelay = 1;
         return false;
     }
@@ -4481,7 +4490,7 @@ public class PathSequenceEventListener {
                 }
             }
             actionIndex++;
-            tickDelay = 2;
+            applyBuiltinSequenceDelay();
             consumeDebugProgress("控制流推进: set_var");
             return true;
         }

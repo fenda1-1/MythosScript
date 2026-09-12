@@ -33,6 +33,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Entity.class)
 public class MixinEntity {
 
+    @Inject(method = "applyEntityCollision", at = @At("HEAD"), cancellable = true, require = 1)
+    private void zszl$ignoreEntityPush(Entity other, CallbackInfo ci) {
+        if (MovementFeatureManager.hasNoCollision((Entity) (Object) this)
+                || MovementFeatureManager.hasNoCollision(other)) {
+            ci.cancel();
+        }
+    }
+
     @Inject(method = "turn", at = @At("HEAD"), cancellable = true)
     private void cancelTurnWhileOverlayOpen(float yaw, float pitch, CallbackInfo ci) {
         Minecraft mc = Minecraft.getMinecraft();

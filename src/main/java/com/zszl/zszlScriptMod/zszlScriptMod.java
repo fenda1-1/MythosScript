@@ -98,7 +98,7 @@ import java.nio.file.Path;
 public class zszlScriptMod {
     public static final String MODID = "zszl_script";
     public static final String NAME = "我的世界脚本";
-    public static final String VERSION = "v1.0.7";
+    public static final String VERSION = "v1.0.71";
 
     public static final Logger LOGGER = LogManager.getLogger(zszlScriptMod.class);
     public static zszlScriptMod instance;

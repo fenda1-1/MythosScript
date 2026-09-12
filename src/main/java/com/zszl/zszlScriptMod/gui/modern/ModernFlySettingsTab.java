@@ -198,7 +198,7 @@ public final class ModernFlySettingsTab {
             FlyHandler.stopMotionOnDisable = true;
             FlyHandler.enableNoCollision = true;
             FlyHandler.enableAntiKnockback = true;
-            FlyHandler.enableAntiKick = false;
+            FlyHandler.enableAntiKick = true;
             FlyHandler.horizontalSpeed = 0.85F;
             FlyHandler.verticalSpeed = 0.42F;
             FlyHandler.glideFallSpeed = 0.04F;

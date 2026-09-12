@@ -23,6 +23,7 @@ import com.zszl.zszlScriptMod.gui.modern.ModernSplitPane;
 import com.zszl.zszlScriptMod.gui.modern.ModernTreeGuide;
 import com.zszl.zszlScriptMod.gui.modern.ModernUiRenderer;
 import com.zszl.zszlScriptMod.gui.modern.form.ModernFormI18n;
+import com.zszl.zszlScriptMod.gui.modern.form.ModernPathSequencePicker;
 import com.zszl.zszlScriptMod.gui.modern.rules.AutoFollowAreaPicker;
 import com.zszl.zszlScriptMod.handlers.GoToAndOpenHandler;
 import com.zszl.zszlScriptMod.handlers.SortingManager;
@@ -94,6 +95,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         NONE,
         DELETE_WAREHOUSE,
         DELETE_CATEGORY,
+        DELETE_CHEST,
         DELETE_RULE,
         CLEAR_DESIGNATED,
         RELOAD
@@ -190,6 +192,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
 
     private final List<LeftHit> leftHits = new ArrayList<>();
     private final List<ChestHit> chestHits = new ArrayList<>();
+    private final Map<Integer, ModernMainLayout.Rect> chestDeleteBounds = new LinkedHashMap<>();
     private final List<RuleHit> ruleHits = new ArrayList<>();
     private final List<FieldHit> fieldHits = new ArrayList<>();
     private final List<TooltipHit> tooltipHits = new ArrayList<>();
@@ -201,6 +204,13 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
     private Warehouse selectedWarehouse;
     private Warehouse loadedRegionOwner;
     private ChestData loadedPolicyOwner;
+    private ModernTextField spreadNamesField;
+    private ModernTextField postDepositSequenceField;
+    private ModernPathSequencePicker postDepositSequencePicker;
+    private boolean loadingPolicyFields;
+    private boolean policyItemsEdited;
+    private boolean policyItemsClearRequested;
+    private boolean depositSlotsExpanded;
     private SortingRule loadedRuleOwner;
     private String selectedCategory = CATEGORY_ALL;
     private int selectedChestIndex = -1;
@@ -243,6 +253,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
     private final ModernHoverScrollbar inventoryInnerScrollbar = new ModernHoverScrollbar();
     private final ModernHoverScrollbar ruleInnerScrollbar = new ModernHoverScrollbar();
     private ModernMainLayout.Rect slotGridBounds;
+    private ModernMainLayout.Rect depositSlotGridBounds;
     private ModernMainLayout.Rect dialogBounds;
     private ModernMainLayout.Rect dialogConfirmBounds;
     private ModernMainLayout.Rect dialogCancelBounds;
@@ -273,10 +284,15 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
     private int slotCellSize;
     private int slotGap;
     private int slotDragStart = -1;
+    private int depositSlotCellSize;
+    private int depositSlotGap;
+    private int depositSlotDragStart = -1;
 
     private boolean initialized;
     private boolean draggingDivider;
     private boolean draggingSlots;
+    private boolean draggingDepositSlots;
+    private boolean depositSlotDragAddMode;
     private boolean withdrawShiftQuickMove = true;
     private DialogMode dialogMode = DialogMode.NONE;
     private ConfirmationMode confirmationMode = ConfirmationMode.NONE;
@@ -316,6 +332,20 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         chestSearchField = createField(fontRenderer, 128);
         inventorySearchField = createField(fontRenderer, 128);
         designatedField = createField(fontRenderer, MAX_TEXT_LENGTH);
+        designatedField.setChangeListener(value -> {
+            if (!loadingPolicyFields) {
+                policyItemsEdited = true;
+            }
+        });
+        spreadNamesField = createField(fontRenderer, MAX_TEXT_LENGTH);
+        postDepositSequenceField = createField(fontRenderer, MAX_TEXT_LENGTH);
+        postDepositSequencePicker = new ModernPathSequencePicker(name -> {
+            ChestData chest = selectedChest();
+            if (chest != null) {
+                chest.postDepositSequence = name == null ? "" : name.trim();
+            }
+        });
+        postDepositSequencePicker.ensureInitialized(fontRenderer);
         ruleNameField = createField(fontRenderer, 256);
         ruleKeywordsField = createField(fontRenderer, MAX_TEXT_LENGTH);
         dialogField = createField(fontRenderer, 128);
@@ -338,6 +368,9 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         updateCursor(ruleNameField);
         updateCursor(ruleKeywordsField);
         updateCursor(dialogField);
+        if (postDepositSequencePicker != null) {
+            postDepositSequencePicker.updateScreen();
+        }
     }
 
     @Override
@@ -348,12 +381,18 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         hoveredTooltip = "";
         leftHits.clear();
         chestHits.clear();
+        chestDeleteBounds.clear();
         ruleHits.clear();
         fieldHits.clear();
         tooltipHits.clear();
         actionBounds.clear();
         actionEnabled.clear();
         actionTooltips.clear();
+        // These bounds are page-local. Clear them before drawing the current page
+        // so an old region category control cannot intercept clicks on another page.
+        categoryChoiceBounds = null;
+        slotGridBounds = null;
+        depositSlotGridBounds = null;
         focusedFieldBeforeLayoutReset = findFocusedField();
         hideFields();
         dirtyForFrame = isDirty();
@@ -380,6 +419,10 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         drawFooter(fontRenderer, mouseX, mouseY);
 
         navigationActions.drawOverlay(mouseX, mouseY);
+        if (postDepositSequencePicker != null && postDepositSequencePicker.isOpen()) {
+            postDepositSequencePicker.draw(fontRenderer, bounds,
+                    "gui.modern.warehouse.post_sequence", mouseX, mouseY);
+        }
         if (contextBounds != null) {
             drawContextMenu(fontRenderer, mouseX, mouseY);
         }
@@ -673,6 +716,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
     }
 
     private int drawChestsView(FontRenderer fontRenderer, int y, int mouseX, int mouseY) {
+        syncScannedChestStates();
         int x = rightViewport.x + 8;
         int width = Math.max(1, rightViewport.width - 8 - ModernHoverScrollbar.GUTTER);
         y = drawSectionTitle(fontRenderer, "gui.modern.warehouse.u051", "gui.modern.warehouse.u052", x, y, width, mouseX, mouseY);
@@ -680,6 +724,9 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         y = drawActionLine(fontRenderer, y, "scan", "gui.modern.warehouse.u055", ActionTone.PRIMARY,
                 sourceByDraft.get(selectedWarehouse) != null,
                 "gui.modern.warehouse.u056", mouseX, mouseY);
+        y = drawActionLine(fontRenderer, y, "scan_unscanned", "gui.modern.warehouse.scan_unscanned",
+                ActionTone.DEFAULT, sourceByDraft.get(selectedWarehouse) != null,
+                "gui.modern.warehouse.scan_unscanned_help", mouseX, mouseY);
 
         int listHeight = Math.max(46, Math.min(154, rightViewport.height / 2));
         ModernMainLayout.Rect listPanel = new ModernMainLayout.Rect(x, y, width, listHeight);
@@ -720,11 +767,19 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
                 String label = chest == null ? "gui.modern.warehouse.u058" : formatPos(chest.pos);
                 String details = chest == null ? "" : ModernFormI18n.tr(chest.hasBeenScanned ? "gui.modern.warehouse.u059" : "gui.modern.warehouse.u060")
                         + " · 规则 " + sortingRuleCount(chest);
+                ModernMainLayout.Rect delete = new ModernMainLayout.Rect(row.right() - 23, row.y + 2, 20, 20);
+                chestDeleteBounds.put(actualIndex, delete);
+                boolean deleteHovered = delete.contains(mouseX, mouseY);
+                ModernUiRenderer.drawSubtlePanel(delete.x, delete.y, delete.width, delete.height, 4,
+                        deleteHovered ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SURFACE,
+                        deleteHovered ? ModernUiRenderer.DANGER : ModernUiRenderer.BORDER_SUBTLE);
+                ModernUiRenderer.drawIcon(ModernUiRenderer.Icon.CLOSE, delete.x + 3, delete.y + 3, 14,
+                        deleteHovered ? ModernUiRenderer.DANGER : ModernUiRenderer.MUTED_TEXT);
                 ModernUiRenderer.drawText(fontRenderer, label, row.x + 19, row.y + 3,
                         selected ? ModernUiRenderer.TEXT : ModernUiRenderer.SUBTLE_TEXT,
-                        Math.max(1, row.width - 25));
+                        Math.max(1, row.width - 50));
                 ModernUiRenderer.drawText(fontRenderer, details, row.x + 19, row.y + 13,
-                        ModernUiRenderer.MUTED_TEXT, Math.max(1, row.width - 25));
+                        ModernUiRenderer.MUTED_TEXT, Math.max(1, row.width - 50));
                 chestHits.add(new ChestHit(actualIndex, chest, row));
             }
         }
@@ -844,6 +899,21 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             return y + 42;
         }
         ensurePolicyFields();
+        y = drawReadOnlyLine(fontRenderer, y, "gui.modern.warehouse.deposit_slots",
+                chest.depositInventorySlots == null || chest.depositInventorySlots.isEmpty()
+                        ? ModernFormI18n.tr("gui.modern.warehouse.all_inventory")
+                        : joinIntegers(chest.depositInventorySlots),
+                "gui.modern.warehouse.deposit_slots_help", mouseX, mouseY);
+        y = drawActionLine(fontRenderer, y, "deposit_slots", "gui.modern.warehouse.select_deposit_slots",
+                ActionTone.DEFAULT, true, "gui.modern.warehouse.deposit_slots_help", mouseX, mouseY);
+        if (depositSlotsExpanded) {
+            y = drawDepositSlots(fontRenderer, y, chest, mouseX, mouseY);
+        }
+        y = drawToggleLine(fontRenderer, y, "spread_after_deposit", "gui.modern.warehouse.spread_after_deposit",
+                chest.spreadAfterDeposit, "gui.modern.warehouse.spread_help", mouseX, mouseY);
+        y = drawFieldLine(fontRenderer, y, "gui.modern.warehouse.spread_names", spreadNamesField,
+                "gui.modern.warehouse.spread_help", mouseX, mouseY);
+        y = drawPostDepositSequencePicker(fontRenderer, y, chest, width, mouseX, mouseY);
         y = drawFieldLine(fontRenderer, y, "gui.modern.warehouse.u078", designatedField,
                 "gui.modern.warehouse.u079", mouseX, mouseY);
         y = drawActionLine(fontRenderer, y, "generate_designated", "gui.modern.warehouse.u080",
@@ -868,6 +938,42 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         y = drawActionLine(fontRenderer, y, "withdraw", "gui.modern.warehouse.u100", ActionTone.DEFAULT, true,
                 "gui.modern.warehouse.u101", mouseX, mouseY);
         return y + 8;
+    }
+
+    private int drawPostDepositSequencePicker(FontRenderer fontRenderer, int y, ChestData chest, int width,
+            int mouseX, int mouseY) {
+        int x = rightViewport.x + 8;
+        ModernUiRenderer.drawText(fontRenderer, "gui.modern.warehouse.post_sequence", x, y + 6,
+                ModernUiRenderer.SUBTLE_TEXT, Math.max(1, Math.min(92, width / 3) - 7));
+        int labelWidth = Math.min(92, Math.max(50, width / 3));
+        ModernMainLayout.Rect button = new ModernMainLayout.Rect(x + labelWidth, y,
+                Math.max(1, width - labelWidth), 21);
+        String value = chest == null || chest.postDepositSequence == null || chest.postDepositSequence.trim().isEmpty()
+                ? "gui.modern.warehouse.choose_sequence" : chest.postDepositSequence;
+        drawChoiceButton(fontRenderer, button, value, chest != null && !safe(chest.postDepositSequence).trim().isEmpty(),
+                mouseX, mouseY);
+        actionBounds.put("post_sequence_picker", button);
+        actionEnabled.put("post_sequence_picker", Boolean.TRUE);
+        actionTooltips.put("post_sequence_picker", "gui.modern.warehouse.post_sequence_help");
+        return y + 27;
+    }
+
+    private int drawDepositSlots(FontRenderer font, int y, ChestData chest, int mouseX, int mouseY) {
+        int width = Math.max(9, rightViewport.width - 16 - ModernHoverScrollbar.GUTTER);
+        int cell = Math.max(1, Math.min(28, width / 9));
+        int x = rightViewport.x + 8 + Math.max(0, (width - cell * 9) / 2);
+        depositSlotCellSize = cell;
+        depositSlotGap = 0;
+        depositSlotGridBounds = new ModernMainLayout.Rect(x, y, cell * 9, cell * 4);
+        for (int visible = 0; visible < 36; visible++) {
+            int raw = visible < 27 ? visible + 9 : visible - 27;
+            boolean selected = chest.depositInventorySlots != null && chest.depositInventorySlots.contains(raw);
+            ModernMainLayout.Rect slot = new ModernMainLayout.Rect(x + visible % 9 * cell,
+                    y + visible / 9 * cell, cell - 1, cell - 1);
+            drawChoiceButton(font, slot, String.valueOf(visible + 1), selected, mouseX, mouseY);
+        }
+        return drawActionLine(font, y + cell * 4 + 4, "deposit_slots_clear", "gui.modern.warehouse.all_inventory",
+                ActionTone.DEFAULT, true, "gui.modern.warehouse.deposit_slots_help", mouseX, mouseY);
     }
 
     private int drawSortingView(FontRenderer fontRenderer, int y, int mouseX, int mouseY) {
@@ -1465,13 +1571,23 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         if (!initialized || bounds == null || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
+        if (postDepositSequencePicker != null && postDepositSequencePicker.isOpen()) {
+            return postDepositSequencePicker.mouseClicked(mouseX, mouseY);
+        }
         if (dialogMode != DialogMode.NONE) {
             return handleDialogClick(mouseX, mouseY, mouseButton);
         }
         if (confirmationMode != ConfirmationMode.NONE) {
             return handleConfirmationClick(mouseX, mouseY, mouseButton);
         }
-        if (navigationActions.mouseClicked(mouseX, mouseY, mouseButton)) return true;
+        // A navigation chooser may still be open from the previous region page.
+        // Let a click on the editor close that chooser and continue to the real
+        // field hit test instead of consuming the click as a group selection.
+        if (navigationActions.isOpen() && editorBounds != null && editorBounds.contains(mouseX, mouseY)) {
+            navigationActions.close();
+        } else if (navigationActions.mouseClicked(mouseX, mouseY, mouseButton)) {
+            return true;
+        }
         if (mouseButton == 1 && navigationContext(mouseX, mouseY)) return true;
         if (contextBounds != null) {
             if (handleContextClick(mouseX, mouseY, mouseButton)) {
@@ -1572,7 +1688,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         if (!rightViewport.contains(mouseX, mouseY)) {
             return true;
         }
-        if (categoryChoiceBounds != null && categoryChoiceBounds.contains(mouseX, mouseY)) {
+        if (view == View.REGION && categoryChoiceBounds != null && categoryChoiceBounds.contains(mouseX, mouseY)) {
             clearFieldFocusExcept(null);
             navigationActions.choose("选择分组", categories, categoryField.getText(), value -> {
                 categoryField.setText(value);
@@ -1587,6 +1703,20 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
                 return true;
             }
         }
+        if (view == View.POLICY && depositSlotsExpanded && depositSlotGridBounds != null
+                && depositSlotGridBounds.contains(mouseX, mouseY)) {
+            int visibleSlot = depositSlotAt(mouseX, mouseY);
+            ChestData chest = selectedChest();
+            if (visibleSlot >= 0 && chest != null) {
+                int rawSlot = visibleToRawDepositSlot(visibleSlot);
+                LinkedHashSet<Integer> selected = selectedDepositSlotSet(chest);
+                depositSlotDragStart = visibleSlot;
+                depositSlotDragAddMode = !selected.contains(rawSlot);
+                applyDepositSlotRectangle(chest, visibleSlot, visibleSlot);
+                draggingDepositSlots = true;
+                return true;
+            }
+        }
         for (Map.Entry<String, ModernMainLayout.Rect> entry : actionBounds.entrySet()) {
             if (entry.getValue() != null && entry.getValue().contains(mouseX, mouseY)) {
                 if (Boolean.TRUE.equals(actionEnabled.get(entry.getKey()))) {
@@ -1596,6 +1726,15 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             }
         }
         if (view == View.CHESTS && chestListViewport != null && chestListViewport.contains(mouseX, mouseY)) {
+            for (Map.Entry<Integer, ModernMainLayout.Rect> entry : chestDeleteBounds.entrySet()) {
+                if (entry.getValue().contains(mouseX, mouseY)) {
+                    ChestData chest = chestAt(selectedWarehouse, entry.getKey());
+                    if (chest != null) {
+                        requestDeleteChest(chest);
+                    }
+                    return true;
+                }
+            }
             for (int i = chestHits.size() - 1; i >= 0; i--) {
                 ChestHit hit = chestHits.get(i);
                 if (hit.bounds.contains(mouseX, mouseY)) {
@@ -1740,6 +1879,9 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
 
     @Override
     public boolean keyTyped(char typedChar, int keyCode) {
+        if (postDepositSequencePicker != null && postDepositSequencePicker.isOpen()) {
+            return postDepositSequencePicker.keyTyped(typedChar, keyCode);
+        }
         if (navigationActions.keyTyped(typedChar, keyCode)) return true;
         if (!initialized) {
             return false;
@@ -1824,6 +1966,9 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
 
     @Override
     public boolean mouseClickMove(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
+        if (postDepositSequencePicker != null && postDepositSequencePicker.isOpen()) {
+            return postDepositSequencePicker.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
+        }
         if (clickedMouseButton == 0 && sectionNavigation.drag(mouseX, mouseY)) return true;
         if (clickedMouseButton != 0) {
             return false;
@@ -1845,13 +1990,23 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             }
             return true;
         }
+        if (draggingDepositSlots && depositSlotGridBounds != null) {
+            int slot = depositSlotAt(mouseX, mouseY);
+            if (slot >= 0) {
+                applyDepositSlotRectangle(selectedChest(), depositSlotDragStart, slot);
+            }
+            return true;
+        }
         return false;
     }
 
     @Override
     public boolean mouseReleased(int mouseX, int mouseY, int state) {
+        if (postDepositSequencePicker != null && postDepositSequencePicker.isOpen()) {
+            return postDepositSequencePicker.mouseReleased(mouseX, mouseY, state);
+        }
         sectionNavigation.release();
-        if (state == 0 && (draggingDivider || isAnyScrollbarDragging() || draggingSlots)) {
+        if (state == 0 && (draggingDivider || isAnyScrollbarDragging() || draggingSlots || draggingDepositSlots)) {
             if (draggingDivider) {
                 MainUiLayoutManager.setModernSplitRatio("warehouse.navigation", navigationRatio);
             }
@@ -1859,6 +2014,8 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             endAllScrollbarDrags();
             draggingSlots = false;
             slotDragStart = -1;
+            draggingDepositSlots = false;
+            depositSlotDragStart = -1;
             return true;
         }
         return false;
@@ -1871,6 +2028,9 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
 
     @Override
     public boolean handleMouseWheel(int wheel, int mouseX, int mouseY) {
+        if (postDepositSequencePicker != null && postDepositSequencePicker.isOpen()) {
+            return postDepositSequencePicker.handleMouseWheel(wheel, mouseX, mouseY);
+        }
         if (navigationActions.wheel(wheel)) return true;
         if (wheel == 0 || bounds == null || !bounds.contains(mouseX, mouseY)
                 || dialogMode != DialogMode.NONE || confirmationMode != ConfirmationMode.NONE) {
@@ -1910,6 +2070,9 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
 
     @Override
     public boolean handleEscape() {
+        if (postDepositSequencePicker != null && postDepositSequencePicker.isOpen()) {
+            return postDepositSequencePicker.handleEscape();
+        }
         if (navigationActions.isOpen()) { navigationActions.close(); return true; }
         if (dialogMode != DialogMode.NONE) {
             closeDialog();
@@ -1924,11 +2087,13 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             contextMenu.clear();
             return true;
         }
-            if (draggingDivider || isAnyScrollbarDragging() || draggingSlots) {
+            if (draggingDivider || isAnyScrollbarDragging() || draggingSlots || draggingDepositSlots) {
                 draggingDivider = false;
                 endAllScrollbarDrags();
                 draggingSlots = false;
                 slotDragStart = -1;
+                draggingDepositSlots = false;
+                depositSlotDragStart = -1;
                 return true;
         }
         return false;
@@ -1936,6 +2101,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
 
     @Override
     public boolean isTextInputFocused() {
+        if (postDepositSequencePicker != null && postDepositSequencePicker.isTextInputFocused()) return true;
         if (navigationActions.isOpen()) return true;
         return isAnyFieldFocused();
     }
@@ -2047,10 +2213,30 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         if (key == null) {
             return;
         }
-        if ("area_picker".equals(key)) {
+        if ("deposit_slots".equals(key)) {
+            depositSlotsExpanded = !depositSlotsExpanded;
+        } else if ("deposit_slots_clear".equals(key)) {
+            if (selectedChest() != null) selectedChest().depositInventorySlots = new ArrayList<>();
+        } else if (key.startsWith("deposit_slot_")) {
+            ChestData chest = selectedChest();
+            if (chest != null) {
+                if (chest.depositInventorySlots == null) chest.depositInventorySlots = new ArrayList<>();
+                Integer slot = Integer.valueOf(key.substring("deposit_slot_".length()));
+                if (!chest.depositInventorySlots.remove(slot)) chest.depositInventorySlots.add(slot);
+            }
+        } else if ("spread_after_deposit".equals(key)) {
+            if (selectedChest() != null) selectedChest().spreadAfterDeposit = !selectedChest().spreadAfterDeposit;
+        } else if ("post_sequence_picker".equals(key)) {
+            ChestData chest = selectedChest();
+            if (chest != null && postDepositSequencePicker != null) {
+                postDepositSequencePicker.open(chest.postDepositSequence);
+            }
+        } else if ("area_picker".equals(key)) {
             startAreaPicker();
         } else if ("scan".equals(key)) {
             scanSelectedWarehouse();
+        } else if ("scan_unscanned".equals(key)) {
+            scanUnscannedChests();
         } else if ("region_active".equals(key)) {
             if (selectedWarehouse != null) {
                 selectedWarehouse.isActive = !selectedWarehouse.isActive;
@@ -2165,6 +2351,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             return;
         }
         source = sourceByDraft.get(selectedWarehouse);
+        BlockPos selectedChestPos = selectedChest() == null ? null : selectedChest().pos;
         try {
             applyWarehouseValues(source, selectedWarehouse);
             WarehouseManager.scanForChestsInWarehouse(source);
@@ -2174,9 +2361,49 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             rebaseCommittedWarehouse(source, selectedWarehouse);
             rebaseCommittedCategoryAdd(selectedWarehouse.category);
             view = View.CHESTS;
+            restoreChestSelection(selectedChestPos, "");
             setStatus("gui.modern.warehouse.u173", ModernUiRenderer.SUCCESS);
         } catch (RuntimeException exception) {
             setStatus(ModernFormI18n.tr("gui.modern.warehouse.fmt.scan_fail", safe(exception.getMessage())), ModernUiRenderer.WARNING);
+        }
+    }
+
+    private void scanUnscannedChests() {
+        if (selectedWarehouse == null) {
+            setStatus("gui.modern.warehouse.u171", ModernUiRenderer.WARNING);
+            return;
+        }
+        Warehouse source = sourceByDraft.get(selectedWarehouse);
+        if (source == null) {
+            setStatus("gui.modern.warehouse.u172", ModernUiRenderer.WARNING);
+            return;
+        }
+        int before = 0;
+        if (source.chests != null) {
+            for (ChestData chest : source.chests) {
+                if (chest != null && !chest.hasBeenScanned) {
+                    before++;
+                }
+            }
+        }
+        boolean started = WarehouseEventHandler.startScanUnscannedChests(source);
+        syncScannedChestStates();
+        int remaining = 0;
+        if (source.chests != null) {
+            for (ChestData chest : source.chests) {
+                if (chest != null && !chest.hasBeenScanned) {
+                    remaining++;
+                }
+            }
+        }
+        if (started) {
+            setStatus(ModernFormI18n.tr("gui.modern.warehouse.fmt.scan_unscanned", String.valueOf(before)),
+                    ModernUiRenderer.SUCCESS);
+        } else if (before > remaining) {
+            setStatus(ModernFormI18n.tr("gui.modern.warehouse.fmt.scan_unscanned", String.valueOf(before - remaining)),
+                    ModernUiRenderer.SUCCESS);
+        } else {
+            setStatus("gui.modern.warehouse.scan_unscanned_none", ModernUiRenderer.SUBTLE_TEXT);
         }
     }
 
@@ -2262,6 +2489,8 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         view = next;
         rightScroll = positions[view.ordinal()];
         draggingSlots = false;
+        draggingDepositSlots = false;
+        depositSlotDragStart = -1;
 
     }
 
@@ -2420,7 +2649,13 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             return;
         }
         if (loadedPolicyOwner != chest) {
-            designatedField.setText(joinStrings(safeSet(chest.designatedItems)));
+            loadingPolicyFields = true;
+            designatedField.setText(String.join(", ", WarehouseEventHandler.orderedDepositNames(chest)));
+            spreadNamesField.setText(safe(chest.spreadItemNames));
+            postDepositSequenceField.setText(safe(chest.postDepositSequence));
+            loadingPolicyFields = false;
+            policyItemsEdited = false;
+            policyItemsClearRequested = false;
             loadedPolicyOwner = chest;
         }
     }
@@ -2489,7 +2724,20 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         if (chest == null || designatedField == null || loadedPolicyOwner != chest) {
             return true;
         }
-        chest.designatedItems = new HashSet<>(splitStrings(designatedField.getText()));
+        if (policyItemsEdited || policyItemsClearRequested) {
+            chest.designatedItems = new HashSet<>(splitStrings(designatedField.getText()));
+            chest.depositItemOrder = new ArrayList<>(splitStrings(designatedField.getText()));
+            chest.depositItemsConfigured = true;
+        } else if ((designatedField.getText() == null || designatedField.getText().trim().isEmpty())
+                && chest.designatedItems != null && !chest.designatedItems.isEmpty()) {
+            // A render-only field reset must never erase a saved policy.
+            loadingPolicyFields = true;
+            designatedField.setText(String.join(", ", WarehouseEventHandler.orderedDepositNames(chest)));
+            loadingPolicyFields = false;
+        }
+        policyItemsEdited = false;
+        policyItemsClearRequested = false;
+        chest.spreadItemNames = spreadNamesField.getText().trim();
         return true;
     }
 
@@ -2520,7 +2768,8 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
                     || !coordinateTextMatches(z2Field, selectedWarehouse.z2);
         }
         if (view == View.POLICY && selectedChest() != null && loadedPolicyOwner == selectedChest()) {
-            return !joinStrings(safeSet(selectedChest().designatedItems)).equals(designatedField.getText());
+            return !String.join(", ", WarehouseEventHandler.orderedDepositNames(selectedChest())).equals(designatedField.getText())
+                    || !safe(selectedChest().spreadItemNames).equals(spreadNamesField.getText());
         }
         if (view == View.SORTING && selectedRule() != null && loadedRuleOwner == selectedRule()) {
             SortingRule rule = selectedRule();
@@ -2619,6 +2868,18 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         confirmationCategory = "";
     }
 
+    private void requestDeleteChest(ChestData chest) {
+        if (chest == null || selectedWarehouse == null) {
+            setStatus("gui.modern.warehouse.u171", ModernUiRenderer.WARNING);
+            return;
+        }
+        confirmationMode = ConfirmationMode.DELETE_CHEST;
+        confirmationChest = chest;
+        confirmationWarehouse = selectedWarehouse;
+        confirmationRule = null;
+        confirmationCategory = "";
+    }
+
     private void requestClearDesignated() {
         ChestData chest = selectedChest();
         if (chest == null || designatedCount(chest) == 0) {
@@ -2646,6 +2907,8 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             return "gui.modern.warehouse.u192";
         case DELETE_CATEGORY:
             return "gui.modern.warehouse.u193";
+        case DELETE_CHEST:
+            return "gui.modern.warehouse.delete_chest_title";
         case DELETE_RULE:
             return "gui.modern.warehouse.u194";
         case CLEAR_DESIGNATED:
@@ -2665,6 +2928,8 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
                     confirmationWarehouse == null ? "" : safe(confirmationWarehouse.name));
         case DELETE_CATEGORY:
             return ModernFormI18n.tr("gui.modern.warehouse.fmt.delete_group", confirmationCategory);
+        case DELETE_CHEST:
+            return ModernFormI18n.tr("gui.modern.warehouse.fmt.delete_chest", confirmationChest == null ? "" : formatPos(confirmationChest.pos));
         case DELETE_RULE:
             return ModernFormI18n.tr("gui.modern.warehouse.fmt.delete_rule",
                     confirmationRule == null ? "" : safe(confirmationRule.name));
@@ -2689,12 +2954,20 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             deleteWarehouseNow(warehouse);
         } else if (pending == ConfirmationMode.DELETE_CATEGORY) {
             deleteCategoryNow(category);
+        } else if (pending == ConfirmationMode.DELETE_CHEST) {
+            deleteChestNow(warehouse, chest);
         } else if (pending == ConfirmationMode.DELETE_RULE) {
             deleteRuleNow(chest, rule);
         } else if (pending == ConfirmationMode.CLEAR_DESIGNATED) {
             if (chest != null) {
+                policyItemsClearRequested = true;
                 chest.designatedItems = new HashSet<>();
+                chest.depositItemOrder = new ArrayList<>();
+                loadingPolicyFields = true;
+                designatedField.setText("");
+                loadingPolicyFields = false;
                 loadedPolicyOwner = null;
+                ensurePolicyFields();
                 setStatus("gui.modern.warehouse.u205", ModernUiRenderer.SUCCESS);
             }
         } else if (pending == ConfirmationMode.RELOAD) {
@@ -2766,6 +3039,26 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         selectedRuleIndex = Math.min(selectedRuleIndex, chest.sortingRules.size() - 1);
         loadedRuleOwner = null;
         setStatus("gui.modern.warehouse.u211", ModernUiRenderer.SUCCESS);
+    }
+
+    private void deleteChestNow(Warehouse warehouse, ChestData chest) {
+        int removedIndex = warehouse == null || warehouse.chests == null || chest == null
+                ? -1 : warehouse.chests.indexOf(chest);
+        if (removedIndex < 0 || !warehouse.chests.remove(chest)) {
+            setStatus("gui.modern.warehouse.delete_chest_failed", ModernUiRenderer.WARNING);
+            return;
+        }
+        if (warehouse == selectedWarehouse) {
+            if (selectedChestIndex == removedIndex) {
+                selectedChestIndex = Math.min(selectedChestIndex, warehouse.chests.size() - 1);
+            } else if (selectedChestIndex > removedIndex) {
+                selectedChestIndex--;
+            }
+            selectedRuleIndex = -1;
+            loadedPolicyOwner = null;
+            loadedRuleOwner = null;
+        }
+        setStatus("gui.modern.warehouse.delete_chest_done", ModernUiRenderer.SUCCESS);
     }
 
     private void openCategoryInput(DialogMode mode, String initial) {
@@ -2851,7 +3144,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         }
         ensureSortingRules(chest);
         SortingRule rule = new SortingRule();
-        rule.name = uniqueRuleName(chest, "gui.modern.warehouse.u218");
+        rule.name = uniqueRuleName(chest, ModernFormI18n.tr("gui.modern.warehouse.u218"));
         rule.enabled = true;
         rule.matchMode = SortingRule.MatchMode.ANY;
         rule.itemType = SortingRule.ItemType.ANY;
@@ -2944,6 +3237,65 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             }
         }
         rule.targetSlots = new ArrayList<>(selected);
+    }
+
+    private int depositSlotAt(int mouseX, int mouseY) {
+        if (depositSlotGridBounds == null || depositSlotCellSize <= 0
+                || !depositSlotGridBounds.contains(mouseX, mouseY)) {
+            return -1;
+        }
+        int step = Math.max(1, depositSlotCellSize + depositSlotGap);
+        int column = (mouseX - depositSlotGridBounds.x) / step;
+        int row = (mouseY - depositSlotGridBounds.y) / step;
+        if (column < 0 || column >= 9 || row < 0 || row >= 4) {
+            return -1;
+        }
+        int localX = (mouseX - depositSlotGridBounds.x) % step;
+        int localY = (mouseY - depositSlotGridBounds.y) % step;
+        if (localX >= depositSlotCellSize || localY >= depositSlotCellSize) {
+            return -1;
+        }
+        return row * 9 + column;
+    }
+
+    private int visibleToRawDepositSlot(int visibleSlot) {
+        // The display follows the Minecraft inventory layout: main inventory
+        // slots first, followed by the nine hotbar slots.
+        return visibleSlot < 27 ? visibleSlot + 9 : visibleSlot - 27;
+    }
+
+    private LinkedHashSet<Integer> selectedDepositSlotSet(ChestData chest) {
+        LinkedHashSet<Integer> selected = new LinkedHashSet<>();
+        if (chest != null && chest.depositInventorySlots != null) {
+            for (Integer slot : chest.depositInventorySlots) {
+                if (slot != null && slot.intValue() >= 0 && slot.intValue() < 36) {
+                    selected.add(slot);
+                }
+            }
+        }
+        return selected;
+    }
+
+    private void applyDepositSlotRectangle(ChestData chest, int firstVisible, int secondVisible) {
+        if (chest == null || firstVisible < 0 || secondVisible < 0) {
+            return;
+        }
+        int firstColumn = firstVisible % 9;
+        int firstRow = firstVisible / 9;
+        int secondColumn = secondVisible % 9;
+        int secondRow = secondVisible / 9;
+        LinkedHashSet<Integer> selected = selectedDepositSlotSet(chest);
+        for (int row = Math.min(firstRow, secondRow); row <= Math.max(firstRow, secondRow); row++) {
+            for (int column = Math.min(firstColumn, secondColumn); column <= Math.max(firstColumn, secondColumn); column++) {
+                int rawSlot = visibleToRawDepositSlot(row * 9 + column);
+                if (depositSlotDragAddMode) {
+                    selected.add(rawSlot);
+                } else {
+                    selected.remove(rawSlot);
+                }
+            }
+        }
+        chest.depositInventorySlots = new ArrayList<>(selected);
     }
 
     private int slotAt(int mouseX, int mouseY) {
@@ -3108,6 +3460,9 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         endAllScrollbarDrags();
         draggingSlots = false;
         slotDragStart = -1;
+        draggingDepositSlots = false;
+        depositSlotDragStart = -1;
+        depositSlotGridBounds = null;
         navigationScroll = 0;
         rightScroll = 0;
         chestListScroll = 0;
@@ -3448,6 +3803,28 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         return result;
     }
 
+    /** Copy only runtime scan data back from the committed warehouse. */
+    private void syncScannedChestStates() {
+        if (selectedWarehouse == null) {
+            return;
+        }
+        Warehouse source = sourceByDraft.get(selectedWarehouse);
+        if (source == null || source.chests == null || selectedWarehouse.chests == null) {
+            return;
+        }
+        for (ChestData draft : selectedWarehouse.chests) {
+            if (draft == null || draft.pos == null) {
+                continue;
+            }
+            ChestData committed = findChestByPosition(source.chests, draft.pos);
+            if (committed != null && committed.hasBeenScanned
+                    && (!draft.hasBeenScanned || !safe(draft.itemsNBTString).equals(safe(committed.itemsNBTString)))) {
+                draft.hasBeenScanned = true;
+                draft.itemsNBTString = committed.itemsNBTString;
+            }
+        }
+    }
+
     private ChestData selectedChest() {
         return chestAt(selectedWarehouse, selectedChestIndex);
     }
@@ -3723,6 +4100,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         copy.sortEnabled = source.sortEnabled;
         copy.autoDepositEnabled = source.autoDepositEnabled;
         copy.depositFrequency = source.depositFrequency;
+        copyDepositPolicy(copy, source);
         copy.designatedItems = new HashSet<>();
         if (source.designatedItems != null) {
             copy.designatedItems.addAll(source.designatedItems);
@@ -3738,12 +4116,23 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         return copy;
     }
 
+    private static void copyDepositPolicy(ChestData target, ChestData source) {
+        target.depositItemOrder = new ArrayList<>(WarehouseEventHandler.orderedDepositNames(source));
+        target.depositItemsConfigured = source.depositItemsConfigured;
+        target.depositInventorySlots = source.depositInventorySlots == null ? new ArrayList<Integer>()
+                : new ArrayList<>(source.depositInventorySlots);
+        target.spreadAfterDeposit = source.spreadAfterDeposit;
+        target.spreadItemNames = source.spreadItemNames;
+        target.postDepositSequence = source.postDepositSequence;
+    }
+
     private static SortingRule copySortingRule(SortingRule source) {
         SortingRule copy = new SortingRule();
         if (source == null) {
             return copy;
         }
-        copy.name = source.name;
+        copy.name = "gui.modern.warehouse.u218".equals(source.name)
+                ? ModernFormI18n.tr("gui.modern.warehouse.u218") : source.name;
         copy.enabled = source.enabled;
         copy.matchMode = source.matchMode == null ? SortingRule.MatchMode.ANY : source.matchMode;
         copy.itemType = source.itemType == null ? SortingRule.ItemType.ANY : source.itemType;
@@ -3807,6 +4196,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         target.depositFrequency = source.depositFrequency;
         target.designatedItems = source.designatedItems == null ? new HashSet<String>()
                 : new HashSet<>(source.designatedItems);
+        copyDepositPolicy(target, source);
         target.sortingRules = source.sortingRules == null ? new ArrayList<SortingRule>() : copyRulesStatic(source.sortingRules);
     }
 
@@ -3850,6 +4240,8 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         setHidden(chestSearchField);
         setHidden(inventorySearchField);
         setHidden(designatedField);
+        setHidden(spreadNamesField);
+        setHidden(postDepositSequenceField);
         setHidden(ruleNameField);
         setHidden(ruleKeywordsField);
         if (dialogMode == DialogMode.NONE) {
@@ -3885,7 +4277,8 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
 
     private ModernTextField[] allFields() {
         return new ModernTextField[] { searchField, nameField, categoryField, x1Field, z1Field, x2Field, z2Field,
-                chestSearchField, inventorySearchField, designatedField, ruleNameField, ruleKeywordsField, dialogField };
+                chestSearchField, inventorySearchField, designatedField, spreadNamesField, postDepositSequenceField,
+                ruleNameField, ruleKeywordsField, dialogField };
     }
 
     private ModernTextField findFocusedField() {

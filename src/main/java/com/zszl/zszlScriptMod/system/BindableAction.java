@@ -55,6 +55,7 @@ public enum BindableAction {
     TOGGLE_AUTO_FISHING("keybind.action.toggle_auto_fishing.name", "keybind.action.toggle_auto_fishing.desc"),
     TOGGLE_FLY("keybind.action.toggle_fly.name", "keybind.action.toggle_fly.desc"),
     TOGGLE_KILL_AURA("keybind.action.toggle_kill_aura.name", "keybind.action.toggle_kill_aura.desc"),
+    TOGGLE_AUTO_FOLLOW("keybind.action.toggle_auto_follow.name", "keybind.action.toggle_auto_follow.desc"),
     TOGGLE_AUTO_PICKUP("keybind.action.toggle_auto_pickup.name", "keybind.action.toggle_auto_pickup.desc"),
     TOGGLE_PACKET_CAPTURE("keybind.action.toggle_packet_capture.name", "keybind.action.toggle_packet_capture.desc"),
     TOGGLE_MOVEMENT_SPEED("keybind.action.toggle_movement_speed.name", "keybind.action.toggle_movement_speed.desc",

@@ -16,6 +16,7 @@ import com.google.gson.JsonObject;
 import com.zszl.zszlScriptMod.gui.modern.ModernUiRenderer;
 import com.zszl.zszlScriptMod.gui.path.GuiActionEditor.model.ExpressionTemplateCard;
 import com.zszl.zszlScriptMod.path.ActionVariableRegistry;
+import com.zszl.zszlScriptMod.path.DroppedPickupTarget;
 import com.zszl.zszlScriptMod.path.InventoryItemFilterExpressionEngine;
 import com.zszl.zszlScriptMod.path.LegacyActionRuntime;
 import com.zszl.zszlScriptMod.path.PathSequenceEventListener;
@@ -23,9 +24,12 @@ import com.zszl.zszlScriptMod.path.PathSequenceManager.ActionData;
 import com.zszl.zszlScriptMod.path.PathSequenceManager.PathSequence;
 import com.zszl.zszlScriptMod.path.PathSequenceManager.PathStep;
 import com.zszl.zszlScriptMod.path.runtime.ScopedRuntimeVariables;
+import com.zszl.zszlScriptMod.utils.CapturedIdPreviewValues;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.item.EntityXPOrb;
 import net.minecraft.item.ItemStack;
 
 /**
@@ -63,6 +67,17 @@ public final class ExpressionEditorPreview {
     }
 
     public static List<Line> build(String expression, Mode mode, Collection<PathSequence> sequences,
+            PathSequence sequence, int stepIndex, int actionIndex, ExpressionTemplateCard selectedTemplate) {
+        CapturedIdPreviewValues.Lookup captured = CapturedIdPreviewValues.current();
+        List<Line> report = LegacyActionRuntime.withPreviewCapturedIds(captured,
+                () -> buildWithCapturedIds(expression, mode, sequences, sequence, stepIndex, actionIndex, selectedTemplate));
+        for (Map.Entry<String, String> source : captured.sources().entrySet()) {
+            report.add(new Line("捕获ID " + source.getKey() + "：" + source.getValue(), ModernUiRenderer.SUBTLE_TEXT, 0));
+        }
+        return report;
+    }
+
+    private static List<Line> buildWithCapturedIds(String expression, Mode mode, Collection<PathSequence> sequences,
             PathSequence sequence, int stepIndex, int actionIndex, ExpressionTemplateCard selectedTemplate) {
         List<Line> lines = new ArrayList<Line>();
         String text = expression == null ? "" : expression.trim();
@@ -188,15 +203,45 @@ public final class ExpressionEditorPreview {
             return;
         }
         ItemStack held = mc.player.getHeldItemMainhand();
-        if (held == null || held.isEmpty()) {
+        EntityXPOrb experienceOrb = findNearestExperienceOrb(mc);
+        if ((held == null || held.isEmpty()) && experienceOrb == null) {
             lines.add(new Line("gui.modern.path.expr.u010", ModernUiRenderer.MUTED_TEXT, 0));
             return;
         }
-        boolean matched = InventoryItemFilterExpressionEngine.matches(held, mc.player.inventory.currentItem, text);
-        lines.add(new Line(tr("gui.modern.path.expr.fmt.preview_item", held.getDisplayName(), String.valueOf(held.getCount())),
-                ModernUiRenderer.SUBTLE_TEXT, 0));
-        lines.add(new Line(tr("gui.modern.path.expr.fmt.preview_result", tr(matched ? "gui.modern.path.expr.u011" : "gui.modern.path.expr.u012")),
-                matched ? ModernUiRenderer.SUCCESS : ModernUiRenderer.WARNING, 0));
+        if (held != null && !held.isEmpty()) {
+            boolean matched = InventoryItemFilterExpressionEngine.matches(held, mc.player.inventory.currentItem, text);
+            lines.add(new Line(tr("gui.modern.path.expr.fmt.preview_item", held.getDisplayName(), String.valueOf(held.getCount())),
+                    ModernUiRenderer.SUBTLE_TEXT, 0));
+            lines.add(new Line(tr("gui.modern.path.expr.fmt.preview_result", tr(matched ? "gui.modern.path.expr.u011" : "gui.modern.path.expr.u012")),
+                    matched ? ModernUiRenderer.SUCCESS : ModernUiRenderer.WARNING, 0));
+        }
+        if (experienceOrb != null) {
+            double distance = Math.sqrt(mc.player.getDistanceSq(experienceOrb));
+            boolean matched = InventoryItemFilterExpressionEngine.matches(experienceOrb, text, "common", distance);
+            lines.add(new Line(tr("gui.modern.path.expr.fmt.preview_drop", DroppedPickupTarget.getDisplayName(experienceOrb)),
+                    ModernUiRenderer.SUBTLE_TEXT, 0));
+            lines.add(new Line(tr("gui.modern.path.expr.fmt.preview_result", tr(matched ? "gui.modern.path.expr.u011" : "gui.modern.path.expr.u012")),
+                    matched ? ModernUiRenderer.SUCCESS : ModernUiRenderer.WARNING, 0));
+        }
+    }
+
+    private static EntityXPOrb findNearestExperienceOrb(Minecraft mc) {
+        if (mc == null || mc.player == null || mc.world == null || mc.world.loadedEntityList == null) {
+            return null;
+        }
+        EntityXPOrb nearest = null;
+        double bestDistanceSq = Double.MAX_VALUE;
+        for (Entity entity : mc.world.loadedEntityList) {
+            if (!(entity instanceof EntityXPOrb) || entity.isDead) {
+                continue;
+            }
+            double distanceSq = mc.player.getDistanceSq(entity);
+            if (distanceSq < bestDistanceSq) {
+                bestDistanceSq = distanceSq;
+                nearest = (EntityXPOrb) entity;
+            }
+        }
+        return nearest;
     }
 
     private static void appendReferences(List<Line> lines, Set<String> references, EvaluationContext context,

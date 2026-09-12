@@ -35,6 +35,19 @@ public final class LegacyActionRuntime {
     private static final Pattern TEMPLATE_PATTERN = Pattern.compile(
             "\\$\\{\\s*([a-zA-Z0-9_\\.\\[\\]+:\\-]+)\\s*\\}");
     private static final Map<String, ExpressionFunction> CUSTOM_FUNCTIONS = new ConcurrentHashMap<>();
+    private static final ThreadLocal<java.util.function.Function<String, String>> PREVIEW_CAPTURE_LOOKUP = new ThreadLocal<>();
+
+    public static <T> T withPreviewCapturedIds(java.util.function.Function<String, String> lookup,
+            java.util.function.Supplier<T> evaluation) {
+        java.util.function.Function<String, String> previous = PREVIEW_CAPTURE_LOOKUP.get();
+        PREVIEW_CAPTURE_LOOKUP.set(lookup);
+        try {
+            return evaluation.get();
+        } finally {
+            if (previous == null) PREVIEW_CAPTURE_LOOKUP.remove();
+            else PREVIEW_CAPTURE_LOOKUP.set(previous);
+        }
+    }
 
     public interface ExpressionFunction {
         Object apply(List<Object> args);
@@ -2036,7 +2049,9 @@ public final class LegacyActionRuntime {
             if (validationMode) {
                 return "00 00 00 00";
             }
-            String hex = CapturedIdRuleManager.getCapturedIdHex(normalizedKey);
+            java.util.function.Function<String, String> previewLookup = PREVIEW_CAPTURE_LOOKUP.get();
+            String hex = previewLookup == null ? CapturedIdRuleManager.getCapturedIdHex(normalizedKey)
+                    : previewLookup.apply(normalizedKey);
             if (hex == null || hex.trim().isEmpty()) {
                 throw error("函数 " + functionName + " 找不到已捕获ID: " + normalizedKey);
             }
