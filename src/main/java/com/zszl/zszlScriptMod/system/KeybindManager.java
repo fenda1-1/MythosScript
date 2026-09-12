@@ -18,6 +18,7 @@ import com.zszl.zszlScriptMod.gui.packet.PacketSequenceManager;
 import com.zszl.zszlScriptMod.utils.PacketCaptureHandler;
 import com.zszl.zszlScriptMod.handlers.AutoEatHandler;
 import com.zszl.zszlScriptMod.handlers.AutoFishingHandler;
+import com.zszl.zszlScriptMod.handlers.AutoFollowHandler;
 import com.zszl.zszlScriptMod.handlers.AutoPickupHandler;
 import com.zszl.zszlScriptMod.handlers.FlyHandler;
 import com.zszl.zszlScriptMod.handlers.KillAuraHandler;
@@ -470,6 +471,9 @@ public class KeybindManager {
                 break;
             case TOGGLE_KILL_AURA:
                 KillAuraHandler.INSTANCE.toggleEnabled();
+                break;
+            case TOGGLE_AUTO_FOLLOW:
+                AutoFollowHandler.toggleEnabledFromHotkey();
                 break;
             case TOGGLE_AUTO_PICKUP:
                 AutoPickupHandler.globalEnabled = !AutoPickupHandler.globalEnabled;

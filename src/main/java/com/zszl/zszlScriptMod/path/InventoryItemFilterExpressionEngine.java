@@ -6,6 +6,9 @@ import com.google.gson.JsonObject;
 import com.zszl.zszlScriptMod.handlers.ItemFilterHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.util.ITooltipFlag;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.item.EntityItem;
+import net.minecraft.entity.item.EntityXPOrb;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTBase;
@@ -194,6 +197,21 @@ public final class InventoryItemFilterExpressionEngine {
         return new Parser(text, ItemSnapshot.from(stack, slotIndex, rarity, distance), false).parseExpression();
     }
 
+    /** Matches a supported world drop, including an experience orb. */
+    public static boolean matches(Entity entity, String expression, String rarity, double distance) {
+        if (entity instanceof EntityItem) {
+            return matches(((EntityItem) entity).getItem(), -1, expression, rarity, distance);
+        }
+        if (!(entity instanceof EntityXPOrb)) {
+            return false;
+        }
+        String text = safe(expression).trim();
+        if (text.isEmpty()) {
+            return false;
+        }
+        return new Parser(text, ItemSnapshot.from((EntityXPOrb) entity, rarity, distance), false).parseExpression();
+    }
+
     private static List<String> normalizeExpressions(List<String> expressions) {
         List<String> normalized = new ArrayList<String>();
         if (expressions == null) {
@@ -231,6 +249,8 @@ public final class InventoryItemFilterExpressionEngine {
         private final String normalizedDisplayName;
         private final String registryName;
         private final String normalizedRegistryName;
+        private final String typeName;
+        private final String normalizedTypeName;
         private final int count;
         private final int slotIndex;
         private final int itemDamage;
@@ -242,19 +262,23 @@ public final class InventoryItemFilterExpressionEngine {
         private final String rarity;
         private final String normalizedRarity;
         private final double distance;
+        private final int experienceValue;
         private final List<String> tooltipLines;
         private final List<String> loreLines;
         private final List<KeyValueEntry> keyValueEntries;
         private final Map<String, List<String>> valuesByKey;
 
-        private ItemSnapshot(String displayName, String registryName, int count, int slotIndex, int itemDamage,
-                boolean hasNbt, String rawNbt, String searchableText, String rarity, double distance,
+        private ItemSnapshot(String displayName, String registryName, String typeName, int count, int slotIndex,
+                int itemDamage, boolean hasNbt, String rawNbt, String searchableText, String rarity, double distance,
+                int experienceValue,
                 List<String> tooltipLines, List<String> loreLines,
                 List<KeyValueEntry> keyValueEntries, Map<String, List<String>> valuesByKey) {
             this.displayName = safe(displayName);
             this.normalizedDisplayName = normalizeComparableText(this.displayName);
             this.registryName = safe(registryName);
             this.normalizedRegistryName = normalizeComparableText(this.registryName);
+            this.typeName = safe(typeName);
+            this.normalizedTypeName = normalizeComparableText(this.typeName);
             this.count = count;
             this.slotIndex = slotIndex;
             this.itemDamage = itemDamage;
@@ -266,6 +290,7 @@ public final class InventoryItemFilterExpressionEngine {
             this.rarity = safe(rarity);
             this.normalizedRarity = normalizeComparableText(this.rarity);
             this.distance = distance;
+            this.experienceValue = experienceValue;
             this.tooltipLines = tooltipLines == null ? Collections.<String>emptyList() : tooltipLines;
             this.loreLines = loreLines == null ? Collections.<String>emptyList() : loreLines;
             this.keyValueEntries = keyValueEntries == null ? Collections.<KeyValueEntry>emptyList() : keyValueEntries;
@@ -273,7 +298,7 @@ public final class InventoryItemFilterExpressionEngine {
         }
 
         private static ItemSnapshot empty() {
-            return new ItemSnapshot("", "", 0, -1, 0, false, "", "", "", 0.0D,
+            return new ItemSnapshot("", "", "", 0, -1, 0, false, "", "", "", 0.0D, 0,
                     new ArrayList<String>(), new ArrayList<String>(),
                     new ArrayList<KeyValueEntry>(), new LinkedHashMap<String, List<String>>());
         }
@@ -311,9 +336,21 @@ public final class InventoryItemFilterExpressionEngine {
                 collectNbtData("", stack.getTagCompound(), keyValueEntries, valuesByKey, loreLines);
             }
 
-            return new ItemSnapshot(displayName, registryText, stack.getCount(), slotIndex, stack.getItemDamage(),
-                    stack.hasTagCompound(), rawNbt, searchableText, rarity, distance, tooltipLines, loreLines, keyValueEntries,
+            return new ItemSnapshot(displayName, registryText, "item", stack.getCount(), slotIndex, stack.getItemDamage(),
+                    stack.hasTagCompound(), rawNbt, searchableText, rarity, distance, 0, tooltipLines, loreLines, keyValueEntries,
                     valuesByKey);
+        }
+
+        private static ItemSnapshot from(EntityXPOrb orb, String rarity, double distance) {
+            String searchableText = DroppedPickupTarget.getSearchableText(orb);
+            return new ItemSnapshot(DroppedPickupTarget.getDisplayName(orb),
+                    DroppedPickupTarget.getRegistryName(orb),
+                    DroppedPickupTarget.getTypeName(orb),
+                    DroppedPickupTarget.getCount(orb), -1, 0, false, "", searchableText,
+                    rarity == null ? "common" : rarity, distance,
+                    DroppedPickupTarget.getExperienceValue(orb),
+                    new ArrayList<String>(), new ArrayList<String>(),
+                    new ArrayList<KeyValueEntry>(), new LinkedHashMap<String, List<String>>());
         }
 
         private boolean matchesNbtText(String text) {
@@ -1354,6 +1391,9 @@ public final class InventoryItemFilterExpressionEngine {
                 case "id":
                 case "registry":
                     return snapshot.registryName;
+                case "type":
+                case "entitytype":
+                    return snapshot.typeName;
                 case "count":
                 case "stacksize":
                     return snapshot.count;
@@ -1376,6 +1416,11 @@ public final class InventoryItemFilterExpressionEngine {
                 case "distance":
                 case "dist":
                     return snapshot.distance;
+                case "xp":
+                case "xpvalue":
+                case "experience":
+                case "experiencevalue":
+                    return snapshot.experienceValue;
                 case "alltext":
                 case "search":
                     return snapshot.searchableText;

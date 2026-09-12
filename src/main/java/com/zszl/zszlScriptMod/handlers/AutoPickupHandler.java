@@ -8,6 +8,7 @@ import com.zszl.zszlScriptMod.PerformanceMonitor;
 import com.zszl.zszlScriptMod.zszlScriptMod;
 import com.zszl.zszlScriptMod.config.DebugModule;
 import com.zszl.zszlScriptMod.config.ModConfig;
+import com.zszl.zszlScriptMod.path.DroppedPickupTarget;
 import com.zszl.zszlScriptMod.path.PathSequenceEventListener;
 import com.zszl.zszlScriptMod.path.PathSequenceManager;
 import com.zszl.zszlScriptMod.shadowbaritone.api.BaritoneAPI;
@@ -28,6 +29,7 @@ import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.item.EntityItem;
+import net.minecraft.entity.item.EntityXPOrb;
 import net.minecraft.item.ItemStack;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.util.math.BlockPos;
@@ -78,7 +80,7 @@ public class AutoPickupHandler {
 
     private State currentState = State.IDLE;
     private AutoPickupRule activeRule = null;
-    private EntityItem currentTargetItem = null;
+    private Entity currentTargetItem = null;
     private int postPickupDelayTicks = 0;
     private int lastEnterMessageTick = -99999;
     private int lastGotoTick = -99999;
@@ -537,7 +539,7 @@ public class AutoPickupHandler {
             return;
         }
 
-        EntityItem nearest = findNearestItemInRule(activeRule, mc.player, nowTick, true);
+        Entity nearest = findNearestItemInRule(activeRule, mc.player, nowTick, true);
         if (nearest == null && isItemSearchRoundInProgress(activeRule)) {
             return;
         }
@@ -550,12 +552,13 @@ public class AutoPickupHandler {
                 clearPendingNavigationAttempt();
             }
             currentTargetItem = nearest;
-            currentTargetStackSnapshot = nearest.getItem().copy();
+            currentTargetStackSnapshot = DroppedPickupTarget.getItemStack(nearest).isEmpty()
+                    ? ItemStack.EMPTY : DroppedPickupTarget.getItemStack(nearest).copy();
             currentState = State.MOVING_TO_ITEM;
             ensureNavigationToCurrentTarget(nowTick);
             if (targetChanged && ModConfig.isDebugFlagEnabled(DebugModule.AUTO_PICKUP)) {
                 mc.player.sendMessage(new TextComponentString(String.format("§d[调试] §7找到目标掉落物: %s @ (%.1f, %.1f, %.1f)",
-                currentTargetItem.getItem().getDisplayName(), currentTargetItem.posX, currentTargetItem.posY,
+                DroppedPickupTarget.getDisplayName(currentTargetItem), currentTargetItem.posX, currentTargetItem.posY,
                         currentTargetItem.posZ)));
             }
         } else {
@@ -618,7 +621,7 @@ public class AutoPickupHandler {
 
     private void handlePostPickupDelay(int nowTick) {
         if (activeRule != null && mc.player != null) {
-            EntityItem nextItem = findNearestItemInRule(activeRule, mc.player, nowTick, true);
+            Entity nextItem = findNearestItemInRule(activeRule, mc.player, nowTick, true);
             if (nextItem != null) {
                 currentTargetItem = nextItem;
                 currentState = State.MOVING_TO_ITEM;
@@ -839,7 +842,7 @@ public class AutoPickupHandler {
         return null;
     }
 
-    private EntityItem findNearestItemInRule(AutoPickupRule rule, EntityPlayerSP player, int nowTick,
+    private Entity findNearestItemInRule(AutoPickupRule rule, EntityPlayerSP player, int nowTick,
             boolean allowCachedResult) {
         if (rule == null || player == null || mc.world == null) {
             return null;
@@ -851,7 +854,7 @@ public class AutoPickupHandler {
         }
         if (!itemSearchRoundInProgress && allowCachedResult && ruleKey == lastItemSearchRuleKey
                 && nowTick - lastItemSearchTick < ITEM_SEARCH_SCAN_INTERVAL_TICKS) {
-            EntityItem cached = resolveCachedNearestItem(rule);
+            Entity cached = resolveCachedNearestItem(rule);
             if (cached != null) {
                 return cached;
             }
@@ -882,13 +885,12 @@ public class AutoPickupHandler {
         int cursor = Math.floorMod(itemSearchRoundCursor, loadedCount);
         for (int scanned = 0; scanned < scanCount; scanned++) {
             Entity entity = loadedEntities.get((cursor + scanned) % loadedCount);
-            if (entity instanceof EntityItem) {
-                EntityItem item = (EntityItem) entity;
-                if (isItemEligibleForRule(item, rule)) {
-                    double toPlayerSq = player.getDistanceSq(item);
+            if (DroppedPickupTarget.isSupported(entity)) {
+                if (isItemEligibleForRule(entity, rule)) {
+                    double toPlayerSq = player.getDistanceSq(entity);
                     if (toPlayerSq < itemSearchRoundBestDistanceSq) {
                         itemSearchRoundBestDistanceSq = toPlayerSq;
-                        itemSearchRoundBestEntityId = item.getEntityId();
+                        itemSearchRoundBestEntityId = entity.getEntityId();
                     }
                 }
             }
@@ -903,16 +905,16 @@ public class AutoPickupHandler {
         return completeItemSearchRound(rule, nowTick);
     }
 
-    private EntityItem completeItemSearchRound(AutoPickupRule rule, int nowTick) {
+    private Entity completeItemSearchRound(AutoPickupRule rule, int nowTick) {
         int completedRuleKey = itemSearchRoundRuleKey;
         int nearestEntityId = itemSearchRoundBestEntityId;
         resetItemSearchRound();
 
-        EntityItem nearest = null;
+        Entity nearest = null;
         if (nearestEntityId != Integer.MIN_VALUE && mc.world != null) {
             Entity entity = mc.world.getEntityByID(nearestEntityId);
-            if (entity instanceof EntityItem && isItemEligibleForRule((EntityItem) entity, rule)) {
-                nearest = (EntityItem) entity;
+            if (DroppedPickupTarget.isSupported(entity) && isItemEligibleForRule(entity, rule)) {
+                nearest = entity;
             }
         }
         if (nearest == null && nearestEntityId != Integer.MIN_VALUE && mc.world != null) {
@@ -948,16 +950,15 @@ public class AutoPickupHandler {
         itemSearchRoundInProgress = false;
     }
 
-    private EntityItem resolveCachedNearestItem(AutoPickupRule rule) {
+    private Entity resolveCachedNearestItem(AutoPickupRule rule) {
         if (mc.world == null || lastNearestItemEntityId == Integer.MIN_VALUE) {
             return null;
         }
         Entity entity = mc.world.getEntityByID(lastNearestItemEntityId);
-        if (!(entity instanceof EntityItem)) {
+        if (!DroppedPickupTarget.isSupported(entity)) {
             return null;
         }
-        EntityItem item = (EntityItem) entity;
-        return isItemEligibleForRule(item, rule) ? item : null;
+        return isItemEligibleForRule(entity, rule) ? entity : null;
     }
 
     private int buildRuleSearchKey(AutoPickupRule rule) {
@@ -976,8 +977,8 @@ public class AutoPickupHandler {
         return result;
     }
 
-    private boolean isItemEligibleForRule(EntityItem item, AutoPickupRule rule) {
-        if (item == null || rule == null || item.isDead || !item.onGround) {
+    private boolean isItemEligibleForRule(Entity item, AutoPickupRule rule) {
+        if (item == null || rule == null || !DroppedPickupTarget.isEligibleForScan(item)) {
             return false;
         }
 
@@ -991,7 +992,13 @@ public class AutoPickupHandler {
             return false;
         }
 
-        ItemMatchCacheEntry cacheEntry = getItemMatchCacheEntry(item);
+        if (DroppedPickupTarget.isExperienceOrb(item)) {
+            String name = DroppedPickupTarget.getDisplayName(item) + " "
+                    + DroppedPickupTarget.getRegistryName(item) + " xp_orb experience_orb";
+            return matchesRuleFilters(rule, name,
+                    DroppedPickupTarget.getSearchableText(item));
+        }
+        ItemMatchCacheEntry cacheEntry = getItemMatchCacheEntry((EntityItem) item);
         return matchesRuleFilters(rule, cacheEntry.itemName, cacheEntry.searchableText);
     }
 
@@ -1089,7 +1096,15 @@ public class AutoPickupHandler {
             return;
         }
 
-        BlockPos pickupGoal = resolveLocalPickupGoal(currentTargetItem);
+        if (DroppedPickupTarget.isExperienceOrb(currentTargetItem)) {
+            startNavigationToPickupTarget(currentTargetItem);
+            lastGotoTick = nowTick;
+            lastGotoTargetEntityId = targetId;
+            armPendingNavigationAttempt(nowTick);
+            return;
+        }
+
+        BlockPos pickupGoal = resolveLocalPickupGoal((EntityItem) currentTargetItem);
         if (pickupGoal == null) {
             // Do not let GoalTargetNormalizer climb through every layer in this X/Z column.
             // The normal pickup retry path will mark the item as unreachable if this remains true.
@@ -1100,7 +1115,7 @@ public class AutoPickupHandler {
             if (ModConfig.isDebugFlagEnabled(DebugModule.AUTO_PICKUP)) {
                 zszlScriptMod.LOGGER.info(
                         "[自动拾取] 掉落物所在方块上方无本层可用目标，跳过跨层修正: {} @ ({}, {}, {})",
-                        currentTargetItem.getItem().getDisplayName(), currentTargetItem.posX,
+                        DroppedPickupTarget.getDisplayName(currentTargetItem), currentTargetItem.posX,
                         currentTargetItem.posY, currentTargetItem.posZ);
             }
             return;
@@ -1145,6 +1160,14 @@ public class AutoPickupHandler {
             return false;
         }
         return startNavigationToPickupGoal(pickupGoal);
+    }
+
+    /** Starts the appropriate approach route for an item or experience orb. */
+    public boolean startNavigationToPickupTarget(Entity target) {
+        if (target instanceof EntityXPOrb) {
+            return EmbeddedNavigationHandler.INSTANCE.startGotoXZ(target.posX, target.posZ);
+        }
+        return target instanceof EntityItem && startNavigationToPickupItem((EntityItem) target);
     }
 
     private boolean startNavigationToPickupGoal(BlockPos pickupGoal) {
@@ -1229,7 +1252,7 @@ public class AutoPickupHandler {
             return;
         }
 
-        EntityItem failedItem = currentTargetItem;
+        Entity failedItem = currentTargetItem;
         ItemLocationKey locationKey = pendingNavigationItemLocation;
         int maxAttempts = getMaxPickupAttempts(activeRule);
         int attempts = incrementFailedAttempts(activeRule, locationKey);
@@ -1247,7 +1270,7 @@ public class AutoPickupHandler {
                     "§d[调试] §7掉落物未开始寻路，记录尝试 %d/%d: %s @ (%.2f, %.2f, %.2f)",
                     attempts,
                     maxAttempts,
-                    failedItem.getItem().getDisplayName(),
+                    DroppedPickupTarget.getDisplayName(failedItem),
                     failedItem.posX,
                     failedItem.posY,
                     failedItem.posZ)));
@@ -1258,7 +1281,7 @@ public class AutoPickupHandler {
                     TextFormatting.YELLOW,
                     TextFormatting.RED,
                     TextFormatting.WHITE,
-                    failedItem.getItem().getDisplayName(),
+                    DroppedPickupTarget.getDisplayName(failedItem),
                     TextFormatting.GRAY,
                     failedItem.posX,
                     failedItem.posY,
@@ -1299,7 +1322,7 @@ public class AutoPickupHandler {
         return next;
     }
 
-    private boolean hasReachedMaxPickupAttempts(EntityItem item, AutoPickupRule rule) {
+    private boolean hasReachedMaxPickupAttempts(Entity item, AutoPickupRule rule) {
         if (item == null || rule == null) {
             return false;
         }
@@ -1352,7 +1375,7 @@ public class AutoPickupHandler {
         return Math.round(value * 1000.0D);
     }
 
-    private ItemLocationKey buildItemLocationKey(EntityItem item) {
+    private ItemLocationKey buildItemLocationKey(Entity item) {
         if (item == null) {
             return null;
         }

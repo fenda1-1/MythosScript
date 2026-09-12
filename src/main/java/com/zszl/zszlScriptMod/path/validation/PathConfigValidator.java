@@ -1988,6 +1988,7 @@ public final class PathConfigValidator {
             case "autoeat":
             case "autoequip":
             case "autopickup":
+            case "toggle_auto_pickup":
                 resources.add(ResourceLockManager.Resource.INVENTORY);
                 break;
             case "pickup_nearby_items":
@@ -2014,6 +2015,7 @@ public final class PathConfigValidator {
                 break;
             case "hunt":
             case "toggle_kill_aura":
+            case "toggle_auto_follow":
                 resources.add(ResourceLockManager.Resource.COMBAT);
                 resources.add(ResourceLockManager.Resource.LOOK);
                 resources.add(ResourceLockManager.Resource.MOVE);

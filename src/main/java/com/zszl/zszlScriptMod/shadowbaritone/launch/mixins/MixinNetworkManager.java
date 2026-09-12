@@ -28,6 +28,8 @@ import io.netty.util.concurrent.GenericFutureListener;
 import net.minecraft.network.EnumPacketDirection;
 import net.minecraft.network.NetworkManager;
 import net.minecraft.network.Packet;
+import net.minecraft.network.play.client.CPacketPlayer;
+import com.zszl.zszlScriptMod.otherfeatures.handler.movement.MovementFeatureManager;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -54,6 +56,13 @@ public class MixinNetworkManager {
             final GenericFutureListener<? extends Future<? super Void>>[] futureListeners, CallbackInfo ci) {
         if (this.field_179294_g != EnumPacketDirection.CLIENTBOUND) {
             return;
+        }
+
+        net.minecraft.client.entity.EntityPlayerSP player = net.minecraft.client.Minecraft.getMinecraft().player;
+        if (inPacket instanceof CPacketPlayer && player != null && player.connection != null
+                && player.connection.getNetworkManager() == (Object) this
+                && MovementFeatureManager.isEnabled("no_fall")) {
+            ((AccessorCPacketPlayer) inPacket).zszl$setOnGround(true);
         }
 
         for (IBaritone ibaritone : BaritoneAPI.getProvider().getAllBaritones()) {

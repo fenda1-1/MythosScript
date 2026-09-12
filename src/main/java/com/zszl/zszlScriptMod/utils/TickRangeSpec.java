@@ -34,12 +34,12 @@ public final class TickRangeSpec {
         String[] parts = normalized.split("-", -1);
         try {
             if (parts.length == 1) {
-                int value = clamp(Integer.parseInt(parts[0]), lower, upper);
+                int value = clamp(parseWholeTicks(parts[0]), lower, upper);
                 return new Range(value, value, lower, upper);
             }
             if (parts.length == 2 && !parts[0].isEmpty() && !parts[1].isEmpty()) {
-                int first = Integer.parseInt(parts[0]);
-                int second = Integer.parseInt(parts[1]);
+                int first = parseWholeTicks(parts[0]);
+                int second = parseWholeTicks(parts[1]);
                 int min = clamp(Math.min(first, second), lower, upper);
                 int max = clamp(Math.max(first, second), lower, upper);
                 return new Range(min, Math.max(min, max), lower, upper);
@@ -58,12 +58,12 @@ public final class TickRangeSpec {
         String[] parts = cleanSpec(normalized).split("-", -1);
         try {
             if (parts.length == 1 && !parts[0].isEmpty()) {
-                Integer.parseInt(parts[0]);
+                parseWholeTicks(parts[0]);
                 return true;
             }
             if (parts.length == 2 && !parts[0].isEmpty() && !parts[1].isEmpty()) {
-                Integer.parseInt(parts[0]);
-                Integer.parseInt(parts[1]);
+                parseWholeTicks(parts[0]);
+                parseWholeTicks(parts[1]);
                 return true;
             }
         } catch (Exception ignored) {
@@ -106,6 +106,10 @@ public final class TickRangeSpec {
             return max;
         }
         return value;
+    }
+
+    private static int parseWholeTicks(String text) {
+        return new java.math.BigDecimal(text).intValueExact();
     }
 
     private static String cleanSpec(String spec) {

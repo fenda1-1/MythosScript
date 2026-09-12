@@ -40,6 +40,9 @@ import net.minecraft.util.math.ChunkPos;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
+import com.zszl.zszlScriptMod.otherfeatures.handler.movement.MovementFeatureManager;
+import net.minecraft.network.play.server.SPacketExplosion;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Arrays;
@@ -52,6 +55,36 @@ import java.util.stream.Collectors;
  */
 @Mixin(NetHandlerPlayClient.class)
 public class MixinNetHandlerPlayClient {
+
+        // Vanilla reaches this call on the client thread, after packet scheduling.
+        @Redirect(method = "handleEntityVelocity", at = @At(value = "INVOKE",
+                target = "Lnet/minecraft/entity/Entity;setVelocity(DDD)V"), require = 1)
+        private void zszl$filterVelocity(Entity entity, double x, double y, double z) {
+                double resistance = entity == Minecraft.getMinecraft().player
+                        ? MovementFeatureManager.getKnockbackResistance() : 0.0D;
+                if (resistance >= 1.0D) return;
+                double keep = 1.0D - resistance;
+                entity.setVelocity(entity.motionX * resistance + x * keep,
+                        entity.motionY * resistance + y * keep, entity.motionZ * resistance + z * keep);
+        }
+
+        @Redirect(method = "handleExplosion", at = @At(value = "INVOKE",
+                target = "Lnet/minecraft/network/play/server/SPacketExplosion;getMotionX()F"), require = 1)
+        private float zszl$explosionX(SPacketExplosion packet) {
+                return (float) (packet.getMotionX() * (1.0D - MovementFeatureManager.getKnockbackResistance()));
+        }
+
+        @Redirect(method = "handleExplosion", at = @At(value = "INVOKE",
+                target = "Lnet/minecraft/network/play/server/SPacketExplosion;getMotionY()F"), require = 1)
+        private float zszl$explosionY(SPacketExplosion packet) {
+                return (float) (packet.getMotionY() * (1.0D - MovementFeatureManager.getKnockbackResistance()));
+        }
+
+        @Redirect(method = "handleExplosion", at = @At(value = "INVOKE",
+                target = "Lnet/minecraft/network/play/server/SPacketExplosion;getMotionZ()F"), require = 1)
+        private float zszl$explosionZ(SPacketExplosion packet) {
+                return (float) (packet.getMotionZ() * (1.0D - MovementFeatureManager.getKnockbackResistance()));
+        }
 
         @Inject(method = "handlePlayerPosLook", at = @At("RETURN"))
         private void postHandlePlayerPosLook(SPacketPlayerPosLook packetIn, CallbackInfo ci) {

@@ -26,6 +26,17 @@ final class PacketCapturedIdPanel extends PacketPanelBase {
     private final PacketTextField pattern = new PacketTextField(7405, 32767), offset = new PacketTextField(7406, 128);
     private final PacketTextField group = new PacketTextField(7412, 8);
     private final PacketTextField search = new PacketTextField(7413, 128);
+    private final PacketTextField preview = new PacketTextField(7414, 32767);
+    private final PacketTextField liveValue = new PacketTextField(7415, 32767);
+    private ModernMainLayout.Rect previewBounds;
+    private ModernMainLayout.Rect liveValueBounds;
+    private static final java.util.concurrent.ExecutorService PREVIEW_WORKER = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread thread = new Thread(r, "captured-id-preview"); thread.setDaemon(true); return thread;
+    });
+    private java.util.concurrent.CompletableFuture<String> pendingPreview;
+    private String pendingPreviewKey = "", lastPreviewKey = "";
+    private String pendingPreviewDraft = "";
+    private long nextPreviewCheck;
     private final PacketTextField bytes = new PacketTextField(7407, 8), sequence = new PacketTextField(7408, 128), cooldown = new PacketTextField(7411, 8);
     private List<CapturedIdRuleManager.RuleCard> cards = new ArrayList<>();
     private List<String> categories = new ArrayList<>();
@@ -83,10 +94,13 @@ final class PacketCapturedIdPanel extends PacketPanelBase {
         registerDropdown(directionDrop); registerDropdown(targetDrop); registerDropdown(valueTypeDrop); registerDropdown(updateModeDrop);
         directionDrop.setValue(direction); targetDrop.setValue(target); valueTypeDrop.setValue(valueType); updateModeDrop.setValue(updateMode);
         refresh();
+        preview.ensure(font); preview.setReadOnly(true); preview.setText("预览：等待检查现有抓包");
+        liveValue.ensure(font); liveValue.setReadOnly(true);
     }
     @Override public void updateScreen() { name.update(); display.update(); note.update(); aliases.update(); category.update(); channel.update(); pattern.update(); offset.update(); group.update(); bytes.update(); sequence.update(); cooldown.update(); search.update(); }
 
     @Override protected void drawBody(FontRenderer font, ModernMainLayout.Rect area, int mx, int my) {
+        refreshPreview();
         int footer = area.bottom() - 30, x = area.x + 12, y = area.y + 42;
         lastMouseX = mx;
         lastMouseY = my;
@@ -94,6 +108,7 @@ final class PacketCapturedIdPanel extends PacketPanelBase {
             drawCompactBody(font, area, mx, my, x, y, footer);
             return;
         }
+        mobileViewport = null;
         int available = Math.max(2, area.width - 24);
         ModernSplitPane.Split split = ModernSplitPane.calculate(available, splitRatio, 280, 260, 220, 200);
         splitRatio = split.ratio;
@@ -342,17 +357,17 @@ final class PacketCapturedIdPanel extends PacketPanelBase {
         y = row(font, "gui.modern.pktid.u027", cooldown, y, fw);
         ModernUiRenderer.endClip();
          ModernMainLayout.Rect flags = new ModernMainLayout.Rect(editorBounds.x + 10,
-                 editorBounds.bottom() - (editorBounds.width < 360 ? 110 : 82), editorBounds.width - 20, 22);
+                 editorBounds.bottom() - (editorBounds.width < 360 ? 134 : 106), editorBounds.width - 20, 22);
          drawFlag(font, flags, tr("gui.modern.pktid.fmt.enabled", tr(enabled ? "gui.modern.pktid.u028" : "gui.modern.pktid.u029")), mx, my, enabled);
          if (editorBounds.width < 360) {
              int flagWidth = Math.max(1, (editorBounds.width - 24) / 2);
-             int rowY = editorBounds.bottom() - 82;
+             int rowY = editorBounds.bottom() - 106;
              choiceBounds[0] = new ModernMainLayout.Rect(editorBounds.x + 10, rowY, flagWidth, 22);
              choiceBounds[1] = new ModernMainLayout.Rect(choiceBounds[0].right() + 4, rowY, flagWidth, 22);
              choiceBounds[2] = new ModernMainLayout.Rect(editorBounds.x + 10, rowY + 28, flagWidth, 22);
              choiceBounds[3] = new ModernMainLayout.Rect(choiceBounds[2].right() + 4, rowY + 28, flagWidth, 22);
          } else {
-             choiceBounds[0] = new ModernMainLayout.Rect(editorBounds.x + 10, editorBounds.bottom() - 54,
+             choiceBounds[0] = new ModernMainLayout.Rect(editorBounds.x + 10, editorBounds.bottom() - 78,
                      Math.max(70, editorBounds.width / 4 - 4), 22);
              choiceBounds[1] = new ModernMainLayout.Rect(choiceBounds[0].right() + 4, choiceBounds[0].y,
                      choiceBounds[0].width, 22);
@@ -369,11 +384,91 @@ final class PacketCapturedIdPanel extends PacketPanelBase {
          targetDrop.drawButton(font, choiceBounds[1], mx, my);
          valueTypeDrop.drawButton(font, choiceBounds[2], mx, my);
          updateModeDrop.drawButton(font, choiceBounds[3], mx, my);
+         liveValueBounds = new ModernMainLayout.Rect(editorBounds.x + 10, editorBounds.bottom() - 51,
+                 Math.max(1, editorBounds.width - 20), 20);
+         this.field(liveValue, liveValueBounds, null);
+         previewBounds = new ModernMainLayout.Rect(editorBounds.x + 10, editorBounds.bottom() - 27,
+                 Math.max(1, editorBounds.width - 20), 20);
+         this.field(preview, previewBounds, null);
+    }
+
+    private void refreshPreview() {
+        long now = System.currentTimeMillis();
+        if (now < nextPreviewCheck) return;
+        nextPreviewCheck = now + 200;
+        String actual = CapturedIdRuleManager.getCapturedIdHex(name.text().trim());
+        String actualText = "实际保存值：" + (actual == null ? "未捕获" : actual);
+        if (actual != null && actual.replace(" ", "").length() <= 16)
+            actualText += " | 数值=" + new java.math.BigInteger(actual.replace(" ", ""), 16);
+        actualText += com.zszl.zszlScriptMod.gui.packet.PacketFilterConfig.INSTANCE.enableBusinessPacketProcessing
+                ? " | 业务处理：开启" : " | 业务处理：关闭";
+        if (isDirty()) actualText += " | 草稿未保存";
+        actualText += " | " + CapturedIdRuleManager.getRuntimeStatus(name.text().trim());
+        if (!actualText.equals(liveValue.text())) liveValue.setText(actualText);
+        List<com.zszl.zszlScriptMod.utils.PacketCaptureHandler.CapturedPacketData> received;
+        List<com.zszl.zszlScriptMod.utils.PacketCaptureHandler.CapturedPacketData> sent;
+        synchronized (com.zszl.zszlScriptMod.utils.PacketCaptureHandler.capturedReceivedPackets) {
+            received = new ArrayList<>(com.zszl.zszlScriptMod.utils.PacketCaptureHandler.capturedReceivedPackets);
+        }
+        synchronized (com.zszl.zszlScriptMod.utils.PacketCaptureHandler.capturedPackets) {
+            sent = new ArrayList<>(com.zszl.zszlScriptMod.utils.PacketCaptureHandler.capturedPackets);
+        }
+        String key = draftSignature() + "|" + packetFingerprint(received) + "|" + packetFingerprint(sent);
+        if (pendingPreview != null) {
+            if (!pendingPreview.isDone()) return;
+            if (draftSignature().equals(pendingPreviewDraft) && (!received.isEmpty() || !sent.isEmpty()
+                    || key.equals(pendingPreviewKey))) {
+                String result;
+                try { result = pendingPreview.join(); } catch (RuntimeException e) { result = "预览错误：" + e.getMessage(); }
+                if (!result.equals(preview.text())) preview.setText(result);
+                lastPreviewKey = pendingPreviewKey;
+            }
+            pendingPreview = null;
+        }
+        if (key.equals(lastPreviewKey)) return;
+        CapturedIdRuleManager.RuleEditModel model = new CapturedIdRuleManager.RuleEditModel();
+        model.pattern = pattern.text(); model.channel = channel.text().trim(); model.direction = directionDrop.value();
+        model.target = targetDrop.value(); model.valueType = valueTypeDrop.value(); model.offset = offset.text();
+        model.updateSequenceMode = updateModeDrop.value(); model.enabled = enabled;
+        try {
+            model.group = Integer.parseInt(group.text().trim());
+            model.byteLength = Integer.parseInt(bytes.text().trim());
+        } catch (NumberFormatException e) {
+            preview.setText("预览错误：分组和字节数需要填写整数"); lastPreviewKey = key; return;
+        }
+        if (!draftSignature().equals(pendingPreviewDraft)) preview.setText("预览：正在检查现有抓包…");
+        pendingPreviewKey = key;
+        pendingPreviewDraft = draftSignature();
+        pendingPreview = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> com.zszl.zszlScriptMod.utils.CapturedIdRulePreview.evaluate(model, received, sent), PREVIEW_WORKER);
+    }
+
+    private long packetFingerprint(List<com.zszl.zszlScriptMod.utils.PacketCaptureHandler.CapturedPacketData> packets) {
+        long fingerprint = packets.size();
+        for (com.zszl.zszlScriptMod.utils.PacketCaptureHandler.CapturedPacketData packet : packets)
+            fingerprint = fingerprint * 31 + System.identityHashCode(packet) + packet.getLastTimestamp();
+        return fingerprint;
     }
     private int row(FontRenderer font, String label, PacketTextField field, int y, int width) { text(font, label, editorBounds.x + 10, y + 6, ModernUiRenderer.MUTED_TEXT, 82); this.field(field, new ModernMainLayout.Rect(editorBounds.x + 88, y, width, 20), null); return y + 26; }
     private void drawFlag(FontRenderer font, ModernMainLayout.Rect r, String value, int mx, int my, boolean selected) { boolean hover = r.contains(mx, my); ModernUiRenderer.drawSubtlePanel(r.x, r.y, r.width, r.height, 3, selected ? ModernUiRenderer.SELECTED_SURFACE : hover ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SHELL_RAISED, selected ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE); text(font, value, r.x + 8, r.y + 6, selected ? ModernUiRenderer.SELECTED_TEXT : ModernUiRenderer.TEXT, r.width - 16); }
 
     @Override protected boolean handleBodyClick(int x, int y, int button) {
+        if (hit(liveValueBounds, x, y) && (mobileViewport == null || mobileViewport.contains(x, y))) {
+            if (button == 1) {
+                openContextMenu(x, y, java.util.Collections.singletonList(
+                        new PacketContextMenu.Item("复制实际保存值", () -> PacketClipboard.copy(liveValue.text()))));
+                return true;
+            }
+            liveValue.click(x, y, button); return true;
+        }
+        if (hit(previewBounds, x, y) && (mobileViewport == null || mobileViewport.contains(x, y))) {
+            if (button == 1) {
+                openContextMenu(x, y, java.util.Collections.singletonList(
+                        new PacketContextMenu.Item("复制预览", () -> PacketClipboard.copy(preview.text()))));
+                return true;
+            }
+            preview.click(x, y, button); return true;
+        }
         if (navigationActions.mouseClicked(x, y, button)) return true;
         if (button == 1 && navigationActions.inTree(x, y)) {
             selectTreeContextHit(x, y);
@@ -447,6 +542,8 @@ final class PacketCapturedIdPanel extends PacketPanelBase {
      private void refresh() { String selectedName = selected >= 0 && selected < cards.size() ? safe(cards.get(selected).model.name) : ""; categories = new ArrayList<>(CapturedIdRuleManager.getAllCategories()); cards = new ArrayList<>(CapturedIdRuleManager.getRuleCards()); cardScroll = 0; selected = -1; if (!selectedName.isEmpty()) for (int i = 0; i < cards.size(); i++) if (selectedName.equals(cards.get(i).model.name)) { select(i); break; } if (selected < 0) clearEditor(); savedSignature = draftSignature(); }
     private CapturedIdRuleManager.RuleEditModel safeModel() { return selected >= 0 && selected < cards.size() ? cards.get(selected).model : new CapturedIdRuleManager.RuleEditModel(); }
      @Override public boolean keyTyped(char c, int code) {
+         if (liveValue.focused()) return liveValue.key(c, code);
+         if (preview.focused()) return preview.key(c, code);
          if (navigationActions.keyTyped(c, code)) return true; if (code == org.lwjgl.input.Keyboard.KEY_DELETE && !ALL.equals(selectedCategory) && !UNGROUPED.equals(selectedCategory)) { if (CapturedIdRuleManager.deleteCategory(selectedCategory)) { selectedCategory = ALL; refresh(); } return true; } return fieldKey(search, c, code) || fieldKey(name, c, code) || fieldKey(display, c, code) || fieldKey(note, c, code) || fieldKey(aliases, c, code) || fieldKey(channel, c, code) || fieldKey(pattern, c, code) || fieldKey(offset, c, code) || fieldKey(group, c, code) || fieldKey(bytes, c, code) || fieldKey(sequence, c, code) || fieldKey(cooldown, c, code); }
     @Override public void discardDraft() {
         navigationActions.close(); PacketTextField.clearActiveFocus(); draggingMobileScrollbar = false; mobileScroll = 0; }
@@ -462,6 +559,8 @@ final class PacketCapturedIdPanel extends PacketPanelBase {
         return false;
     }
     @Override public boolean mouseClickMove(int x, int y, int button, long timeSinceLastClick) {
+        if (liveValue.dragSelection(x, button)) return true;
+        if (preview.dragSelection(x, button)) return true;
         if (navigationActions.isOpen()) return true;
         if (draggingCategorySplit && button == 0) {
             ModernSplitPane.Split split = ModernSplitPane.calculateFromPointer(
@@ -503,7 +602,7 @@ final class PacketCapturedIdPanel extends PacketPanelBase {
                 mobileViewport.height);
         mobileScrollbarThumbBounds = mobileScrollbarBounds;
     }
-    private ModernMainLayout.Rect editorContentBounds() { return editorBounds == null ? new ModernMainLayout.Rect(0, 0, 1, 1) : new ModernMainLayout.Rect(editorBounds.x + 1, editorBounds.y + 30, Math.max(1, editorBounds.width - 2), Math.max(1, editorBounds.height - 126)); }
+    private ModernMainLayout.Rect editorContentBounds() { return editorBounds == null ? new ModernMainLayout.Rect(0, 0, 1, 1) : new ModernMainLayout.Rect(editorBounds.x + 1, editorBounds.y + 30, Math.max(1, editorBounds.width - 2), Math.max(1, editorBounds.height - (editorBounds.width < 360 ? 178 : 150))); }
     private static String safe(String value) { return value == null ? "" : value; }
     private static String safe(String value, String fallback) { return value == null || value.trim().isEmpty() ? fallback : value; }
     private static int clamp(int value, int min, int max) { return Math.max(min, Math.min(max, value)); }

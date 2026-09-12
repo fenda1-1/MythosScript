@@ -240,6 +240,10 @@ public final class ExpressionLanguageSupport {
                 "player.experience", "player.experience_level", "player.selected_slot",
                 "player.dimension", "player.on_ground", "player.sneaking", "player.sprinting",
                 "player.burning", "gui.title", "gui.screen");
+        addVariables(variables, "Dropped-item filter field", "Fields available to dropped-item and experience-orb filters.",
+                "name", "id", "registry", "type", "entitytype", "count", "stacksize", "slot", "damage",
+                "meta", "hasnbt", "nbtraw", "rawnbt", "tooltip", "lore", "rarity", "distance", "dist",
+                "xp", "xpvalue", "experience", "experiencevalue", "alltext", "search");
         BUILTIN_VARIABLE_COMPLETIONS = immutableSorted(variables);
 
         List<Completion> functions = new ArrayList<Completion>();

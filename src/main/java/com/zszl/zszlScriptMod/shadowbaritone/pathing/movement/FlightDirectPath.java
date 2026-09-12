@@ -22,6 +22,7 @@ import net.minecraft.block.BlockTrapDoor;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.AxisAlignedBB;
 
 import java.util.*;
 
@@ -320,17 +321,11 @@ public final class FlightDirectPath extends PathBase {
             }
             List<BetterBlockPos> route = findOrthogonalRoute(context, start.x, start.z,
                     planningTarget.getX(), planningTarget.getZ(), cruiseY, true, cruiseY);
-            boolean fullCorridor = true;
-            if (route == null) {
-                route = findOrthogonalRoute(context, start.x, start.z,
-                        planningTarget.getX(), planningTarget.getZ(), cruiseY, false, cruiseY);
-                fullCorridor = false;
-            }
             if (route == null) {
                 continue;
             }
             return (FlightDirectPath) buildPath(baritone, context, goal, planningTarget, launchRoute, targetRoute,
-                    route, cruiseY, fullCorridor, cruiseY, finalSegment, terminalSegment, safeLandingTerminal);
+                    route, cruiseY, true, cruiseY, finalSegment, terminalSegment, safeLandingTerminal);
         }
         return null;
     }
@@ -466,16 +461,21 @@ public final class FlightDirectPath extends PathBase {
     }
 
     public static boolean isSegmentLoadedAndClear(CalculationContext context, BetterBlockPos src, BetterBlockPos dest) {
+        return isSegmentLoadedAndClear(context, src, dest, false);
+    }
+
+    public static boolean isSegmentLoadedAndClear(CalculationContext context, BetterBlockPos src, BetterBlockPos dest,
+            boolean fullCorridorClearance) {
         if (context == null || src == null || dest == null) {
             return false;
         }
         if (src.x == dest.x && src.z == dest.z) {
-            return isColumnClear(context, src.x, src.y, src.z, dest.y, false);
+            return isColumnClear(context, src.x, src.y, src.z, dest.y, fullCorridorClearance);
         }
         if (src.y != dest.y || src.x != dest.x && src.z != dest.z) {
             return false;
         }
-        return isHorizontalLineClear(context, src.x, src.z, dest.x, dest.z, src.y, false);
+        return isHorizontalLineClear(context, src.x, src.z, dest.x, dest.z, src.y, fullCorridorClearance);
     }
 
     private static boolean isExecutable(IBaritone baritone, FlightDirectPath path) {
@@ -746,11 +746,52 @@ public final class FlightDirectPath extends PathBase {
             return isPlayerCellClear(context, x, y, z, allowInteractions);
         }
         int width = Math.max(1, Math.min(9, Baritone.settings().flightCorridorWidth.value));
-        int minOffset = -((width - 1) / 2);
-        int maxOffset = width / 2;
-        for (int offsetX = minOffset; offsetX <= maxOffset; offsetX++) {
-            for (int offsetZ = minOffset; offsetZ <= maxOffset; offsetZ++) {
-                if (!isPlayerCellClear(context, x + offsetX, y, z + offsetZ, false)) {
+        net.minecraft.entity.player.EntityPlayer player = context.getBaritone().getPlayerContext().player();
+        double height = Math.max(Math.max(1.8D, player.height), Baritone.settings().flightClearance.value + 1.0D);
+        double halfWidth = Math.max(0.3D, player.width / 2.0D);
+        double radius = width / 2.0D;
+        double verticalDrift = allowInteractions ? radius : 0.0D;
+        AxisAlignedBB volume = new AxisAlignedBB(x + 0.5D - radius - halfWidth, y - verticalDrift,
+                z + 0.5D - radius - halfWidth, x + 0.5D + radius + halfWidth,
+                y + height + verticalDrift, z + 0.5D + radius + halfWidth);
+        return FlightCorridorClearance.isClear(x, y, z, width / 2.0D, allowInteractions,
+                halfWidth, height, (bx, by, bz) -> isFlightBlockClear(context, bx, by, bz))
+                && isFloorCollisionClear(context, volume);
+    }
+
+    private static boolean isPlayerCellClear(CalculationContext context, int x, int y, int z,
+            boolean allowInteractions) {
+        net.minecraft.entity.player.EntityPlayer player = context.getBaritone().getPlayerContext().player();
+        double halfWidth = Math.max(0.3D, player.width / 2.0D);
+        double height = Math.max(Math.max(1.8D, player.height), Baritone.settings().flightClearance.value + 1.0D);
+        AxisAlignedBB body = new AxisAlignedBB(x + 0.5D - halfWidth, y, z + 0.5D - halfWidth,
+                x + 0.5D + halfWidth, y + height, z + 0.5D + halfWidth);
+        return FlightCorridorClearance.isClear(x, y, z, 0.0D, false, halfWidth, height, (bx, by, bz) -> {
+            if (!context.bsi.worldContainsLoadedChunk(bx, bz)) {
+                return false;
+            }
+            IBlockState state = context.get(bx, by, bz);
+            boolean openable = isOpenableInteraction(context, bx, by, bz, state);
+            if (allowInteractions && openable && isClosedInteraction(state)) {
+                return true;
+            }
+            if (!MovementHelper.canFlyThrough(context, bx, by, bz, state) && !openable) {
+                return false;
+            }
+            BlockPos pos = new BlockPos(bx, by, bz);
+            AxisAlignedBB collision = state.getCollisionBoundingBox(context.bsi.access, pos);
+            return collision == null || !collision.offset(pos).intersects(body);
+        }) && isFloorCollisionClear(context, body);
+    }
+
+    private static boolean isFloorCollisionClear(CalculationContext context, AxisAlignedBB volume) {
+        // Fences and walls extend above their own block cell into the flight volume.
+        int y = (int) Math.floor(volume.minY) - 1;
+        for (int x = (int) Math.floor(volume.minX); x < Math.ceil(volume.maxX); x++) {
+            for (int z = (int) Math.floor(volume.minZ); z < Math.ceil(volume.maxZ); z++) {
+                BlockPos pos = new BlockPos(x, y, z);
+                AxisAlignedBB collision = context.get(x, y, z).getCollisionBoundingBox(context.bsi.access, pos);
+                if (collision != null && collision.offset(pos).intersects(volume)) {
                     return false;
                 }
             }
@@ -758,20 +799,25 @@ public final class FlightDirectPath extends PathBase {
         return true;
     }
 
-    private static boolean isPlayerCellClear(CalculationContext context, int x, int y, int z,
-            boolean allowInteractions) {
+    private static boolean isClosedInteraction(IBlockState state) {
+        if (state.getBlock() instanceof BlockDoor) {
+            return !state.getValue(BlockDoor.OPEN);
+        }
+        if (state.getBlock() instanceof BlockFenceGate) {
+            return !state.getValue(BlockFenceGate.OPEN);
+        }
+        return state.getBlock() instanceof BlockTrapDoor && !state.getValue(BlockTrapDoor.OPEN);
+    }
+
+    private static boolean isFlightBlockClear(CalculationContext context, int x, int y, int z) {
         if (!context.bsi.worldContainsLoadedChunk(x, z)) {
             return false;
         }
-        int clearance = Math.max(0, Baritone.settings().flightClearance.value);
-        for (int offset = 0; offset <= clearance; offset++) {
-            IBlockState state = context.get(x, y + offset, z);
-            if (!MovementHelper.canFlyThrough(context, x, y + offset, z, state)
-                    && (!allowInteractions || !isOpenableInteraction(context, x, y + offset, z, state))) {
-                return false;
-            }
-        }
-        return true;
+        IBlockState state = context.get(x, y, z);
+        // Walking rules can treat doors and other interactive blocks as passable.
+        // A free-flight volume must also be physically empty.
+        return MovementHelper.canFlyThrough(context, x, y, z, state)
+                && state.getCollisionBoundingBox(context.bsi.access, new BlockPos(x, y, z)) == null;
     }
 
     private static boolean isOpenableInteraction(CalculationContext context, int x, int y, int z, IBlockState state) {

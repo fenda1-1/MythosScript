@@ -13,7 +13,7 @@
 <p>为 Minecraft 打造的可视化自动化工作台<br />从一次操作，到一整套由你定义的游戏流程。</p>
 
 <p>
-<img src="https://img.shields.io/badge/VERSION-1.0.7-79B8AB?style=flat-square&amp;labelColor=202B33" alt="Version 1.0.7" />
+<img src="https://img.shields.io/badge/VERSION-1.0.71-79B8AB?style=flat-square&amp;labelColor=202B33" alt="Version 1.0.71" />
 <img src="https://img.shields.io/badge/MINECRAFT-1.12.2-79B8AB?style=flat-square&amp;labelColor=202B33" alt="Minecraft 1.12.2" />
 <img src="https://img.shields.io/badge/FORGE-14.23.5.2860-D8B583?style=flat-square&amp;labelColor=202B33" alt="Forge 14.23.5.2860" />
 <img src="https://img.shields.io/badge/JAVA-8-D8B583?style=flat-square&amp;labelColor=202B33" alt="Java 8" />
@@ -143,7 +143,7 @@
 </tr>
 </table>
 
-<p align="center"><sub>以上均为 v1.0.7 游戏内实拍。点击图片查看原图。</sub></p>
+<p align="center"><sub>以上均为 v1.0.71 游戏内实拍。点击图片查看原图。</sub></p>
 
 ## 开始使用
 
@@ -152,7 +152,7 @@
 | Minecraft | **1.12.2** |
 | Forge | **14.23.5.2860** |
 | Java | **8** |
-| 当前版本 / 主分支 | **v1.0.7** / **1.12.2** |
+| 当前版本 / 主分支 | **v1.0.71** / **1.12.2** |
 
 1. 准备 Minecraft 1.12.2 的 Forge 游戏环境，并使用 Java 8 启动。
 2. 将适配的 MythosScript Mod JAR 放入该游戏实例的 `mods` 文件夹。
@@ -225,8 +225,8 @@ python skills/mythosscript-mcp/scripts/client.py --auto-discover --player Steve 
 
 | 文件 | 用途 |
 | :--- | :--- |
-| `MythosScript-v1.0.7.jar` | 常规发布包，便于排查问题和开发调试。 |
-| `MythosScript-v1.0.7-obf.jar` | 已经过 ProGuard 混淆的发布包，建议作为对外分发版本。 |
+| `MythosScript-v1.0.71-mc1.12.2.jar` | 常规发布包，便于排查问题和开发调试。 |
+| `MythosScript-v1.0.71-mc1.12.2-obf.jar` | 已经过 ProGuard 混淆的发布包，建议作为对外分发版本。 |
 
 两个 JAR 都是 Minecraft 1.12.2 Forge Mod；一次发布只应选择其中一个放入游戏实例的 `mods` 文件夹，不能同时安装。`build` 会在现有工作树上构建，因此发布前请先确认需要包含的本地修改。
 

@@ -131,6 +131,13 @@ public final class ModernActionEditorSchema {
         } else if ("blocknextgui".equals(t)) {
             text(result, "gui.modern.path.schema.u080", "count", "gui.modern.path.schema.u081", "", "1");
             toggle(result, "gui.modern.path.schema.u080", "blockCurrentGui", "gui.modern.path.schema.u082", "", "false");
+        } else if ("showhiddengui".equals(t)) {
+            List<String> choices = new ArrayList<>();
+            choices.add("");
+            choices.addAll(com.zszl.zszlScriptMod.handlers.GuiVisibilityHandler.getHiddenGuiChoices().keySet());
+            choice(result, "gui.modern.path.schema.hidden_gui_section", "hiddenGuiId",
+                    "gui.modern.path.schema.hidden_gui_select", "gui.modern.path.schema.hidden_gui_hint",
+                    choices.toArray(new String[0]));
         } else if ("hud_text_check".equals(t)) {
             text(result, "gui.modern.path.schema.u083", "contains", "gui.modern.path.schema.u084", "", "");
             toggle(result, "gui.modern.path.schema.u083", "matchBlock", "gui.modern.path.schema.u085", "", "false");

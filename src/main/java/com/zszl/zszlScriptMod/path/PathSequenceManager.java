@@ -11,6 +11,7 @@ import com.zszl.zszlScriptMod.gui.MainUiLayoutManager;
 import com.zszl.zszlScriptMod.handlers.AutoEatHandler;
 import com.zszl.zszlScriptMod.handlers.AutoEscapeHandler;
 import com.zszl.zszlScriptMod.handlers.AutoFishingHandler;
+import com.zszl.zszlScriptMod.handlers.AutoFollowHandler;
 import com.zszl.zszlScriptMod.handlers.AutoPickupHandler;
 import com.zszl.zszlScriptMod.handlers.ConditionalExecutionHandler;
 import com.zszl.zszlScriptMod.handlers.EmbeddedNavigationHandler;
@@ -1428,8 +1429,18 @@ public class PathSequenceManager {
                                 + ((params.has("enabled") && !params.get("enabled").getAsBoolean())
                                         ? I18n.format("path.common.off")
                                         : I18n.format("path.common.on"));
+                    case "toggle_auto_pickup":
+                        return "自动拾取掉落物: "
+                                + ((params.has("enabled") && !params.get("enabled").getAsBoolean())
+                                        ? I18n.format("path.common.off")
+                                        : I18n.format("path.common.on"));
                     case "toggle_kill_aura":
                         return "杀戮光环: "
+                                + ((params.has("enabled") && !params.get("enabled").getAsBoolean())
+                                        ? I18n.format("path.common.off")
+                                        : I18n.format("path.common.on"));
+                    case "toggle_auto_follow":
+                        return "自动追怪: "
                                 + ((params.has("enabled") && !params.get("enabled").getAsBoolean())
                                         ? I18n.format("path.common.off")
                                         : I18n.format("path.common.on"));
@@ -2856,7 +2867,9 @@ public class PathSequenceManager {
                 case "hidecurrentgui":
                     return player -> GuiVisibilityHandler.hideCurrentGui();
                 case "showhiddengui":
-                    return player -> GuiVisibilityHandler.showHiddenGui();
+                    String hiddenGuiId = params.has("hiddenGuiId") && !params.get("hiddenGuiId").isJsonNull()
+                            ? params.get("hiddenGuiId").getAsString() : "";
+                    return player -> GuiVisibilityHandler.showHiddenGui(hiddenGuiId);
                 case "close_container_window":
                     return player -> {
                         Minecraft mc = Minecraft.getMinecraft();
@@ -2921,6 +2934,13 @@ public class PathSequenceManager {
                     final boolean toggleAutoFishingEnabled = !params.has("enabled")
                             || params.get("enabled").getAsBoolean();
                     return player -> AutoFishingHandler.INSTANCE.setEnabled(toggleAutoFishingEnabled);
+                case "toggle_auto_pickup":
+                    final boolean toggleAutoPickupEnabled = !params.has("enabled")
+                            || params.get("enabled").getAsBoolean();
+                    return player -> {
+                        AutoPickupHandler.globalEnabled = toggleAutoPickupEnabled;
+                        AutoPickupHandler.saveConfig();
+                    };
                 case "toggle_kill_aura":
                     final boolean toggleKillAuraEnabled = !params.has("enabled")
                             || params.get("enabled").getAsBoolean();
@@ -2932,6 +2952,10 @@ public class PathSequenceManager {
                         }
                         KillAuraHandler.INSTANCE.setEnabled(toggleKillAuraEnabled);
                     };
+                case "toggle_auto_follow":
+                    final boolean toggleAutoFollowEnabled = !params.has("enabled")
+                            || params.get("enabled").getAsBoolean();
+                    return player -> AutoFollowHandler.setEnabled(toggleAutoFollowEnabled);
                 case "toggle_fly":
                     final boolean toggleFlyEnabled = !params.has("enabled") || params.get("enabled").getAsBoolean();
                     return player -> FlyHandler.INSTANCE.setEnabled(toggleFlyEnabled);

@@ -33,7 +33,6 @@ import com.zszl.zszlScriptMod.path.PathSequenceEventListener;
 import com.zszl.zszlScriptMod.path.PathSequenceManager;
 import com.zszl.zszlScriptMod.path.PathSequenceManager.PathSequence;
 import com.zszl.zszlScriptMod.path.PathSequenceManager.PathStep;
-import com.zszl.zszlScriptMod.system.AutoFollowRule;
 import com.zszl.zszlScriptMod.utils.PinyinSearchHelper;
 
 import net.minecraft.client.Minecraft;
@@ -2705,28 +2704,7 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
             return true;
         } else if ("followconfig".equals(command)) {
             if (mouseButton == 0) {
-                boolean wasActive = AutoFollowHandler.getActiveRule() != null;
-                if (wasActive) {
-                    AutoFollowHandler.toggleEnabledFromQuickSwitch();
-                    if (mc.player != null) {
-                        mc.player.sendMessage(new TextComponentString(I18n.format("gui.modern.inv.u084")));
-                    }
-                } else {
-                    if (!AutoFollowHandler.hasAnyRuleConfigured()) {
-                        if (mc.player != null) {
-                            mc.player.sendMessage(new TextComponentString(I18n.format("gui.modern.inv.u085")));
-                        }
-                    } else {
-                        AutoFollowRule activatedRule = AutoFollowHandler.toggleEnabledFromQuickSwitch();
-                        if (mc.player != null) {
-                            mc.player.sendMessage(new TextComponentString(I18n.format("gui.modern.inv.u086")
-                                    + (activatedRule != null && activatedRule.name != null
-                                            && !activatedRule.name.trim().isEmpty()
-                                                    ? I18n.format("gui.modern.inv.fmt.rule", activatedRule.name.trim())
-                                                    : "")));
-                        }
-                    }
-                }
+                AutoFollowHandler.toggleEnabledFromHotkey();
                 refreshGuiLists();
             } else if (mouseButton == 1) {
                 GuiModernMainScreen.openSettingsTab(mc, command);

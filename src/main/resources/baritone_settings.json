@@ -166,6 +166,14 @@
       "desc": "飞行碰撞体积向上的安全空间层数"
     },
     {
+      "key": "flightCorridorWidth", "defaultValue": "3", "type": "int",
+      "desc": "飞行实体通道宽度（格）"
+    },
+    {
+      "key": "flightCorridorCornerExtension", "defaultValue": "0.5D", "type": "double",
+      "desc": "飞行实体通道拐角延伸距离"
+    },
+    {
       "key": "flightEntityCorridor", "defaultValue": "false", "type": "boolean",
       "desc": "实体通道模式：仅在本地为当前飞行通道添加不可见碰撞墙，减少高速过冲"
     },
@@ -370,6 +378,12 @@
       "desc": "渲染路径"
     },
     {
+      "key": "renderDetectedEdgePortals",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "渲染检测到的边缘传送门"
+    },
+    {
       "key": "renderPathAsLine",
       "defaultValue": "false",
       "type": "boolean",
@@ -466,6 +480,12 @@
       "desc": "平滑视角单tick最大转角"
     },
     {
+      "key": "smoothLookTicks",
+      "defaultValue": "5",
+      "type": "int",
+      "desc": "平滑视角兼容平均窗口tick数"
+    },
+    {
       "key": "elytraSmoothLook",
       "defaultValue": "true",
       "type": "boolean",
@@ -512,6 +532,12 @@
       "defaultValue": "true",
       "type": "boolean",
       "desc": "允许前缀命令控制"
+    },
+    {
+      "key": "useBuiltinBaritone",
+      "defaultValue": "false",
+      "type": "boolean",
+      "desc": "导航请求直接调用内置 Baritone"
     },
     {
       "key": "shortBaritonePrefix",
@@ -1316,6 +1342,12 @@
       "defaultValue": "RED",
       "type": "color",
       "desc": "当前路径颜色"
+    },
+    {
+      "key": "colorDetectedEdgePortals",
+      "defaultValue": "ORANGE",
+      "type": "color",
+      "desc": "检测到的边缘传送门颜色"
     },
     {
       "key": "colorNextPath",

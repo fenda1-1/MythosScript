@@ -22,6 +22,7 @@ import net.minecraft.block.BlockWeb;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.client.resources.I18n;
 import net.minecraft.client.renderer.BufferBuilder;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderGlobal;
@@ -468,6 +469,40 @@ public class AutoFollowHandler {
         }
         setActiveRule(preferred);
         return preferred;
+    }
+
+    public static void setEnabled(boolean enabled) {
+        boolean currentlyEnabled = getActiveRule() != null;
+        if (enabled == currentlyEnabled) {
+            return;
+        }
+        if (enabled && !hasAnyRuleConfigured()) {
+            return;
+        }
+        toggleEnabledFromQuickSwitch();
+    }
+
+    public static void toggleEnabledFromHotkey() {
+        if (getActiveRule() != null) {
+            toggleEnabledFromQuickSwitch();
+            sendHotkeyMessage(I18n.format("gui.modern.inv.u084"));
+            return;
+        }
+        if (!hasAnyRuleConfigured()) {
+            sendHotkeyMessage(I18n.format("gui.modern.inv.u085"));
+            return;
+        }
+        AutoFollowRule activatedRule = toggleEnabledFromQuickSwitch();
+        String extra = activatedRule != null && activatedRule.name != null && !activatedRule.name.trim().isEmpty()
+                ? I18n.format("gui.modern.inv.fmt.rule", activatedRule.name.trim())
+                : "";
+        sendHotkeyMessage(I18n.format("gui.modern.inv.u086") + extra);
+    }
+
+    private static void sendHotkeyMessage(String message) {
+        if (mc.player != null) {
+            mc.player.sendMessage(new TextComponentString(message));
+        }
     }
 
     public static boolean hasActiveLockChaseRestriction() {

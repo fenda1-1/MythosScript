@@ -75,9 +75,6 @@ public class MovementFeatureManager {
     int scaffoldPlaceCooldownTicks = 0;
     int obstacleAvoidDirection = 0;
     int obstacleAvoidTicks = 0;
-    double lastProtectionSafeMotionX = 0.0D;
-    double lastProtectionSafeMotionY = 0.0D;
-    double lastProtectionSafeMotionZ = 0.0D;
 
     static {
         register(new FeatureState("no_slow", "不受减速",
@@ -87,8 +84,8 @@ public class MovementFeatureManager {
                 "只要有前进输入就持续尝试进入疾跑状态，减少手动补按疾跑键。左键快速开关，右键打开移动设置。",
                 null, 0.0F, 0.0F, 0.0F, true));
         register(new FeatureState("anti_knockback", "防击退",
-                "尽量取消近战与常规受击产生的击退位移，让站位更稳定。左键快速开关，右键打开移动设置。",
-                null, 0.0F, 0.0F, 0.0F, true));
+                "抵消收到的水平和垂直击退；防击退系数 1 为完全抵消，0 为不抵消。",
+                "防击退系数", 1.0F, 0.0F, 1.0F, true));
         register(new FeatureState("gui_move", "GUI界面下移动",
                 "在大多数 GUI 界面保持 WASD、跳跃和下蹲输入可用。聊天输入框默认不接管。左键快速开关，右键打开移动设置。",
                 null, 0.0F, 0.0F, 0.0F, true));
@@ -105,7 +102,7 @@ public class MovementFeatureManager {
                 "卡进实体方块边缘或持续顶墙时，自动寻找最近安全偏移并轻量脱困，目标是减少卡住而不是粗暴穿墙。左键快速开关，右键打开移动设置。",
                 "脱困强度", 0.12F, 0.05F, 0.40F, true));
         register(new FeatureState("no_collision", "无碰撞",
-                "尽量减少与实体之间的推动和挤压，穿人群、贴怪或拥挤场景时更不容易被顶偏。左键快速开关，右键打开移动设置。",
+                "取消客户端实体阻挡与推挤，保留方块、墙壁和地板碰撞；服务器仍可校正位置。",
                 null, 0.0F, 0.0F, 0.0F, true));
         register(new FeatureState("long_jump", "长距离跳跃",
                 "地面移动时按住潜行蓄力，松开潜行后释放一次长跳。配置值决定蓄满所需时间，蓄力越久跳得越远。左键快速开关，右键打开移动设置。",
@@ -141,11 +138,11 @@ public class MovementFeatureManager {
                 "快速下落接近地面时自动削弱下坠速度，减少落地过猛的手感。左键快速开关，右键打开移动设置。",
                 "缓冲速度", 0.24F, 0.10F, 0.60F, true));
         register(new FeatureState("no_fall", "无摔伤",
-                "下落过高时主动补发落地状态，尽量规避摔落伤害。左键快速开关，右键打开移动设置。",
+                "开启后持续发送落地状态并清除本地摔落距离；服务器独立校验时可能仍受伤。",
                 null, 0.0F, 0.0F, 0.0F, true));
         register(new FeatureState("anti_arrow_knockback", "反击飞",
-                "受到击退时尽量压低水平位移，尤其适合对抗箭矢与远程骚扰。左键快速开关，右键打开移动设置。",
-                "抵消强度", 0.72F, 0.00F, 0.95F, true));
+                "抵消箭矢、受击和爆炸的水平与垂直速度；1 为完全抵消，0 为不抵消。",
+                "抵消强度", 1.0F, 0.0F, 1.0F, true));
 
         loadConfig();
     }
@@ -216,7 +213,7 @@ public class MovementFeatureManager {
                 this.value = defaultValue;
                 return;
             }
-            float clamped = MathHelper.clamp(value, minValue, maxValue);
+            float clamped = Float.isFinite(value) ? MathHelper.clamp(value, minValue, maxValue) : defaultValue;
             this.value = usesIntegerValue() ? Math.round(clamped) : clamped;
         }
 
@@ -686,7 +683,6 @@ public class MovementFeatureManager {
         NoSlowFeatureHandler.apply(player);
         IceBoostFeatureHandler.apply(player);
         ScaffoldFeatureHandler.apply(this, player);
-        AntiArrowKnockbackFeatureHandler.apply(player);
         AirMotionFeatureHandler.apply(player);
         SafeWalkFeatureHandler.apply(player);
     }
@@ -739,9 +735,6 @@ public class MovementFeatureManager {
                 player.entityCollisionReduction = 0.0F;
                 player.noClip = false;
             }
-            this.lastProtectionSafeMotionX = 0.0D;
-            this.lastProtectionSafeMotionY = 0.0D;
-            this.lastProtectionSafeMotionZ = 0.0D;
             return;
         }
 
@@ -753,75 +746,45 @@ public class MovementFeatureManager {
             player.noClip = false;
         }
 
-        if (applyAntiKnockback && player.hurtTime > 0) {
-            boolean hasMoveInput = player.movementInput != null && (Math.abs(player.movementInput.moveForward) > 0.01F
-                    || Math.abs(player.movementInput.moveStrafe) > 0.01F || player.movementInput.jump
-                    || player.movementInput.sneak);
-            boolean jumpPressed = player.movementInput != null && player.movementInput.jump;
-
-            if (!hasMoveInput) {
-                player.motionX = 0.0D;
-                player.motionZ = 0.0D;
-                player.velocityChanged = true;
-            } else {
-                double preservedSpeed = Math.sqrt(this.lastProtectionSafeMotionX * this.lastProtectionSafeMotionX
-                        + this.lastProtectionSafeMotionZ * this.lastProtectionSafeMotionZ);
-                double[] preservedMotion = resolveMovementProtectionMotion(player, preservedSpeed);
-                player.motionX = preservedMotion[0];
-                player.motionZ = preservedMotion[1];
-                player.velocityChanged = true;
-            }
-
-            if (!jumpPressed && player.motionY > 0.0D) {
-                player.motionY = Math.min(0.0D, this.lastProtectionSafeMotionY);
-                player.velocityChanged = true;
-            }
-        } else {
-            this.lastProtectionSafeMotionX = player.motionX;
-            this.lastProtectionSafeMotionY = player.motionY;
-            this.lastProtectionSafeMotionZ = player.motionZ;
-        }
     }
 
-    private double[] resolveMovementProtectionMotion(EntityPlayerSP player, double speed) {
+    public static double getKnockbackResistance() {
+        double melee = isEnabled("anti_knockback") ? getConfiguredValue("anti_knockback", 1.0F) : 0.0D;
+        double ranged = isEnabled("anti_arrow_knockback") ? getConfiguredValue("anti_arrow_knockback", 1.0F) : 0.0D;
+        return Math.max(melee, ranged);
+    }
+
+    public static boolean hasNoCollision(Entity entity) {
+        if (entity == null || !isEnabled("no_collision")) {
+            return false;
+        }
+        Minecraft mc = Minecraft.getMinecraft();
+        EntityPlayerSP player = mc.player;
         if (player == null) {
-            return new double[] { 0.0D, 0.0D };
+            return false;
         }
-        if (speed <= 1.0E-4D) {
-            return new double[] { 0.0D, 0.0D };
+        if (entity == player) {
+            return true;
         }
-
-        float forward = player.movementInput == null ? 0.0F : player.movementInput.moveForward;
-        float strafe = player.movementInput == null ? 0.0F : player.movementInput.moveStrafe;
-        float yaw = player.rotationYaw;
-
-        if (Math.abs(forward) < 0.01F && Math.abs(strafe) < 0.01F) {
-            return new double[] { this.lastProtectionSafeMotionX, this.lastProtectionSafeMotionZ };
-        }
-
-        if (forward != 0.0F) {
-            if (strafe > 0.0F) {
-                yaw += forward > 0.0F ? -45.0F : 45.0F;
-            } else if (strafe < 0.0F) {
-                yaw += forward > 0.0F ? 45.0F : -45.0F;
-            }
-            strafe = 0.0F;
-            forward = forward > 0.0F ? 1.0F : -1.0F;
-        }
-
-        if (strafe > 0.0F) {
-            strafe = 1.0F;
-        } else if (strafe < 0.0F) {
-            strafe = -1.0F;
-        }
-
-        double rad = Math.toRadians(yaw + 90.0F);
-        double sin = Math.sin(rad);
-        double cos = Math.cos(rad);
-        double motionX = (forward * cos + strafe * sin) * speed;
-        double motionZ = (forward * sin - strafe * cos) * speed;
-        return new double[] { motionX, motionZ };
+        // The integrated server owns a different player object and simulates animal pushing.
+        return entity instanceof net.minecraft.entity.player.EntityPlayerMP
+                && mc.getIntegratedServer() != null
+                && entity.getServer() == mc.getIntegratedServer()
+                && player.getUniqueID().equals(entity.getUniqueID());
     }
+
+    @SubscribeEvent
+    public void onLivingFall(net.minecraftforge.event.entity.living.LivingFallEvent event) {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (isEnabled("no_fall") && mc.player != null
+                && (event.getEntityLiving() == mc.player
+                    || (mc.isIntegratedServerRunning()
+                        && event.getEntityLiving().getUniqueID().equals(mc.player.getUniqueID())))) {
+            event.setCanceled(true);
+            event.getEntityLiving().fallDistance = 0.0F;
+        }
+    }
+
 
     private static void register(FeatureState state) {
         FEATURES.put(state.id, state);

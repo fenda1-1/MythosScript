@@ -29,6 +29,8 @@ src/test/**
 !src/test/**/AutoFollowWidgetStateTest.java
 !src/test/**/RuleSectionPagesTest.java
 !src/test/**/AutoPickupWorkbenchStateTest.java
+!src/test/**/MovementProtectionMixinContractTest.java
+!src/test/**/FlightCorridorClearanceTest.java
 # ====================== IDE ======================
 # Eclipse
 bin/

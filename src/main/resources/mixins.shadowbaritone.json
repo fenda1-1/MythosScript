@@ -9,6 +9,7 @@
     "maxShiftBy": 2
   },
   "client": [
+    "AccessorCPacketPlayer",
     "MixinAnvilChunkLoader",
     "MixinBitArray",
     "MixinBlockStateContainer",
@@ -42,6 +43,8 @@
     "MixinTileEntityRendererDispatcherForXray",
     "MixinVboRenderList",
     "MixinWorldClient",
+    "MixinWorld",
+    "MixinVehicleCollision",
     "MixinWorldProvider"
   ]
 }

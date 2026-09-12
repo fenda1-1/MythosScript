@@ -142,7 +142,8 @@ public final class NodeParameterSchemaRegistry {
                                          "warehouse_auto_deposit",
                                         "blocknextgui", "hidecurrentgui", "showhiddengui", "close_container_window", "hud_text_check", "autoeat",
                                         "autoequip", "autopickup",
-                                        "toggle_autoeat", "toggle_autofishing", "toggle_kill_aura", "toggle_fly",
+                                        "toggle_autoeat", "toggle_autofishing", "toggle_auto_pickup",
+                                        "toggle_kill_aura", "toggle_auto_follow", "toggle_fly",
                                         "toggle_conditional_execution",
                                         "toggle_auto_escape",
                                         "toggle_baritone_free_look",
@@ -490,11 +491,17 @@ public final class NodeParameterSchemaRegistry {
                 } else if ("toggle_autofishing".equals(normalized)) {
                         schemas.add(FieldSchema.paramsField("enabled", "自动钓鱼开关", FieldType.BOOLEAN, false,
                                         "true=开启自动钓鱼，false=关闭自动钓鱼。", "true / false", "true"));
+                } else if ("toggle_auto_pickup".equals(normalized)) {
+                        schemas.add(FieldSchema.paramsField("enabled", "自动拾取掉落物开关", FieldType.BOOLEAN, false,
+                                        "true=开启自动拾取掉落物，false=关闭自动拾取掉落物。", "true / false", "true"));
                 } else if ("toggle_kill_aura".equals(normalized)) {
                         schemas.add(FieldSchema.paramsField("presetName", "预设名称", FieldType.TEXT, false,
                                         "开启时应用该杀戮光环预设；留空则沿用当前配置。", "已保存的预设名称", ""));
                         schemas.add(FieldSchema.paramsField("enabled", "杀戮光环开关", FieldType.BOOLEAN, false,
                                         "true=开启杀戮光环，false=关闭杀戮光环。", "true / false", "true"));
+                } else if ("toggle_auto_follow".equals(normalized)) {
+                        schemas.add(FieldSchema.paramsField("enabled", "自动追怪开关", FieldType.BOOLEAN, false,
+                                        "true=开启自动追怪，false=关闭自动追怪。", "true / false", "true"));
                 } else if ("toggle_fly".equals(normalized)) {
                         schemas.add(FieldSchema.paramsField("enabled", "飞行开关", FieldType.BOOLEAN, false,
                                         "true=开启飞行，false=关闭飞行。", "true / false", "true"));

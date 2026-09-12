@@ -60,6 +60,11 @@ public final class PacketPayloadDecoder {
         return report == null ? "" : report.detailText;
     }
 
+    public static String decodeForRules(byte[] data, String preferredText) {
+        return preferredText != null && !preferredText.trim().isEmpty()
+                ? preferredText : decodeFull(data);
+    }
+
     public static String decodeFull(byte[] data) {
         AnnotatedDecodeReport report = inspectAnnotated(data);
         StringBuilder builder = new StringBuilder();

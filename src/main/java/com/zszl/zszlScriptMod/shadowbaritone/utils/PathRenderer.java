@@ -35,6 +35,7 @@ import com.zszl.zszlScriptMod.shadowbaritone.pathing.movement.parkour.ParkourJum
 import com.zszl.zszlScriptMod.shadowbaritone.pathing.path.OrbitRoutePath;
 import com.zszl.zszlScriptMod.shadowbaritone.pathing.path.PathExecutor;
 import com.zszl.zszlScriptMod.shadowbaritone.pathing.movement.movements.MovementParkour;
+import com.zszl.zszlScriptMod.shadowbaritone.pathing.movement.movements.MovementFlightCorridor;
 import com.zszl.zszlScriptMod.shadowbaritone.pathing.portal.EdgePortal;
 import com.zszl.zszlScriptMod.shadowbaritone.pathing.portal.EdgePortalDetector;
 import net.minecraft.block.state.IBlockState;
@@ -223,7 +224,9 @@ public final class PathRenderer implements IRenderer {
                 double fraction = (trimDistance - cumulativeDistance) / segmentLength;
                 segmentFrom = segmentFrom.add(segmentTo.subtract(segmentFrom).scale(fraction));
             }
-            emitFlightCorridorSegment(segmentFrom, segmentTo);
+            double radius = ((MovementFlightCorridor)
+                    path.movements().get(index)).getCorridorRadius();
+            emitFlightCorridorSegment(segmentFrom, segmentTo, radius);
             cumulativeDistance = segmentEndDistance;
         }
         IRenderer.endLines(settings.renderPathIgnoreDepth.value);
@@ -253,7 +256,7 @@ public final class PathRenderer implements IRenderer {
         return bestAlong;
     }
 
-    private static void emitFlightCorridorSegment(Vec3d start, Vec3d end) {
+    private static void emitFlightCorridorSegment(Vec3d start, Vec3d end, double radius) {
         Vec3d direction = end.subtract(start);
         if (direction.lengthSquared() <= 1.0E-6D) {
             return;
@@ -269,13 +272,17 @@ public final class PathRenderer implements IRenderer {
             axisB = new Vec3d(0.0D, 1.0D, 0.0D);
         }
 
-        int corridorWidth = Math.max(1, Math.min(9, settings.flightCorridorWidth.value));
-        double halfWidth = corridorWidth / 2.0D;
+        double halfWidth = radius + 0.3D;
+        double halfHeight = Math.abs(normalized.y) > 0.9D ? halfWidth : radius + 0.9D;
+        if (Math.abs(normalized.y) <= 0.9D) {
+            start = start.addVector(0.0D, 0.4D, 0.0D);
+            end = end.addVector(0.0D, 0.4D, 0.0D);
+        }
         double extension = Math.max(0.0D,
                 Math.min(halfWidth, settings.flightCorridorCornerExtension.value));
         for (int signA : new int[] { -1, 1 }) {
             for (int signB : new int[] { -1, 1 }) {
-                Vec3d cornerOffset = axisA.scale(signA * halfWidth).add(axisB.scale(signB * halfWidth));
+                Vec3d cornerOffset = axisA.scale(signA * halfWidth).add(axisB.scale(signB * halfHeight));
                 Vec3d cornerStart = start.add(cornerOffset);
                 Vec3d cornerEnd = end.add(cornerOffset);
                 IRenderer.emitLine(cornerStart, cornerEnd);

@@ -14,9 +14,11 @@ apply plugin: 'net.minecraftforge.gradle'
 apply plugin: 'eclipse'
 apply plugin: 'maven-publish'
 
-version = 'v1.0.7'
+version = 'v1.0.71'
 group = 'com.zszl.script'
 archivesBaseName = 'MythosScript'
+def minecraftVersionSuffix = 'mc1.12.2'
+def releaseJarBaseName = "${archivesBaseName}-${version}-${minecraftVersionSuffix}"
 def generatedMixinResourcesDir = file("$buildDir/generated/mixin")
 def generatedMixinRefMap = new File(generatedMixinResourcesDir, 'mixins.shadowbaritone.refmap.json')
 def generatedMixinTsrg = file("$buildDir/tmp/compileJava/mixins.shadowbaritone.tsrg")
@@ -150,6 +152,7 @@ sourceSets {
 }
 
 jar {
+    archiveFileName = "${releaseJarBaseName}.jar"
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     embeddedJarSignatureExcludes.each { pattern ->
         exclude pattern
@@ -158,7 +161,7 @@ jar {
         attributes([
             "Specification-Title": "MythosScript",
             "Specification-Vendor": "fenda",
-            "Specification-Version": "v1.0.7",
+            "Specification-Version": "v1.0.71",
             "Implementation-Title": "我的世界脚本",
             "Implementation-Version": "${version}",
             "Implementation-Vendor" :"fenda",
@@ -202,8 +205,8 @@ task proguard(type: JavaExec) {
     main = 'proguard.ProGuard'
 
     // 定义输入、输出和配置文件路径
-    def inputJar = "${project.buildDir}/libs/${project.archivesBaseName}-${project.version}.jar"
-    def outputJar = "${project.buildDir}/libs/${project.archivesBaseName}-${project.version}-obf.jar"
+    def inputJar = "${project.buildDir}/libs/${releaseJarBaseName}.jar"
+    def outputJar = "${project.buildDir}/libs/${releaseJarBaseName}-obf.jar"
     def configFile = "${project.buildDir}/proguard.pro"
 
     // 在执行前动态生成 ProGuard 配置文件

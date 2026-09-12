@@ -38,7 +38,7 @@ public final class FlightCorridorCollisionHandler {
             clear(null);
             return;
         }
-        double corridorRadius = Math.max(0.5D, radius);
+        double corridorRadius = Math.max(0.0D, radius);
         if (!isPlayerInside(player, start, end, corridorRadius)) {
             clear(owner);
             return;

@@ -7,7 +7,7 @@
 <p>A visual automation workbench for Minecraft.<br />Turn individual actions into game workflows you can design, inspect, and run.</p>
 
 <p>
-<img src="https://img.shields.io/badge/VERSION-1.0.7-79B8AB?style=flat-square&amp;labelColor=202B33" alt="Version 1.0.7" />
+<img src="https://img.shields.io/badge/VERSION-1.0.71-79B8AB?style=flat-square&amp;labelColor=202B33" alt="Version 1.0.71" />
 <img src="https://img.shields.io/badge/MINECRAFT-1.12.2-79B8AB?style=flat-square&amp;labelColor=202B33" alt="Minecraft 1.12.2" />
 <img src="https://img.shields.io/badge/FORGE-14.23.5.2860-D8B583?style=flat-square&amp;labelColor=202B33" alt="Forge 14.23.5.2860" />
 <img src="https://img.shields.io/badge/JAVA-8-D8B583?style=flat-square&amp;labelColor=202B33" alt="Java 8" />
@@ -62,8 +62,8 @@ On Windows, `build.bat` runs the same command. The build compiles the project, r
 
 | File | Purpose |
 | :--- | :--- |
-| `MythosScript-v1.0.7.jar` | Standard build for development and troubleshooting. |
-| `MythosScript-v1.0.7-obf.jar` | ProGuard-obfuscated build, intended for distribution. |
+| `MythosScript-v1.0.71-mc1.12.2.jar` | Standard build for development and troubleshooting. |
+| `MythosScript-v1.0.71-mc1.12.2-obf.jar` | ProGuard-obfuscated build, intended for distribution. |
 
 Both are Minecraft 1.12.2 Forge mods. Install only one of them in a game instance's `mods` directory at a time. The build includes the current working tree, so confirm the local changes you intend to ship before creating a release.
 

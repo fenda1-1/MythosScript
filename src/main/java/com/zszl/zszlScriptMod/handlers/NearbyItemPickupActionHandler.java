@@ -1,12 +1,12 @@
 package com.zszl.zszlScriptMod.handlers;
 
 import com.google.gson.JsonObject;
+import com.zszl.zszlScriptMod.path.DroppedPickupTarget;
 import com.zszl.zszlScriptMod.path.InventoryItemFilterExpressionEngine;
 import com.zszl.zszlScriptMod.zszlScriptMod;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.item.EntityItem;
 import net.minecraft.item.EnumRarity;
 import net.minecraft.item.ItemStack;
 
@@ -104,13 +104,13 @@ public final class NearbyItemPickupActionHandler {
             return;
         }
 
-        EntityItem target = resolveCurrentTarget(player);
+        Entity target = resolveCurrentTarget(player);
         if (maxItems > 0 && pickedCount >= maxItems) {
             finish();
             return;
         }
         if (target == null) {
-            target = findNearestMatchingItem(player);
+            target = findNearestMatchingTarget(player);
             if (target == null) {
                 finish();
                 return;
@@ -128,46 +128,44 @@ public final class NearbyItemPickupActionHandler {
         if (nowTick - lastGotoTick < GOTO_INTERVAL_TICKS) {
             return;
         }
-        AutoPickupHandler.INSTANCE.startNavigationToPickupItem(target);
+        AutoPickupHandler.INSTANCE.startNavigationToPickupTarget(target);
         lastGotoTick = nowTick;
     }
 
-    private static EntityItem resolveCurrentTarget(EntityPlayerSP player) {
+    private static Entity resolveCurrentTarget(EntityPlayerSP player) {
         if (targetEntityId == Integer.MIN_VALUE || player.world == null) {
             return null;
         }
         Entity entity = player.world.getEntityByID(targetEntityId);
-        if (!(entity instanceof EntityItem) || entity.isDead) {
+        if (!DroppedPickupTarget.isSupported(entity) || entity.isDead) {
             pickedCount++;
             targetEntityId = Integer.MIN_VALUE;
             lastGotoTick = -99999;
             return null;
         }
-        EntityItem item = (EntityItem) entity;
-        if (isEligible(item, player)) {
-            return item;
+        if (isEligible(entity, player)) {
+            return entity;
         }
         targetEntityId = Integer.MIN_VALUE;
         lastGotoTick = -99999;
         return null;
     }
 
-    private static EntityItem findNearestMatchingItem(EntityPlayerSP player) {
-        EntityItem nearest = null;
+    private static Entity findNearestMatchingTarget(EntityPlayerSP player) {
+        Entity nearest = null;
         double bestDistanceSq = Double.MAX_VALUE;
         int scanned = 0;
         for (Entity entity : player.world.loadedEntityList) {
-            if (!(entity instanceof EntityItem)) {
+            if (!DroppedPickupTarget.isSupported(entity)) {
                 continue;
             }
-            EntityItem item = (EntityItem) entity;
-            if (!isEligible(item, player)) {
+            if (!isEligible(entity, player)) {
                 continue;
             }
-            double distanceSq = player.getDistanceSq(item);
+            double distanceSq = player.getDistanceSq(entity);
             if (distanceSq < bestDistanceSq) {
                 bestDistanceSq = distanceSq;
-                nearest = item;
+                nearest = entity;
             }
             if (++scanned >= MAX_SCANNED_ITEM_ENTITIES) {
                 break;
@@ -176,29 +174,26 @@ public final class NearbyItemPickupActionHandler {
         return nearest;
     }
 
-    private static boolean isEligible(EntityItem item, EntityPlayerSP player) {
-        if (item == null || item.isDead || !item.onGround) {
+    private static boolean isEligible(Entity target, EntityPlayerSP player) {
+        if (target == null || !DroppedPickupTarget.isEligibleForScan(target)) {
             return false;
         }
-        double dx = item.posX - centerX;
-        double dy = item.posY - centerY;
-        double dz = item.posZ - centerZ;
+        double dx = target.posX - centerX;
+        double dy = target.posY - centerY;
+        double dz = target.posZ - centerZ;
         if (dx * dx + dy * dy + dz * dz > searchRadius * searchRadius) {
             return false;
         }
 
-        ItemStack stack = item.getItem();
-        if (stack == null || stack.isEmpty()) {
-            return false;
-        }
-        double playerDistance = Math.sqrt(player.getDistanceSq(item));
+        double playerDistance = Math.sqrt(player.getDistanceSq(target));
+        String rarity = DroppedPickupTarget.isExperienceOrb(target) ? "common"
+                : getRarityToken(DroppedPickupTarget.getItemStack(target));
         if (inheritKillAuraRules) {
-            return KillAuraHandler.INSTANCE.matchesHuntPickupRulesForAction(stack, playerDistance);
+            return KillAuraHandler.INSTANCE.matchesHuntPickupRulesForAction(target, playerDistance);
         }
-        String rarity = getRarityToken(stack);
         for (String expression : expressions) {
             try {
-                if (InventoryItemFilterExpressionEngine.matches(stack, -1, expression, rarity, playerDistance)) {
+                if (InventoryItemFilterExpressionEngine.matches(target, expression, rarity, playerDistance)) {
                     return true;
                 }
             } catch (RuntimeException e) {

@@ -3,6 +3,9 @@ package com.zszl.zszlScriptMod.gui.modern.path.editor;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 import net.minecraft.client.resources.I18n;
 
@@ -13,6 +16,9 @@ import net.minecraft.client.resources.I18n;
 public final class ActionEditorFieldHelp {
     private static final String PREFIX = "gui.path.action_editor.help.";
     private static final Map<String, String> ALIASES = aliases();
+    private static final Set<String> VARIABLE_FIELDS = new HashSet<String>(Arrays.asList(
+            "ticks", "delayTicks", "timeoutTicks", "intervalTicks", "count", "amount", "slot", "x", "y", "z",
+            "range", "radius", "tolerance", "maxTake", "maxPut", "useCount", "perSlotCount", "skipCount"));
 
     private ActionEditorFieldHelp() {
     }
@@ -20,9 +26,20 @@ public final class ActionEditorFieldHelp {
     public static String tooltip(String actionType, String fieldKey, String hint, Object... formatArgs) {
         String translated = translate(candidates(actionType, fieldKey), formatArgs);
         if (!translated.isEmpty()) {
-            return translated;
+            return withVariableHint(fieldKey, translated);
         }
-        return hint == null ? "" : hint.trim();
+        String base = hint == null ? "" : hint.trim();
+        return withVariableHint(fieldKey, base);
+    }
+
+    public static String inputHint(String fieldKey, String hint) {
+        return withVariableHint(fieldKey, hint == null ? "" : hint.trim());
+    }
+
+    private static String withVariableHint(String fieldKey, String text) {
+        if (!VARIABLE_FIELDS.contains(fieldKey)) return text;
+        String suffix = "支持引用已有变量：填写 $变量名（如 $delay_ticks）；也可使用 ${变量名}。运行时会将其值转换为当前参数类型。";
+        return text.isEmpty() ? suffix : text + "\n" + suffix;
     }
 
     private static String translate(String[] suffixes, Object... formatArgs) {

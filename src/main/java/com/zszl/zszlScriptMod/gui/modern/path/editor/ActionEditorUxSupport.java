@@ -14,7 +14,7 @@ import net.minecraft.client.resources.I18n;
  */
 public final class ActionEditorUxSupport {
     private static final Set<String> EMPTY_PARAM_ACTIONS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
-            "disconnect", "hidecurrentgui", "showhiddengui", "close_container_window", "restart_sequence",
+            "disconnect", "hidecurrentgui", "close_container_window", "restart_sequence",
             "no_stop_navigation", "debug_print_gui_summary", "runlastsequence")));
 
     private static final Set<String> HOTBAR_KEYS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
