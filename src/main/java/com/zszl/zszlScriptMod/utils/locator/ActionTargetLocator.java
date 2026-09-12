@@ -278,8 +278,7 @@ public final class ActionTargetLocator {
             if (entity == null || entity == player || !entity.isEntityAlive()) {
                 continue;
             }
-            String searchText = buildEntitySearchText(entity);
-            if (!matches(searchText, query, matchMode)) {
+            if (!matchesEntity(entity, query, matchMode)) {
                 continue;
             }
             matches.add(new EntityMatch(entity, entity.getDistanceSq(player)));
@@ -617,6 +616,12 @@ public final class ActionTargetLocator {
         }
         builder.append(' ').append(entity.getClass().getSimpleName());
         return builder.toString();
+    }
+
+    private static boolean matchesEntity(Entity entity, String query, String mode) {
+        if (entity.getDisplayName() != null && matches(entity.getDisplayName().getUnformattedText(), query, mode)) return true;
+        if (matches(entity.getName(), query, mode)) return true;
+        return matches(entity.getClass().getSimpleName(), query, mode);
     }
 
     private static String normalize(String text) {

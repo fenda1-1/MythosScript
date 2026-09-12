@@ -29,6 +29,7 @@ import com.zszl.zszlScriptMod.shadowbaritone.pathing.movement.CalculationContext
 import com.zszl.zszlScriptMod.shadowbaritone.pathing.movement.Movement;
 import com.zszl.zszlScriptMod.shadowbaritone.pathing.movement.MovementHelper;
 import com.zszl.zszlScriptMod.shadowbaritone.pathing.movement.MovementState;
+import com.zszl.zszlScriptMod.shadowbaritone.behavior.InventoryBehavior;
 import com.zszl.zszlScriptMod.shadowbaritone.utils.BlockStateInterface;
 import com.google.common.collect.ImmutableSet;
 import net.minecraft.block.*;
@@ -37,7 +38,6 @@ import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
-import java.util.Objects;
 import java.util.Set;
 
 public class MovementPillar extends Movement {
@@ -207,10 +207,13 @@ public class MovementPillar extends Movement {
                 ctx.playerRotations());
         if (!ladder) {
             state.setTarget(
-                    new MovementState.MovementTarget(ctx.playerRotations().withPitch(rotation.getPitch()), true));
+                    new MovementState.MovementTarget(rotation, true));
         }
 
         boolean blockIsThere = MovementHelper.canWalkOn(ctx, src) || ladder;
+        if (ctx.playerFeet().equals(dest) && blockIsThere) {
+            return state.setStatus(MovementStatus.SUCCESS);
+        }
         if (ladder) {
             BlockPos against = vine ? getAgainst(new CalculationContext(baritone), src)
                     : src.offset(fromDown.getValue(BlockLadder.FACING).getOpposite());
@@ -236,20 +239,16 @@ public class MovementPillar extends Movement {
             return state;
         } else {
             // Get ready to place a throwaway block
-            if (!((Baritone) baritone).getInventoryBehavior().selectThrowawayForLocation(true, src.x, src.y, src.z)) {
+            InventoryBehavior inventory = ((Baritone) baritone).getInventoryBehavior();
+            if (!blockIsThere && !inventory.selectThrowawayForLocation(true, src.x, src.y, src.z)) {
                 return state.setStatus(MovementStatus.UNREACHABLE);
             }
-
-            state.setInput(Input.SNEAK, ctx.player().posY > dest.getY() || ctx.player().posY < src.getY() + 0.2D); // delay
-                                                                                                                   // placement
-                                                                                                                   // by
-                                                                                                                   // 1
-                                                                                                                   // tick
-                                                                                                                   // for
-                                                                                                                   // ncp
-                                                                                                                   // compatibility
-            // since (lower down) we only right click once player.isSneaking, and that
-            // happens the tick after we request to sneak
+            // A queued inventory swap is not a block in hand. Wait on the ground
+            // instead of spending the jump's placement window with the wrong item.
+            state.setInput(Input.SNEAK, true);
+            if (!blockIsThere && !inventory.selectThrowawayForLocation(true, src.x, src.y, src.z, false)) {
+                return state;
+            }
 
             double diffX = ctx.player().posX - (dest.getX() + 0.5);
             double diffZ = ctx.player().posZ - (dest.getZ() + 0.5);
@@ -283,11 +282,16 @@ public class MovementPillar extends Movement {
                     state.setInput(Input.JUMP, false); // breaking is like 5x slower when you're jumping
                     state.setInput(Input.CLICK_LEFT, true);
                     blockIsThere = false;
-                } else if (ctx.player().isSneaking()
-                        && (Objects.equals(src.down(), ctx.objectMouseOver().getBlockPos())
-                                || Objects.equals(src, ctx.objectMouseOver().getBlockPos()))
-                        && ctx.player().posY > dest.getY() + 0.1) {
-                    state.setInput(Input.CLICK_RIGHT, true);
+                } else if (dist <= 0.17 && flatMotion < 0.05) {
+                    // Use actual reachable faces, including the walls of a bedrock
+                    // pit. Only change placement yaw after centering has finished.
+                    MovementHelper.PlaceResult placement = MovementHelper.attemptToPlaceABlock(
+                            state, baritone, src, true, true);
+                    if (placement == MovementHelper.PlaceResult.READY_TO_PLACE
+                            && ctx.player().isSneaking()
+                            && ctx.player().getEntityBoundingBox().minY >= dest.getY()) {
+                        state.setInput(Input.CLICK_RIGHT, true);
+                    }
                 }
             }
         }

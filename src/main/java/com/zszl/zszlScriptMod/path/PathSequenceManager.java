@@ -2799,8 +2799,7 @@ public class PathSequenceManager {
                                         entityLocatorText);
                                 return;
                             }
-                            Minecraft.getMinecraft().playerController.interactWithEntity(player, targetEntity,
-                                    EnumHand.MAIN_HAND);
+                            ModUtils.rightClickEntity(player, targetEntity);
                             return;
                         }
                         if (entityPos == null) {
