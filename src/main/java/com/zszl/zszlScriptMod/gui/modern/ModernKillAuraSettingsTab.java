@@ -406,6 +406,8 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         attackCore.fields.add(toggle("requireLineOfSight", "gui.modern.killaura.u058", "gui.modern.killaura.u059"));
         attackCore.fields.add(toggle("throughWallAttack", "gui.modern.killaura.u060", "gui.modern.killaura.u061"));
         attackCore.fields.add(toggle("focusSingleTarget", "gui.modern.killaura.u062", "gui.modern.killaura.u063"));
+        attackCore.fields.add(toggle("blockWhileAttacking", "gui.modern.killaura.block_while_attacking",
+                "gui.modern.killaura.block_while_attacking_desc").enabledWhen(condition("notAimOnly")));
 
         Section rotation = section(Group.ATTACK, "gui.modern.killaura.u064", "gui.modern.killaura.u065");
         rotation.fields.add(toggle("rotateToTarget", "gui.modern.killaura.u066", "gui.modern.killaura.u067")
@@ -2651,6 +2653,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         KillAuraHandler.onlyWeapon = false;
         KillAuraHandler.aimOnlyMode = false;
         KillAuraHandler.focusSingleTarget = true;
+        KillAuraHandler.blockWhileAttacking = false;
         KillAuraHandler.ignoreInvisible = true;
         KillAuraHandler.enableNoCollision = true;
         KillAuraHandler.enableAntiKnockback = true;
@@ -3274,6 +3277,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             value.onlyWeapon = KillAuraHandler.onlyWeapon;
             value.aimOnlyMode = KillAuraHandler.aimOnlyMode;
             value.focusSingleTarget = KillAuraHandler.focusSingleTarget;
+            value.blockWhileAttacking = KillAuraHandler.blockWhileAttacking;
             value.ignoreInvisible = KillAuraHandler.ignoreInvisible;
             value.enableNoCollision = KillAuraHandler.enableNoCollision;
             value.enableAntiKnockback = KillAuraHandler.enableAntiKnockback;
@@ -3343,6 +3347,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             KillAuraHandler.onlyWeapon = value.onlyWeapon;
             KillAuraHandler.aimOnlyMode = value.aimOnlyMode;
             KillAuraHandler.focusSingleTarget = value.focusSingleTarget;
+            KillAuraHandler.blockWhileAttacking = value.blockWhileAttacking;
             KillAuraHandler.ignoreInvisible = value.ignoreInvisible;
             KillAuraHandler.enableNoCollision = value.enableNoCollision;
             KillAuraHandler.enableAntiKnockback = value.enableAntiKnockback;
@@ -3403,6 +3408,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             if ("onlyWeapon".equals(key)) return KillAuraHandler.onlyWeapon;
             if ("aimOnlyMode".equals(key)) return KillAuraHandler.aimOnlyMode;
             if ("focusSingleTarget".equals(key)) return KillAuraHandler.focusSingleTarget;
+            if ("blockWhileAttacking".equals(key)) return KillAuraHandler.blockWhileAttacking;
             if ("ignoreInvisible".equals(key)) return KillAuraHandler.ignoreInvisible;
             if ("enableNoCollision".equals(key)) return KillAuraHandler.enableNoCollision;
             if ("enableAntiKnockback".equals(key)) return KillAuraHandler.enableAntiKnockback;
@@ -3444,6 +3450,10 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                     KillAuraHandler.rotateOnlyOnAttack = false;
                 }
             } else if ("focusSingleTarget".equals(key)) KillAuraHandler.focusSingleTarget = value;
+            else if ("blockWhileAttacking".equals(key)) {
+                KillAuraHandler.blockWhileAttacking = value;
+                if (!value) KillAuraHandler.INSTANCE.stopAttackBlocking();
+            }
             else if ("ignoreInvisible".equals(key)) KillAuraHandler.ignoreInvisible = value;
             else if ("enableNoCollision".equals(key)) KillAuraHandler.enableNoCollision = value;
             else if ("enableAntiKnockback".equals(key)) KillAuraHandler.enableAntiKnockback = value;

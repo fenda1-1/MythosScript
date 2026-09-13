@@ -30,6 +30,8 @@ src/test/**
 !src/test/**/RuleSectionPagesTest.java
 !src/test/**/AutoPickupWorkbenchStateTest.java
 !src/test/**/MovementProtectionMixinContractTest.java
+!src/test/**/KillAuraBlockingContractTest.java
+!src/test/**/KillAuraBlockingGeometryTest.java
 !src/test/**/FlightCorridorClearanceTest.java
 # ====================== IDE ======================
 # Eclipse

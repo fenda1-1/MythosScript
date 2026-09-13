@@ -29,12 +29,15 @@ import net.minecraft.network.EnumPacketDirection;
 import net.minecraft.network.NetworkManager;
 import net.minecraft.network.Packet;
 import net.minecraft.network.play.client.CPacketPlayer;
+import com.zszl.zszlScriptMod.handlers.KillAuraHandler;
+import com.zszl.zszlScriptMod.handlers.KillAuraBlocking;
 import com.zszl.zszlScriptMod.otherfeatures.handler.movement.MovementFeatureManager;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
@@ -43,6 +46,20 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(NetworkManager.class)
 public class MixinNetworkManager {
+
+    @ModifyVariable(method = "dispatchPacket", at = @At("HEAD"), argsOnly = true, ordinal = 0, require = 1)
+    private Packet<?> zszl$sendShieldFacing(Packet<?> packet) {
+        if (this.field_179294_g != EnumPacketDirection.CLIENTBOUND || !(packet instanceof CPacketPlayer)) {
+            return packet;
+        }
+        net.minecraft.client.entity.EntityPlayerSP player = net.minecraft.client.Minecraft.getMinecraft().player;
+        if (player == null || player.connection == null
+                || player.connection.getNetworkManager() != (NetworkManager) (Object) this) return packet;
+        java.util.Optional<com.zszl.zszlScriptMod.shadowbaritone.api.utils.Rotation> facing =
+                KillAuraHandler.INSTANCE.getBlockingServerRotation(player);
+        if (!facing.isPresent()) return packet;
+        return KillAuraBlocking.withRotation((CPacketPlayer) packet, facing.get());
+    }
 
     @Shadow(remap = false)
     private Channel field_150746_k;

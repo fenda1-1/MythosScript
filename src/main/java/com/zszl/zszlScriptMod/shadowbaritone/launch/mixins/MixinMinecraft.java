@@ -18,6 +18,7 @@
 package com.zszl.zszlScriptMod.shadowbaritone.launch.mixins;
 
 import com.zszl.zszlScriptMod.otherfeatures.handler.movement.MovementFeatureManager;
+import com.zszl.zszlScriptMod.handlers.KillAuraHandler;
 import com.zszl.zszlScriptMod.otherfeatures.handler.movement.FreecamFeatureHandler;
 import com.zszl.zszlScriptMod.shadowbaritone.api.BaritoneAPI;
 import com.zszl.zszlScriptMod.shadowbaritone.api.IBaritone;
@@ -31,6 +32,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.multiplayer.WorldClient;
+import net.minecraft.client.multiplayer.PlayerControllerMP;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.EnumActionResult;
 import net.minecraft.util.EnumHand;
@@ -53,6 +56,13 @@ import java.util.function.BiFunction;
  */
 @Mixin(Minecraft.class)
 public class MixinMinecraft {
+
+        @Redirect(method = "processKeyBinds", at = @At(value = "INVOKE", target = "net/minecraft/client/multiplayer/PlayerControllerMP.onStoppedUsingItem(Lnet/minecraft/entity/player/EntityPlayer;)V"), require = 1)
+        private void zszl$keepAuraShieldRaised(PlayerControllerMP controller, EntityPlayer player) {
+                if (!KillAuraHandler.INSTANCE.shouldKeepAttackBlocking()) {
+                        controller.onStoppedUsingItem(player);
+                }
+        }
 
         @Inject(method = {"clickMouse", "rightClickMouse", "middleClickMouse"}, at = @At("HEAD"), cancellable = true)
         private void zszl$freecamBlockClicks(CallbackInfo ci) {
