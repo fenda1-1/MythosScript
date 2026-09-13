@@ -10,6 +10,7 @@
   },
   "client": [
     "AccessorCPacketPlayer",
+    "AccessorEntityArrow",
     "MixinAnvilChunkLoader",
     "MixinBitArray",
     "MixinBlockStateContainer",

@@ -6894,6 +6894,7 @@ public class PathSequenceEventListener {
             }
             return triggered;
         }
+        KillAuraHandler.INSTANCE.refreshHuntAttackBlocking(player, target);
         if (huntAttackCooldownTicks > 0 || player == null || target == null) {
             return false;
         }

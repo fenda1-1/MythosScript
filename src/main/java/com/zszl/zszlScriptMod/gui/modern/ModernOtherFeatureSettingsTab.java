@@ -129,7 +129,7 @@ public final class ModernOtherFeatureSettingsTab {
                                     ModernFormSettingsTab.option(SpeedHandler.PRESET_CUSTOM, "自定义")))
                     .toggle(text("gui.other_feature.timer_boost", "Timer 加速"), text("gui.other_feature.timer_boost_tip", "是否同时调整客户端 tick 节奏。"), access.speedTimerValue())
                     .toggle(text("gui.other_feature.feature_hud", "单项状态 HUD"), text("gui.other_feature.feature_hud_tip", "在状态 HUD 中显示速度模式和参数。"), access.speedHudValue())
-                    .decimal(text("gui.other_feature.timer_multiplier", "Timer 倍率"), "范围 1.00 - 2.50。", access.speedTimerSpeedValue(), 1.00F, 2.50F)
+                    .decimal(text("gui.other_feature.timer_multiplier", "Timer 倍率"), "范围 1.00 - 15.00。", access.speedTimerSpeedValue(), 1.00F, 15.00F)
                     .decimal(text("gui.other_feature.horizontal_speed", "水平速度"), "范围 0.10 - 15.00。", access.speedVanillaValue(), 0.10F, 15.00F)
                     .decimal(text("gui.other_feature.jump_height", "跳跃高度"), "范围 0.00 - 1.00；仅跳跃模式使用。", access.speedJumpValue(), 0.00F, 1.00F)
                     .enabledWhen(new ModernFormSettingsTab.EnabledPredicate() {
@@ -148,8 +148,7 @@ public final class ModernOtherFeatureSettingsTab {
                     .integer(text("gui.other_feature.execution_interval", "执行间隔"), text("gui.other_feature.execution_interval_tip", "按功能限制范围调整 tick 间隔。"), access.itemTimingValue(),
                             access.itemTimingMinimum(), access.itemTimingMaximum());
             if ("drop_all".equals(access.id)) {
-                builder.text(text("gui.other_feature.drop_expression", "丢弃表达式"), text("gui.other_feature.drop_expression_tip", "每行一条过滤表达式；命中任意表达式的物品会被自动丢弃。"),
-                        access.dropExpressionsValue(), "示例: name contains 垃圾", 2048);
+                builder.custom(new ModernExpressionListWidget(access.dropExpressionsValue()));
             }
         } else if (access.kind == Kind.MISC && "auto_reconnect".equals(access.id)) {
             builder.section(text("gui.other_feature.reconnect_strategy", "重连策略"), text("gui.other_feature.reconnect_strategy_tip", "配置断线后的等待时间、尝试上限和持续重试方式。"))

@@ -1042,7 +1042,7 @@ public class SpeedHandler {
     private static void normalizeConfig() {
         speedMode = normalizeSpeedMode(speedMode);
         presetId = normalizePresetId(presetId);
-        timerSpeed = MathHelper.clamp(timerSpeed, 1.00F, 2.50F);
+        timerSpeed = MathHelper.clamp(timerSpeed, 1.00F, 15.00F);
         jumpHeight = MathHelper.clamp(jumpHeight, 0.00F, 1.00F);
         vanillaSpeed = MathHelper.clamp(vanillaSpeed, 0.10F, 15.00F);
     }

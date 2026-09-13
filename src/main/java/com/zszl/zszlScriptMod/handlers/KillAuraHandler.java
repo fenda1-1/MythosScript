@@ -26,6 +26,7 @@ import com.zszl.zszlScriptMod.shadowbaritone.api.utils.BetterBlockPos;
 import com.zszl.zszlScriptMod.shadowbaritone.api.utils.Rotation;
 import com.zszl.zszlScriptMod.shadowbaritone.api.utils.RotationUtils;
 import com.zszl.zszlScriptMod.shadowbaritone.process.KillAuraOrbitProcess;
+import com.zszl.zszlScriptMod.shadowbaritone.launch.mixins.AccessorEntityArrow;
 import com.zszl.zszlScriptMod.shadowbaritone.utils.PathRenderer;
 import com.zszl.zszlScriptMod.system.ProfileManager;
 import com.zszl.zszlScriptMod.utils.JsonConfigCharsetCompat;
@@ -46,9 +47,15 @@ import net.minecraft.client.resources.I18n;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EnumCreatureType;
 import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.entity.EntityLiving;
 import net.minecraft.entity.item.EntityEnderCrystal;
 import net.minecraft.entity.item.EntityArmorStand;
 import net.minecraft.entity.item.EntityItem;
+import net.minecraft.entity.projectile.EntityArrow;
+import net.minecraft.entity.projectile.EntityFireball;
+import net.minecraft.entity.projectile.EntityThrowable;
+import net.minecraft.entity.projectile.EntityPotion;
+import net.minecraft.entity.projectile.EntityShulkerBullet;
 import net.minecraft.entity.boss.EntityDragon;
 import net.minecraft.entity.monster.EntityGolem;
 import net.minecraft.entity.monster.IMob;
@@ -61,6 +68,7 @@ import net.minecraft.item.ItemAxe;
 import net.minecraft.item.EnumRarity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.ItemSword;
+import net.minecraft.item.EnumAction;
 import net.minecraft.network.play.client.CPacketPlayer;
 import net.minecraft.network.play.client.CPacketUseEntity;
 import net.minecraft.network.play.server.SPacketPlayerPosLook;
@@ -143,6 +151,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
     public static boolean onlyWeapon = false;
     public static boolean aimOnlyMode = false;
     public static boolean focusSingleTarget = true;
+    public static boolean blockWhileAttacking = false;
     public static boolean ignoreInvisible = true;
     public static boolean enableNoCollision = true;
     public static boolean enableAntiKnockback = true;
@@ -327,6 +336,15 @@ public class KillAuraHandler implements AbstractGameEventListener {
     private static final double HUNT_UNREACHABLE_TARGET_RESET_DISTANCE_SQ = 4.0D;
 
     private int attackCooldownTicks = 0;
+    private EntityPlayerSP blockingPlayer;
+    private ItemStack blockingStack = ItemStack.EMPTY;
+    private EnumHand blockingHand;
+    private int blockingHotbarSlot;
+    private Entity lastBlockingTarget;
+    private int lastBlockingAttackTick;
+    private EntityPlayerSP blockingAttemptPlayer;
+    private int nextBlockingAttemptTick;
+    private volatile Rotation blockingServerRotation;
     private int sequenceCooldownTicks = 0;
     private int currentTargetEntityId = -1;
     private int lastAimTargetEntityId = Integer.MIN_VALUE;
@@ -492,6 +510,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         public boolean onlyWeapon = false;
         public boolean aimOnlyMode = false;
         public boolean focusSingleTarget = true;
+        public boolean blockWhileAttacking = false;
         public boolean ignoreInvisible = true;
         public boolean enableNoCollision = true;
         public boolean enableAntiKnockback = true;
@@ -567,6 +586,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
             this.onlyWeapon = other.onlyWeapon;
             this.aimOnlyMode = other.aimOnlyMode;
             this.focusSingleTarget = other.focusSingleTarget;
+            this.blockWhileAttacking = other.blockWhileAttacking;
             this.ignoreInvisible = other.ignoreInvisible;
             this.enableNoCollision = other.enableNoCollision;
             this.enableAntiKnockback = other.enableAntiKnockback;
@@ -762,6 +782,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         onlyWeapon = false;
         aimOnlyMode = false;
         focusSingleTarget = true;
+        blockWhileAttacking = false;
         ignoreInvisible = true;
         enableNoCollision = true;
         enableAntiKnockback = true;
@@ -867,6 +888,9 @@ public class KillAuraHandler implements AbstractGameEventListener {
             }
             if (json.has("focusSingleTarget")) {
                 focusSingleTarget = json.get("focusSingleTarget").getAsBoolean();
+            }
+            if (json.has("blockWhileAttacking")) {
+                blockWhileAttacking = json.get("blockWhileAttacking").getAsBoolean();
             }
             if (json.has("ignoreInvisible")) {
                 ignoreInvisible = json.get("ignoreInvisible").getAsBoolean();
@@ -1075,6 +1099,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
             json.addProperty("onlyWeapon", onlyWeapon);
             json.addProperty("aimOnlyMode", aimOnlyMode);
             json.addProperty("focusSingleTarget", focusSingleTarget);
+            json.addProperty("blockWhileAttacking", blockWhileAttacking);
             json.addProperty("ignoreInvisible", ignoreInvisible);
             json.addProperty("enableNoCollision", enableNoCollision);
             json.addProperty("enableAntiKnockback", enableAntiKnockback);
@@ -1320,6 +1345,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         onlyWeapon = safePreset.onlyWeapon;
         aimOnlyMode = safePreset.aimOnlyMode;
         focusSingleTarget = safePreset.focusSingleTarget;
+        blockWhileAttacking = safePreset.blockWhileAttacking;
         ignoreInvisible = safePreset.ignoreInvisible;
         enableNoCollision = safePreset.enableNoCollision;
         enableAntiKnockback = safePreset.enableAntiKnockback;
@@ -1370,6 +1396,9 @@ public class KillAuraHandler implements AbstractGameEventListener {
     }
 
     public void resetRuntimeState() {
+        stopAttackBlocking();
+        this.blockingAttemptPlayer = null;
+        this.nextBlockingAttemptTick = 0;
         stopHuntPickupNavigation();
         stopHuntNavigation();
         this.attackCooldownTicks = 0;
@@ -1420,6 +1449,212 @@ public class KillAuraHandler implements AbstractGameEventListener {
         this.attackSequenceExecutor.stop();
         clearNoDamageAttackTracking();
         this.areaHuntControlTicks = 0;
+    }
+
+    private boolean ownsAttackBlocking(EntityPlayerSP player) {
+        return player != null && player == this.blockingPlayer && this.blockingHand != null
+                && player.isHandActive() && player.getActiveHand() == this.blockingHand
+                && player.getActiveItemStack() == this.blockingStack;
+    }
+
+    private boolean isAttackBlockingRequested(Minecraft mc) {
+        EntityPlayerSP player = mc.player;
+        if (!blockWhileAttacking || aimOnlyMode || player == null || mc.world == null
+                || player.world != mc.world || mc.playerController == null || player.connection == null
+                || mc.currentScreen != null || !mc.inGameHasFocus || mc.isGamePaused()
+                || player.isDead || player.getHealth() <= 0.0F || player.isSpectator()
+                || AutoEatHandler.isEating || this.attackSequenceExecutor.isRunning()
+                || !PerformanceMonitor.isFeatureEnabled("kill_aura")) {
+            return false;
+        }
+        // Target loss must not restart vanilla's five-tick shield warm-up.
+        return enabled || this.areaHuntControlTicks > 0 || (this.lastBlockingTarget != null
+                && player.ticksExisted - this.lastBlockingAttackTick >= 0
+                && player.ticksExisted - this.lastBlockingAttackTick <= 2);
+    }
+
+    /** Finds moving projectiles whose next few ticks intersect the player's body. */
+    private Entity findBlockingProjectileThreat(EntityPlayerSP player) {
+        if (!blockWhileAttacking || player == null || player.world == null) return null;
+        Entity best = null;
+        double bestTime = Double.POSITIVE_INFINITY;
+        AxisAlignedBB body = player.getEntityBoundingBox().grow(0.35D);
+        Vec3d playerMotion = new Vec3d(player.motionX, player.onGround ? 0D : player.motionY, player.motionZ);
+        for (Entity entity : player.world.loadedEntityList) {
+            if (!(entity instanceof EntityArrow || entity instanceof EntityFireball
+                    || entity instanceof EntityThrowable || entity instanceof EntityShulkerBullet)
+                    || entity.isDead) continue;
+            if (entity instanceof EntityArrow && ((AccessorEntityArrow) entity).zszl$isInGround()) continue;
+            Vec3d velocity = new Vec3d(entity.motionX, entity.motionY, entity.motionZ);
+            Vec3d start = new Vec3d(entity.posX, entity.posY, entity.posZ);
+            Vec3d acceleration = Vec3d.ZERO;
+            double gravity = 0D;
+            double drag = 1D;
+            if (entity instanceof EntityArrow || entity instanceof EntityThrowable) {
+                drag = entity.isInWater() ? (entity instanceof EntityArrow ? 0.6F : 0.8F) : 0.99F;
+                if (!entity.hasNoGravity()) {
+                    gravity = entity instanceof EntityArrow || entity instanceof EntityPotion ? 0.05F : 0.03F;
+                }
+            } else if (entity instanceof EntityFireball) {
+                EntityFireball fireball = (EntityFireball) entity;
+                acceleration = new Vec3d(fireball.accelerationX, fireball.accelerationY, fireball.accelerationZ);
+                drag = entity.isInWater() ? 0.8F : 0.95F;
+            }
+            double time = KillAuraBlocking.impactTime(body, playerMotion, start, velocity, acceleration,
+                    drag, gravity, 20, (from, to) -> player.world.rayTraceBlocks(from, to, false, true, false));
+            if (time < bestTime) {
+                best = entity;
+                bestTime = time;
+            }
+        }
+        return best;
+    }
+
+    public Optional<Rotation> getBlockingServerRotation(EntityPlayerSP player) {
+        // Packet dispatch may run off-thread. Publish the game-thread result instead of scanning the world here.
+        return player != null && player == this.blockingPlayer && blockWhileAttacking && !aimOnlyMode
+                ? Optional.ofNullable(this.blockingServerRotation) : Optional.empty();
+    }
+
+    private EntityLivingBase findBlockingMeleeThreat(EntityPlayerSP player) {
+        EntityLivingBase best = null;
+        double bestScore = Double.POSITIVE_INFINITY;
+        for (EntityLivingBase entity : player.world.getEntitiesWithinAABB(EntityLivingBase.class,
+                player.getEntityBoundingBox().grow(4D))) {
+            if (entity == player || !entity.isEntityAlive() || entity instanceof EntityArmorStand
+                    || entity.isOnSameTeam(player) || !player.canEntityBeSeen(entity)) continue;
+            boolean targetingPlayer = entity instanceof EntityLiving && ((EntityLiving) entity).getAttackTarget() == player;
+            if (!targetingPlayer && !(entity instanceof IMob) && !(entity instanceof EntityPlayer)
+                    && !entity.isSwingInProgress
+                    && player.getRevengeTarget() != entity) continue;
+            double distance = player.getDistanceSq(entity);
+            if (distance > 16D) continue;
+            double score = distance - (entity.isSwingInProgress ? 16D : 0D) - (targetingPlayer ? 8D : 0D);
+            if (score < bestScore) {
+                best = entity;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private void syncBlockingServerRotation() {
+        EntityPlayerSP player = Minecraft.getMinecraft().player;
+        if (!ownsAttackBlocking(player)) return;
+        Entity source = findBlockingProjectileThreat(player);
+        if (source == null) source = findBlockingMeleeThreat(player);
+        if (source == null && lastBlockingTarget != null && lastBlockingTarget.isEntityAlive()
+                && lastBlockingTarget.world == player.world) source = lastBlockingTarget;
+        if (source == null && enabled && currentTargetEntityId != -1) {
+            source = player.world.getEntityByID(currentTargetEntityId);
+        }
+        Rotation previous = this.blockingServerRotation;
+        this.blockingServerRotation = source == null || !source.isEntityAlive() ? null
+                : KillAuraBlocking.faceSource(player.getPositionVector(), source.getPositionVector());
+        Rotation rotation = this.blockingServerRotation;
+        // A stationary vanilla player can go twenty ticks without any movement packet.
+        if (rotation != null || previous != null) {
+            player.connection.sendPacket(new CPacketPlayer.Rotation(rotation == null ? player.rotationYaw : rotation.getYaw(),
+                    rotation == null ? player.rotationPitch : rotation.getPitch(), player.onGround));
+        }
+    }
+
+    private boolean canUseBlockingStack(EntityPlayerSP player, ItemStack stack) {
+        return !stack.isEmpty() && stack.getItemUseAction() == EnumAction.BLOCK
+                && stack.getItem().isShield(stack, player)
+                && !player.getCooldownTracker().hasCooldown(stack.getItem());
+    }
+
+    // Vanilla releases active use when the use key is up. Keep only the shield we own,
+    // without faking right-click input (which could eat, place blocks or open containers).
+    public boolean shouldKeepAttackBlocking() {
+        Minecraft mc = Minecraft.getMinecraft();
+        return ownsAttackBlocking(mc.player) && isAttackBlockingRequested(mc)
+                && mc.player.inventory.currentItem == this.blockingHotbarSlot
+                && mc.player.getHeldItem(this.blockingHand) == this.blockingStack
+                && canUseBlockingStack(mc.player, this.blockingStack);
+    }
+
+    public void stopAttackBlocking() {
+        this.lastBlockingTarget = null;
+        releaseAttackBlocking();
+    }
+
+    private void releaseAttackBlocking() {
+        Minecraft mc = Minecraft.getMinecraft();
+        EntityPlayerSP player = this.blockingPlayer;
+        boolean owned = ownsAttackBlocking(player);
+        Rotation previous = this.blockingServerRotation;
+        this.blockingServerRotation = null;
+        this.blockingPlayer = null;
+        this.blockingHand = null;
+        this.blockingStack = ItemStack.EMPTY;
+        if (player != null && player == mc.player && player.world == mc.world && mc.playerController != null
+                && player.connection != null) {
+            if (previous != null) {
+                player.connection.sendPacket(new CPacketPlayer.Rotation(player.rotationYaw, player.rotationPitch, player.onGround));
+            }
+            // A real or externally held use key takes over the shield without interruption.
+            if (owned && !mc.gameSettings.keyBindUseItem.isKeyDown()) {
+                mc.playerController.onStoppedUsingItem(player);
+            }
+        } else if (owned) {
+            player.resetActiveHand();
+        }
+    }
+
+    private void updateAttackBlocking() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (this.attackSequenceExecutor.isRunning() && blockWhileAttacking && !aimOnlyMode) {
+            releaseAttackBlocking();
+            return;
+        }
+        if (!isAttackBlockingRequested(mc)) {
+            stopAttackBlocking();
+            return;
+        }
+        EntityPlayerSP player = mc.player;
+        if (mc.gameSettings.keyBindUseItem.isKeyDown()) {
+            releaseAttackBlocking();
+            return;
+        }
+        if (shouldKeepAttackBlocking()) return;
+        releaseAttackBlocking();
+        if (player.isHandActive()) return;
+        if (this.blockingAttemptPlayer == player && player.ticksExisted < this.nextBlockingAttemptTick) return;
+        EnumHand hand = canUseBlockingStack(player, player.getHeldItemOffhand()) ? EnumHand.OFF_HAND
+                : canUseBlockingStack(player, player.getHeldItemMainhand()) ? EnumHand.MAIN_HAND : null;
+        if (hand == null) return;
+        ItemStack stack = player.getHeldItem(hand);
+        this.blockingAttemptPlayer = player;
+        this.nextBlockingAttemptTick = player.ticksExisted + 5;
+        mc.playerController.processRightClick(player, mc.world, hand);
+        if (player.isHandActive() && player.getActiveHand() == hand
+                && player.getActiveItemStack() == stack) {
+            this.blockingPlayer = player;
+            this.blockingHand = hand;
+            this.blockingStack = stack;
+            this.blockingHotbarSlot = player.inventory.currentItem;
+            this.nextBlockingAttemptTick = player.ticksExisted;
+        }
+    }
+
+    private void rememberBlockingAttack(EntityPlayerSP player, Entity target) {
+        if (!blockWhileAttacking) return;
+        this.lastBlockingTarget = target;
+        this.lastBlockingAttackTick = player.ticksExisted;
+    }
+
+    public void refreshHuntAttackBlocking(EntityPlayerSP player, EntityLivingBase target) {
+        if (player != null && target != null && this.lastBlockingTarget == target) {
+            this.lastBlockingAttackTick = player.ticksExisted;
+        }
+    }
+
+    private boolean shouldYieldAttackToItemUse(EntityPlayerSP player) {
+        return blockWhileAttacking && (AutoEatHandler.isEating
+                || Minecraft.getMinecraft().gameSettings.keyBindUseItem.isKeyDown()
+                || (player.isHandActive() && !ownsAttackBlocking(player)));
     }
 
     public boolean hasActiveTarget(EntityPlayerSP player) {
@@ -1479,6 +1714,8 @@ public class KillAuraHandler implements AbstractGameEventListener {
         if (mc == null || player == null || target == null || mc.playerController == null) {
             return false;
         }
+        refreshHuntAttackBlocking(player, target);
+        if (shouldYieldAttackToItemUse(player)) return false;
         if (aimOnlyMode || isSequenceAttackMode()) {
             return false;
         }
@@ -1506,6 +1743,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
             boolean attacked = performTeleportAttack(player, target);
             if (attacked) {
                 player.swingArm(EnumHand.MAIN_HAND);
+                updateAttackBlocking();
             }
             decayTargetSwitchSmoothTicks();
             return attacked;
@@ -1546,6 +1784,10 @@ public class KillAuraHandler implements AbstractGameEventListener {
         if (attacked && !teleportAttack) {
             recordNoDamageAttackAttempt(target);
         }
+        if (attacked) {
+            rememberBlockingAttack(player, target);
+            updateAttackBlocking();
+        }
         decayTargetSwitchSmoothTicks();
         return attacked;
     }
@@ -1557,6 +1799,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         if (!isValidTarget(player, target)) {
             return false;
         }
+        stopAttackBlocking();
         this.currentTargetEntityId = target.getEntityId();
         updateAimTargetTransition(target);
         EntityLivingBase crosshairLockedTarget = isRelockSuppressedByCrosshairTarget(player, target) ? target : null;
@@ -1714,6 +1957,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
     }
 
     private void clearAreaHuntRuntimeState(boolean stopSequence) {
+        stopAttackBlocking();
         this.currentTargetEntityId = -1;
         clearAimTargetTransition();
         stopHuntPickupNavigation();
@@ -1894,6 +2138,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         if (event.phase == TickEvent.Phase.END && mcpOriginalFields != null
                 && mcpRemainingTicks > 0 && --mcpRemainingTicks == 0) endMcpRuntime();
         if (!PerformanceMonitor.isFeatureEnabled("kill_aura")) {
+            stopAttackBlocking();
             return;
         }
         PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("kill_aura");
@@ -2095,6 +2340,10 @@ public class KillAuraHandler implements AbstractGameEventListener {
             }
             decayTargetSwitchSmoothTicks();
         } finally {
+            if (event.phase == TickEvent.Phase.END) {
+                updateAttackBlocking();
+                syncBlockingServerRotation();
+            }
             flushTeleportDebug();
             timer.stop();
         }
@@ -2923,6 +3172,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
             attacked = true;
         }
         if (attacked) {
+            rememberBlockingAttack(player, crystalTarget);
             if (!isMouseClickAttackMode()) {
                 player.swingArm(EnumHand.MAIN_HAND);
             }
@@ -3348,6 +3598,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         if (player == null) {
             return false;
         }
+        if (shouldYieldAttackToItemUse(player)) return false;
         if (aimOnlyMode) {
             return false;
         }
@@ -3415,6 +3666,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
                 mc.playerController.attackEntity(player, target);
             }
             recordNoDamageAttackAttempt(target);
+            rememberBlockingAttack(player, target);
             attackedCount++;
         }
         return attackedCount;
@@ -3910,6 +4162,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
                 }
                 player.connection.sendPacket(new CPacketUseEntity(target));
                 recordNoDamageAttackAttempt(target);
+                rememberBlockingAttack(player, target);
                 this.teleportLastAttackTicks.remove(target.getEntityId());
                 this.teleportLastAttackTicks.put(target.getEntityId(), player.ticksExisted);
                 this.teleportTargetRetryAfterTicks.remove(target.getEntityId());
@@ -6601,6 +6854,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         if (player == null || target == null) {
             return false;
         }
+        if (shouldYieldAttackToItemUse(player)) return false;
         if (this.sequenceCooldownTicks > 0 || this.attackSequenceExecutor.isRunning()) {
             return false;
         }
@@ -6625,6 +6879,8 @@ public class KillAuraHandler implements AbstractGameEventListener {
             return false;
         }
 
+        releaseAttackBlocking();
+        rememberBlockingAttack(player, target);
         this.attackSequenceExecutor.start(configuredSequence, player, target);
         return this.attackSequenceExecutor.isRunning();
     }
@@ -8969,6 +9225,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         preset.onlyWeapon = onlyWeapon;
         preset.aimOnlyMode = aimOnlyMode;
         preset.focusSingleTarget = focusSingleTarget;
+        preset.blockWhileAttacking = blockWhileAttacking;
         preset.ignoreInvisible = ignoreInvisible;
         preset.enableNoCollision = enableNoCollision;
         preset.enableAntiKnockback = enableAntiKnockback;

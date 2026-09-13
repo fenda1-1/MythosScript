@@ -326,6 +326,9 @@ task proguard(type: JavaExec) {
             writer.writeLine "-keep public class com.zszl.zszlScriptMod.config.** { *; }"
             // ShadowBaritone's un-obfuscated flight lifecycle bridge calls this directly.
             writer.writeLine "-keep class com.zszl.zszlScriptMod.handlers.FlyHandler { *; }"
+            // MixinNetworkManager is restored from the original shadowbaritone bytecode
+            // after ProGuard; keep the shared shield packet helper at its binary name too.
+            writer.writeLine "-keep class com.zszl.zszlScriptMod.handlers.KillAuraBlocking { *; }"
             writer.writeLine "-keep public class com.zszl.zszlScriptMod.gui.packet.PacketSequence { *; }"
             writer.writeLine "-keep public class com.zszl.zszlScriptMod.handlers.AutoEquipHandler\$ConfigWrapper { *; }"
             writer.writeLine "-keep public class com.zszl.zszlScriptMod.handlers.AutoExperienceHandler\$ConfigData { *; }"

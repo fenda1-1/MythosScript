@@ -699,10 +699,12 @@ public final class ModernAutoFollowWorkbenchTab implements ModernSettingsTab {
                                 @Override public String get() { return safe(rule.category); }
                                 @Override public void set(String value) { rule.category = value; }
                             }, ModernFormSettingsTab.stringOptions(state.categories()))
-                    .readOnly("范围点1", "范围点1的 X / Z 坐标，保留一位小数。",
-                            () -> "X " + draft.point1X + "   Z " + draft.point1Z)
-                    .readOnly("范围点2", "范围点2的 X / Z 坐标，保留一位小数。",
-                            () -> "X " + draft.point2X + "   Z " + draft.point2Z)
+                    .custom(new AutoFollowNumericPanel(
+                            new String[] {"范围点1 X", "范围点1 Z", "范围点2 X", "范围点2 Z"},
+                            text(() -> draft.point1X, value -> draft.point1X = value),
+                            text(() -> draft.point1Z, value -> draft.point1Z = value),
+                            text(() -> draft.point2X, value -> draft.point2X = value),
+                            text(() -> draft.point2Z, value -> draft.point2Z = value)))
                     .action("范围取点", "开启灵魂出窍，左键选点1，右键选点2，中键确认，Esc取消。", "开始取点",
                             ModernFormSettingsTab.ActionStyle.PRIMARY,
                             tab -> startAreaSelection(draft, tab));
