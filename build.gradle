@@ -10,12 +10,17 @@ buildscript {
     }
 }
 
+// ForgeGradle's environment probe opens HTTPS connections independently of
+// Gradle dependency resolution. Respect offline mode before applying it.
+if (gradle.startParameter.offline) {
+    System.setProperty('net.minecraftforge.gradle.check.certs', 'false')
+}
 apply plugin: 'net.minecraftforge.gradle'
 apply plugin: 'eclipse'
 apply plugin: 'maven-publish'
 
-version = 'v1.0.71'
-group = 'com.zszl.script'
+version = 'v1.0.72'
+group = 'com.mythos.script'
 archivesBaseName = 'MythosScript'
 def minecraftVersionSuffix = 'mc1.12.2'
 def releaseJarBaseName = "${archivesBaseName}-${version}-${minecraftVersionSuffix}"
@@ -54,7 +59,9 @@ tasks.named('compileJava', JavaCompile).configure { task ->
 repositories {
     maven { url = 'https://maven.minecraftforge.net/' }
     maven { url 'https://maven.aliyun.com/repository/public/' }
-    maven { url 'https://babbaj.github.io/maven/' }
+    // 本地镜像：nether-pathfinder-1.3.0 已提取到 local-maven。
+    // babbaj.github.io 在国内 TLS 握手挂死，会导致解析阶段永久卡住，故不再远程连接它。
+    maven { url = uri("${rootDir}/../local-maven") }
     mavenCentral() // 添加 mavenCentral 以获取 ProGuard
 }
 
@@ -66,6 +73,7 @@ configurations {
     implementation.extendsFrom(embed)
     // 为 ProGuard 创建一个专门的配置
     proguard
+    proguardMinecraftMapper
 }
 
 dependencies {
@@ -74,22 +82,24 @@ dependencies {
     minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2860'
     testImplementation 'junit:junit:4.13.2'
     embed 'org.jsoup:jsoup:1.15.3'
-    embed 'com.vladsch.flexmark:flexmark:0.62.2'
-    embed 'com.google.guava:guava:31.1-jre'
+    // Forge 1.12.2 already puts these on the runtime classpath:
+    // Guava 21, fastutil 7.1.0, commons-lang3 3.5 and commons-io 2.5.
+    // Every type referenced by this mod exists there, so embedding newer
+    // full copies only duplicates tens of megabytes.
+    compileOnly 'com.google.guava:guava:31.1-jre'
+    compileOnly 'it.unimi.dsi:fastutil:8.5.12'
+    compileOnly 'org.apache.commons:commons-lang3:3.12.0'
+    compileOnly 'commons-io:commons-io:2.11.0'
     embed 'com.belerweb:pinyin4j:2.5.1'
-    embed 'it.unimi.dsi:fastutil:8.5.12'
-    embed 'org.apache.commons:commons-lang3:3.12.0'
-    embed 'commons-io:commons-io:2.11.0'
     embed 'dev.babbaj:nether-pathfinder:1.3.0'
     embed 'com.github.luben:zstd-jni:1.5.6-3'
     embed 'io.airlift:aircompressor:0.27'
     embed 'org.tukaani:xz:1.9'
     embed 'org.brotli:dec:0.1.2'
     embed 'com.aayushatharva.brotli4j:brotli4j:1.16.0'
-    ['windows-x86_64', 'windows-aarch64', 'linux-x86_64', 'linux-aarch64',
-     'osx-x86_64', 'osx-aarch64'].each { platform ->
-        embed "com.aayushatharva.brotli4j:native-${platform}:1.16.0"
-    }
+    // This distribution targets 64-bit Windows. Other Brotli native artifacts
+    // are never loadable on the target platform and only inflate the release jar.
+    embed "com.aayushatharva.brotli4j:native-windows-x86_64:1.16.0"
 
     // 统一使用 TwelveMonkeys（纯 Java），避免与其他 webp 实现的 SPI 冲突
     def tmVersion = '3.12.0'
@@ -112,6 +122,7 @@ dependencies {
 
     // 添加 ProGuard 的核心库作为构建工具依赖
     proguard 'com.guardsquare:proguard-base:7.8.1'
+    proguardMinecraftMapper 'net.md-5:SpecialSource:1.11.0:shaded'
 }
 
 minecraft {
@@ -122,7 +133,7 @@ minecraft {
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
             mods {
-                zszl_script {
+                mythos_script {
                     source sourceSets.main
                 }
             }
@@ -132,7 +143,7 @@ minecraft {
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
             mods {
-                zszl_script {
+                mythos_script {
                     source sourceSets.main
                 }
             }
@@ -146,6 +157,7 @@ sourceSets {
         resources {
             srcDirs = ['src/main/resources']
             exclude '**/*.bak'
+            exclude 'assets/mythos_script/fonts/*.otf'
         }
         output.dir(generatedMixinResourcesDir, builtBy: 'compileJava')
     }
@@ -161,12 +173,12 @@ jar {
         attributes([
             "Specification-Title": "MythosScript",
             "Specification-Vendor": "fenda",
-            "Specification-Version": "v1.0.71",
-            "Implementation-Title": "我的世界脚本",
+            "Specification-Version": "v1.0.72",
+            "Implementation-Title": "MythosScript",
             "Implementation-Version": "${version}",
             "Implementation-Vendor" :"fenda",
             "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
-            "FMLCorePlugin": "com.zszl.zszlScriptMod.mixin.ZszlScriptCorePlugin",
+            "FMLCorePlugin": "com.mythos.mythosScriptMod.mixin.MythosScriptCorePlugin",
             "FMLCorePluginContainsFMLMod": "true",
             "ForceLoadAsMod": "true"
         ])
@@ -176,6 +188,12 @@ jar {
     }
     // Java 8 Forge scans embedded classes, including multi-release module descriptors.
     exclude 'module-info.class', 'META-INF/versions/**'
+
+    // zstd-jni bundles native binaries for every OS/CPU, and the Brotli runtime
+    // has a Windows ARM variant as well. Keep only the 64-bit Windows binaries.
+    exclude 'darwin/**', 'freebsd/**', 'linux/**'
+    exclude 'win/x86/**', 'win/aarch64/**'
+    exclude 'lib/linux-*/**', 'lib/osx-*/**', 'lib/windows-aarch64/**'
 }
 
 publishing {
@@ -186,7 +204,7 @@ publishing {
     }
     repositories {
         maven {
-            url = "file://${project.projectDir}/zszl_script"
+            url = "file://${project.projectDir}/mythos_script"
         }
     }
 }
@@ -194,9 +212,34 @@ publishing {
 // ==================================================
 // 2. 标准的 ProGuard 混淆任务
 // ==================================================
+// ProGuard analyzes an SRG mod jar, so its Minecraft library must use SRG
+// member names too. Otherwise unresolved method return types can produce
+// invalid StackMapTable entries (Entity incorrectly merged to Object).
+def proguardMinecraftLibrary = file("$buildDir/proguardMinecraftLibrary/minecraft-srg.jar")
+def minecraftCompileLibrary = providers.provider {
+    configurations.runtimeClasspath.files.find { it.name.endsWith('-recomp.jar') }
+            ?: configurations.runtimeClasspath.files.find { it.name.endsWith('-srg.jar') }
+            ?: configurations.runtimeClasspath.files.find { it.name.contains('_mapped_snapshot_') && it.name.endsWith('.jar') }
+            ?: { throw new GradleException('Minecraft recomp/srg library not found for ProGuard') }()
+}
+tasks.register('prepareProguardMinecraftLibrary', JavaExec) {
+    dependsOn 'createMcpToSrg'
+    classpath = configurations.proguardMinecraftMapper
+    mainClass = 'net.md_5.specialsource.SpecialSource'
+    inputs.file(minecraftCompileLibrary)
+    inputs.file(forgeMcpToSrg)
+    outputs.file(proguardMinecraftLibrary)
+    doFirst {
+        proguardMinecraftLibrary.parentFile.mkdirs()
+        args = ['--in-jar', minecraftCompileLibrary.get().absolutePath,
+                '--out-jar', proguardMinecraftLibrary.absolutePath,
+                '--srg-in', forgeMcpToSrg.absolutePath]
+    }
+}
+
 task proguard(type: JavaExec) {
     // Standalone packaging must also use runtime SRG names, not development MCP names.
-    dependsOn 'reobfJar'
+    dependsOn 'reobfJar', 'prepareProguardMinecraftLibrary'
     // 设置 ProGuard 的 classpath
     classpath = configurations.proguard
     workingDir = project.buildDir
@@ -260,8 +303,9 @@ task proguard(type: JavaExec) {
         def normalizedOutputJar = outputJar.replace('\\', '/')
 
         // 获取所有其他的运行时依赖
-        def otherLibraryJars = configurations.runtimeClasspath.files.collect {
-            "-libraryjars \"${it.absolutePath.replace('\\', '/')}\""
+        def otherLibraryJars = configurations.runtimeClasspath.files.collect { dependency ->
+            def library = dependency == minecraftCompileLibrary.get() ? proguardMinecraftLibrary : dependency
+            "-libraryjars \"${library.absolutePath.replace('\\', '/')}\""
         }.join('\n')
 
         // 将 Java 运行库和其他库合并
@@ -291,12 +335,14 @@ task proguard(type: JavaExec) {
             // 否则可能出现 cE / ce 这类类名碰撞，导致 NoClassDefFoundError。
             writer.writeLine "-dontusemixedcaseclassnames"
             writer.writeLine "-allowaccessmodification"
-            writer.writeLine "-repackageclasses 'com.zszl.obf'" // 将所有类移动到一个新的、无意义的包中
+            writer.writeLine "-repackageclasses 'com.mythos.obf'" // 将所有类移动到一个新的、无意义的包中
             // 关闭激进重载，避免在旧环境/大小写不敏感文件系统上产生不可预期的类名冲突。
             writer.writeLine ""
             writer.writeLine "### Keep Rules for Forge Mod ###"
             writer.writeLine "# Keep the main mod class and its members"
-            writer.writeLine "-keep public class com.zszl.zszlScriptMod.zszlScriptMod { *; }"
+            writer.writeLine "-keep public class com.mythos.mythosScriptMod.mythosScriptMod { *; }"
+            writer.writeLine "-keep class dev.mythos.inject.** { *; }"
+            writer.writeLine "-keep class AttachBridge { *; }"
             writer.writeLine "# Keep classes annotated with @Mod"
             writer.writeLine "-keep @net.minecraftforge.fml.common.Mod class *"
             writer.writeLine "# Keep methods annotated with @EventHandler"
@@ -310,36 +356,36 @@ task proguard(type: JavaExec) {
             writer.writeLine "# Keep all GUI classes"
             writer.writeLine "# Some GUI screens inherit through custom base classes such as ThemedGuiScreen,"
             writer.writeLine "# so keeping only direct GuiScreen subclasses can drop valid runtime targets."
-            writer.writeLine "-keep public class com.zszl.zszlScriptMod.gui.** { *; }"
+            writer.writeLine "-keep public class com.mythos.mythosScriptMod.gui.** { *; }"
             writer.writeLine "# This bridge must remain in GuiScreen's runtime package to call protected input methods."
             writer.writeLine "-keep class net.minecraft.client.gui.EmbeddedGuiScreenInputBridge { *; }"
             writer.writeLine ""
             writer.writeLine "### Keep all Enums and their special methods ###"
             writer.writeLine "-keepclassmembers enum * { public static **[] values(); public static ** valueOf(java.lang.String); }"
-            writer.writeLine "-keep enum com.zszl.zszlScriptMod.** { *; }"
+            writer.writeLine "-keep enum com.mythos.mythosScriptMod.** { *; }"
             writer.writeLine ""
             writer.writeLine "# Keep config packages and data structures"
             // MCP catalogues contain explicit binary class names. Retain these entry points in release jars.
             new groovy.json.JsonSlurper().parse(file('src/main/resources/mcp/modules.json')).each { module ->
                 writer.writeLine "-keep class ${module['class']} { public *; }"
             }
-            writer.writeLine "-keep public class com.zszl.zszlScriptMod.config.** { *; }"
+            writer.writeLine "-keep public class com.mythos.mythosScriptMod.config.** { *; }"
             // ShadowBaritone's un-obfuscated flight lifecycle bridge calls this directly.
-            writer.writeLine "-keep class com.zszl.zszlScriptMod.handlers.FlyHandler { *; }"
+            writer.writeLine "-keep class com.mythos.mythosScriptMod.handlers.FlyHandler { *; }"
             // MixinNetworkManager is restored from the original shadowbaritone bytecode
             // after ProGuard; keep the shared shield packet helper at its binary name too.
-            writer.writeLine "-keep class com.zszl.zszlScriptMod.handlers.KillAuraBlocking { *; }"
-            writer.writeLine "-keep public class com.zszl.zszlScriptMod.gui.packet.PacketSequence { *; }"
-            writer.writeLine "-keep public class com.zszl.zszlScriptMod.handlers.AutoEquipHandler\$ConfigWrapper { *; }"
-            writer.writeLine "-keep public class com.zszl.zszlScriptMod.handlers.AutoExperienceHandler\$ConfigData { *; }"
-            writer.writeLine "-keep public class com.zszl.zszlScriptMod.system.** { *; }"
-            writer.writeLine "-keep public class com.zszl.zszlScriptMod.system.dungeon.** { *; }"
+            writer.writeLine "-keep class com.mythos.mythosScriptMod.handlers.KillAuraBlocking { *; }"
+            writer.writeLine "-keep public class com.mythos.mythosScriptMod.gui.packet.PacketSequence { *; }"
+            writer.writeLine "-keep public class com.mythos.mythosScriptMod.handlers.AutoEquipHandler\$ConfigWrapper { *; }"
+            writer.writeLine "-keep public class com.mythos.mythosScriptMod.handlers.AutoExperienceHandler\$ConfigData { *; }"
+            writer.writeLine "-keep public class com.mythos.mythosScriptMod.system.** { *; }"
+            writer.writeLine "-keep public class com.mythos.mythosScriptMod.system.dungeon.** { *; }"
             writer.writeLine "# Keep inner classes used for data storage"
-            writer.writeLine "-keep class com.zszl.zszlScriptMod.**\$* { *; }"
+            writer.writeLine "-keep class com.mythos.mythosScriptMod.**\$* { *; }"
             writer.writeLine ""
             
             writer.writeLine "### Keep Public Members, Obfuscate Others ###"
-            writer.writeLine "-keepclassmembers class com.zszl.zszlScriptMod.** { public *; }"
+            writer.writeLine "-keepclassmembers class com.mythos.mythosScriptMod.** { public *; }"
 
             writer.writeLine ""
             writer.writeLine "### Keep ImageIO Plugins (Crucial for WebP) ###"
@@ -352,20 +398,30 @@ task proguard(type: JavaExec) {
             writer.writeLine "### Keep Embedded ShadowBaritone ###"
             writer.writeLine "# ShadowBaritone 依赖 ServiceLoader、mixin 配置和大量按类名定位的运行时逻辑。"
             writer.writeLine "# 若被重打包/重命名，运行时会出现 provider 初始化失败或 mixin 类名失效。"
-            writer.writeLine "-keep class com.zszl.zszlScriptMod.shadowbaritone.** { *; }"
+            writer.writeLine "-keep class com.mythos.mythosScriptMod.shadowbaritone.** { *; }"
             // The merge below restores original mixin bytecode, including its handler
             // class/member references. Keep those targets stable across obfuscation.
-            writer.writeLine "-keep class com.zszl.zszlScriptMod.otherfeatures.handler.movement.** { *; }"
-            writer.writeLine "-keep class com.zszl.zszlScriptMod.utils.ReflectionCompat { *; }"
+            writer.writeLine "-keep class com.mythos.mythosScriptMod.otherfeatures.handler.movement.** { *; }"
+            writer.writeLine "-keep class com.mythos.mythosScriptMod.utils.ReflectionCompat { *; }"
+            writer.writeLine "-keep class com.mythos.mythosScriptMod.mcp.McpDragonCore { *; }"
             writer.writeLine "-keep class dev.babbaj.pathfinder.** { *; }"
             writer.writeLine "-keep class com.github.luben.zstd.** { *; }"
             writer.writeLine "-keep class com.aayushatharva.brotli4j.** { *; }"
 
             writer.writeLine ""
             writer.writeLine "### Keep Mixins ###"
-            writer.writeLine "-keep class com.zszl.zszlScriptMod.mixin.** { *; }"
+            writer.writeLine "-keep class com.mythos.mythosScriptMod.mixin.** { *; }"
             writer.writeLine "-keep class org.spongepowered.** { *; }"
-            
+
+            writer.writeLine ""
+            writer.writeLine "### Keep Third-Party Library Class Names ###"
+            // embed 进 jar 的第三方库（Guava/jsoup/fastutil 等）会被 -repackageclasses 挪到
+            // com.mythos.obf 包下。一旦 Minecraft/Forge 方法签名引用这些库类型——例如
+            // Minecraft.addScheduledTask 返回 com.google.common.util.concurrent.ListenableFuture——
+            // 调用点的方法描述符会被改写成 Lcom/mythos/obf/...，运行时找不到方法，抛 NoSuchMethodError。
+            // 因此所有非本 mod 包的类一律保持原包名/类名，不参与重打包与重命名。
+            writer.writeLine "-keep class !com.mythos.mythosScriptMod.** { *; }"
+
             writer.writeLine ""
             writer.writeLine "### Keep Attributes (Important for Forge) ###"
             writer.writeLine "-keepattributes Exceptions,InnerClasses,Signature,Deprecated,SourceFile,LineNumberTable,*Annotation*,EnclosingMethod"
@@ -399,11 +455,11 @@ task proguard(type: JavaExec) {
         copy {
             from zipTree(inputJar)
             into tempMergeDir
-            include 'com/zszl/zszlScriptMod/shadowbaritone/**'
+            include 'com/mythos/mythosScriptMod/shadowbaritone/**'
             include 'dev/babbaj/pathfinder/**'
             include 'org/spongepowered/**'
             include 'assets/shadowbaritone/**'
-            include 'META-INF/services/com.zszl.zszlScriptMod.shadowbaritone.api.IBaritoneProvider'
+            include 'META-INF/services/com.mythos.mythosScriptMod.shadowbaritone.api.IBaritoneProvider'
             include 'META-INF/services/org.spongepowered.asm.service.IGlobalPropertyService'
             include 'META-INF/services/org.spongepowered.asm.service.IMixinService'
             include 'META-INF/services/org.spongepowered.asm.service.IMixinServiceBootstrap'
@@ -424,7 +480,7 @@ task proguard(type: JavaExec) {
         new java.util.zip.ZipFile(outputJar).withCloseable { artifact ->
             ['MovementFeatureManager', 'WallClimbFeatureHandler', 'FreecamFeatureHandler',
              'FreecamFeatureHandler$GhostCamera'].each { className ->
-                def entry = "com/zszl/zszlScriptMod/otherfeatures/handler/movement/${className}.class"
+                def entry = "com/mythos/mythosScriptMod/otherfeatures/handler/movement/${className}.class"
                 if (artifact.getEntry(entry) == null) {
                     throw new GradleException("Missing movement mixin dependency in final jar: ${entry}")
                 }
@@ -437,3 +493,5 @@ task proguard(type: JavaExec) {
 
 // 3. 将最终的构建任务指向新的 proguard 任务
 build.finalizedBy(proguard)
+
+apply from: 'agent.gradle'

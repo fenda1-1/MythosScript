@@ -1,0 +1,15 @@
+// Export resolved dependencies once; the quick runner compiles into an isolated overlay.
+allprojects { p ->
+    afterEvaluate {
+        tasks.register('parkourTestEnvironment') {
+            doLast {
+                def output = file("$buildDir/parkour-offline/environment.json")
+                output.parentFile.mkdirs()
+                output.text = groovy.json.JsonOutput.toJson([
+                    javaHome: System.getProperty('java.home'),
+                    classpath: sourceSets.test.runtimeClasspath.asPath
+                ])
+            }
+        }
+    }
+}

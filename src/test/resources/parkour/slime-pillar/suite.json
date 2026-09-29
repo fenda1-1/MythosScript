@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "origin": [
+    11,
+    180,
+    -16
+  ],
+  "sessionId": "5cb4cd69-c751-409e-9cc4-db2e612c2b67",
+  "player": "test_1122_inj",
+  "captures": [
+    {
+      "region": "slime-pillar",
+      "file": "slime-pillar.json",
+      "tick": 21557
+    }
+  ],
+  "tests": [
+    {
+      "name": "slime-pillar-rebound",
+      "regions": [
+        "slime-pillar"
+      ],
+      "start": [
+        11.5,
+        180,
+        -15.5
+      ],
+      "goals": [
+        [
+          11.5,
+          173,
+          -8.5
+        ]
+      ],
+      "mode": "graph"
+    }
+  ]
+}

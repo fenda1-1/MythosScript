@@ -1,0 +1,13 @@
+{
+  "captures": [
+    {"region": "raised", "file": "scene.json"},
+    {"region": "doorway", "file": "high-platform.json"},
+    {"region": "continuous", "file": "continuous-jumps.json"}
+  ],
+  "tests": [
+    {"name": "raised-platform", "regions": ["raised"], "start": [8.5, 30, -0.5], "goals": [[8.5, 31, -2.5]], "mode": "graph"},
+    {"name": "raised-platform-captured-start", "regions": ["raised"], "goals": [[8.5, 31, -2.5]], "mode": "graph"},
+    {"name": "distant-low-doorway", "regions": ["doorway"], "goals": [[12.5, 97, -102.5]], "mode": "graph"},
+    {"name": "continuous-three-block-jumps", "regions": ["continuous"], "start": [11.494936672793878, 131, -81.31392545395619], "goals": [[11.5, 131, -60.5]], "mode": "graph"}
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "其他测试_102层连续跳",
+  "category": "其他测试",
+  "subCategory": "",
+  "singleExecution": true,
+  "note": "Getting Over it The Corrupted：11.5 102 -118 到目标方块 11 102 -149（落点中心11.5 102 -148.5）。关闭输入缓存，单次导航；运行前保持非飞行、无药效。",
+  "steps": [{
+    "pos": null,
+    "actions": [
+      {"type": "command", "params": {"command": "!cancel"}},
+      {"type": "command", "params": {"command": "/tp @s 11.5 102 -118"}},
+      {"type": "wait_until_player_in_area", "params": {"center": [11.5, 102, -118], "radius": 1, "timeoutTicks": 60, "timeoutSkipCount": 4}},
+      {"type": "command", "params": {"command": "!set parkourMode true"}},
+      {"type": "command", "params": {"command": "!set parkourInputCache false"}},
+      {"type": "command", "params": {"command": "!goto 11 102 -149"}},
+      {"type": "wait_until_player_in_area", "params": {"center": [11.5, 102, -148.5], "radius": 0.2, "timeoutTicks": 1200, "timeoutSkipCount": 0}},
+      {"type": "command", "params": {"command": "!cancel"}}
+    ]
+  }]
+}

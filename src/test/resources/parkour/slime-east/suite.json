@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "origin": [
+    28,
+    168,
+    -9
+  ],
+  "sessionId": "e7a3bb02-7a8e-4ccd-85ef-215122cdaba8",
+  "player": "test_1122_inj",
+  "captures": [
+    {
+      "region": "slime-east",
+      "file": "slime-east.json",
+      "tick": 3982
+    }
+  ],
+  "tests": [
+    {
+      "name": "slime-east-rebound",
+      "regions": [
+        "slime-east"
+      ],
+      "start": [
+        28.5,
+        168,
+        -8.5
+      ],
+      "goals": [
+        [
+          33.5,
+          157,
+          -7.5
+        ]
+      ],
+      "mode": "graph"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "其他测试_铁砧连续段",
+  "category": "其他测试",
+  "subCategory": "",
+  "singleExecution": true,
+  "note": "Getting Over it The Corrupted 铁砧连续段。自动传送并确认起点，关闭跑酷输入缓存，单次 goto 终点；到达或超时后取消导航。运行前保持非飞行、无药效。",
+  "steps": [
+    {
+      "pos": null,
+      "actions": [
+        {"type": "command", "params": {"command": "!cancel"}},
+        {"type": "command", "params": {"command": "/tp @s 11.494936672793878 131 -81.31392545395619"}},
+        {"type": "wait_until_player_in_area", "params": {"center": [11.494936672793878, 131, -81.31392545395619], "radius": 1, "timeoutTicks": 60, "timeoutSkipCount": 4}},
+        {"type": "command", "params": {"command": "!set parkourMode true"}},
+        {"type": "command", "params": {"command": "!set parkourInputCache false"}},
+        {"type": "command", "params": {"command": "!goto 11.5 131 -60.5"}},
+        {"type": "wait_until_player_in_area", "params": {"center": [11.5, 131, -60.5], "radius": 0.2, "timeoutTicks": 1200, "timeoutSkipCount": 0}},
+        {"type": "command", "params": {"command": "!cancel"}}
+      ]
+    }
+  ]
+}

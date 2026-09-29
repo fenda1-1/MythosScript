@@ -1,0 +1,3400 @@
+{
+  "ticks": [
+    350,
+    490
+  ],
+  "groups": [
+    {
+      "edge": [
+        [
+          5,
+          10,
+          -3196
+        ],
+        [
+          11,
+          12,
+          -3196
+        ]
+      ],
+      "before": {
+        "clientTick": 404,
+        "positionExact": [
+          5.999267,
+          10.0,
+          -3196.158336
+        ],
+        "motion": [
+          0.131272,
+          -0.0784,
+          0.053264
+        ],
+        "rotation": [
+          43.41,
+          0.45
+        ],
+        "onGround": true,
+        "sprinting": false,
+        "sneaking": false,
+        "flying": false,
+        "collidedHorizontally": false,
+        "movementSpeedAttribute": 0.1,
+        "effects": [],
+        "input": {
+          "forward": 1.0,
+          "strafe": 0.0,
+          "jump": false,
+          "sneak": false
+        },
+        "movement": {
+          "type": "MovementParkour",
+          "index": 1,
+          "source": [
+            1,
+            11,
+            -3196
+          ],
+          "destination": [
+            5,
+            10,
+            -3196
+          ]
+        }
+      },
+      "ticks": [
+        {
+          "clientTick": 405,
+          "positionExact": [
+            6.257939,
+            10.0,
+            -3196.105072
+          ],
+          "motion": [
+            0.141235,
+            -0.0784,
+            0.029082
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": true,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 406,
+          "positionExact": [
+            6.526574,
+            10.0,
+            -3196.07599
+          ],
+          "motion": [
+            0.146675,
+            -0.0784,
+            0.015879
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": true,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 407,
+          "positionExact": [
+            6.800649,
+            10.0,
+            -3196.060111
+          ],
+          "motion": [
+            0.149645,
+            -0.0784,
+            0.00867
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": true,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 408,
+          "positionExact": [
+            7.077694,
+            10.0,
+            -3196.051442
+          ],
+          "motion": [
+            0.151266,
+            -0.0784,
+            0.004734
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": true,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 409,
+          "positionExact": [
+            6.928049,
+            10.51,
+            -3196.060111
+          ],
+          "motion": [
+            0.06956,
+            -0.0784,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 410,
+          "positionExact": [
+            7.02309,
+            11.01,
+            -3196.060111
+          ],
+          "motion": [
+            0.086487,
+            1.0,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 411,
+          "positionExact": [
+            7.135056,
+            12.01,
+            -3196.060111
+          ],
+          "motion": [
+            0.10189,
+            0.9016,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 412,
+          "positionExact": [
+            7.262426,
+            12.9116,
+            -3196.060111
+          ],
+          "motion": [
+            0.115906,
+            0.805168,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 413,
+          "positionExact": [
+            7.403813,
+            13.716768,
+            -3196.060111
+          ],
+          "motion": [
+            0.128662,
+            0.710665,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 414,
+          "positionExact": [
+            7.557954,
+            14.427433,
+            -3196.060111
+          ],
+          "motion": [
+            0.140269,
+            0.618051,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 415,
+          "positionExact": [
+            7.723703,
+            15.045484,
+            -3196.060111
+          ],
+          "motion": [
+            0.150832,
+            0.52729,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 416,
+          "positionExact": [
+            7.900015,
+            15.572775,
+            -3196.060111
+          ],
+          "motion": [
+            0.160444,
+            0.438345,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 417,
+          "positionExact": [
+            8.085938,
+            16.011119,
+            -3196.060111
+          ],
+          "motion": [
+            0.16919,
+            0.351178,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 418,
+          "positionExact": [
+            8.280609,
+            16.362297,
+            -3196.060111
+          ],
+          "motion": [
+            0.17715,
+            0.265754,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 419,
+          "positionExact": [
+            8.483239,
+            16.628051,
+            -3196.060111
+          ],
+          "motion": [
+            0.184393,
+            0.182039,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 420,
+          "positionExact": [
+            8.693112,
+            16.81009,
+            -3196.060111
+          ],
+          "motion": [
+            0.190985,
+            0.099998,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 421,
+          "positionExact": [
+            8.909577,
+            16.910088,
+            -3196.060111
+          ],
+          "motion": [
+            0.196983,
+            0.019598,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 422,
+          "positionExact": [
+            9.13204,
+            16.929687,
+            -3196.060111
+          ],
+          "motion": [
+            0.202441,
+            -0.059194,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 423,
+          "positionExact": [
+            9.359961,
+            16.870493,
+            -3196.060111
+          ],
+          "motion": [
+            0.207408,
+            -0.13641,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 424,
+          "positionExact": [
+            9.592849,
+            16.734083,
+            -3196.060111
+          ],
+          "motion": [
+            0.211928,
+            -0.212082,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 425,
+          "positionExact": [
+            9.830258,
+            16.522002,
+            -3196.060111
+          ],
+          "motion": [
+            0.216042,
+            -0.28624,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 426,
+          "positionExact": [
+            10.071779,
+            16.235762,
+            -3196.060111
+          ],
+          "motion": [
+            0.219785,
+            -0.358915,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 427,
+          "positionExact": [
+            10.317044,
+            15.876847,
+            -3196.060111
+          ],
+          "motion": [
+            0.223191,
+            -0.430137,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 428,
+          "positionExact": [
+            10.565715,
+            15.44671,
+            -3196.060111
+          ],
+          "motion": [
+            0.226291,
+            -0.499934,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 429,
+          "positionExact": [
+            10.817486,
+            14.946776,
+            -3196.060111
+          ],
+          "motion": [
+            0.229111,
+            -0.568335,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 430,
+          "positionExact": [
+            11.072077,
+            14.37844,
+            -3196.060111
+          ],
+          "motion": [
+            0.231678,
+            -0.635369,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 431,
+          "positionExact": [
+            11.329235,
+            13.743071,
+            -3196.060111
+          ],
+          "motion": [
+            0.234014,
+            -0.701061,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 432,
+          "positionExact": [
+            11.588729,
+            13.04201,
+            -3196.060111
+          ],
+          "motion": [
+            0.236139,
+            -0.76544,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 433,
+          "positionExact": [
+            11.850348,
+            12.27657,
+            -3196.060111
+          ],
+          "motion": [
+            0.238074,
+            -0.828531,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 434,
+          "positionExact": [
+            12.113902,
+            12.0,
+            -3196.060111
+          ],
+          "motion": [
+            0.239834,
+            -0.0784,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": true,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 2,
+            "source": [
+              5,
+              10,
+              -3196
+            ],
+            "destination": [
+              11,
+              12,
+              -3196
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "edge": [
+        [
+          11,
+          12,
+          -3196
+        ],
+        [
+          15,
+          17,
+          -3196
+        ]
+      ],
+      "before": {
+        "clientTick": 434,
+        "positionExact": [
+          12.113902,
+          12.0,
+          -3196.060111
+        ],
+        "motion": [
+          0.239834,
+          -0.0784,
+          0.0
+        ],
+        "rotation": [
+          -90.0,
+          0.45
+        ],
+        "onGround": true,
+        "sprinting": true,
+        "sneaking": false,
+        "flying": false,
+        "collidedHorizontally": false,
+        "movementSpeedAttribute": 0.13,
+        "effects": [],
+        "input": {
+          "forward": 1.0,
+          "strafe": 0.0,
+          "jump": false,
+          "sneak": false
+        },
+        "movement": {
+          "type": "MovementPistonLaunch",
+          "index": 2,
+          "source": [
+            5,
+            10,
+            -3196
+          ],
+          "destination": [
+            11,
+            12,
+            -3196
+          ]
+        }
+      },
+      "ticks": [
+        {
+          "clientTick": 435,
+          "positionExact": [
+            12.481135,
+            12.0,
+            -3196.060111
+          ],
+          "motion": [
+            0.20051,
+            -0.0784,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": true,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 436,
+          "positionExact": [
+            12.809045,
+            12.0,
+            -3196.060111
+          ],
+          "motion": [
+            0.179039,
+            -0.0784,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": true,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 437,
+          "positionExact": [
+            13.115484,
+            12.51,
+            -3196.060111
+          ],
+          "motion": [
+            0.167316,
+            1.0,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 438,
+          "positionExact": [
+            12.834525,
+            13.01,
+            -3196.060111
+          ],
+          "motion": [
+            0.023187,
+            1.0,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 439,
+          "positionExact": [
+            12.883192,
+            14.01,
+            -3196.060111
+          ],
+          "motion": [
+            0.044287,
+            0.9016,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 440,
+          "positionExact": [
+            12.952958,
+            14.9116,
+            -3196.060111
+          ],
+          "motion": [
+            0.063488,
+            0.805168,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 441,
+          "positionExact": [
+            13.041926,
+            15.716768,
+            -3196.060111
+          ],
+          "motion": [
+            0.080961,
+            0.710665,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 442,
+          "positionExact": [
+            13.148367,
+            16.427433,
+            -3196.060111
+          ],
+          "motion": [
+            0.096861,
+            0.618051,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 443,
+          "positionExact": [
+            13.270708,
+            17.045484,
+            -3196.060111
+          ],
+          "motion": [
+            0.11133,
+            0.52729,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 444,
+          "positionExact": [
+            13.407518,
+            17.572775,
+            -3196.060111
+          ],
+          "motion": [
+            0.124497,
+            0.438345,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 445,
+          "positionExact": [
+            13.557496,
+            18.011119,
+            -3196.060111
+          ],
+          "motion": [
+            0.136479,
+            0.351178,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 446,
+          "positionExact": [
+            13.719455,
+            18.362297,
+            -3196.060111
+          ],
+          "motion": [
+            0.147383,
+            0.265754,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 447,
+          "positionExact": [
+            13.892318,
+            18.628051,
+            -3196.060111
+          ],
+          "motion": [
+            0.157305,
+            0.182039,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 448,
+          "positionExact": [
+            14.075104,
+            18.81009,
+            -3196.060111
+          ],
+          "motion": [
+            0.166335,
+            0.099998,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 449,
+          "positionExact": [
+            14.266918,
+            18.910088,
+            -3196.060111
+          ],
+          "motion": [
+            0.174551,
+            0.019598,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 450,
+          "positionExact": [
+            14.46695,
+            18.929687,
+            -3196.060111
+          ],
+          "motion": [
+            0.182029,
+            -0.059194,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 451,
+          "positionExact": [
+            14.674458,
+            18.870493,
+            -3196.060111
+          ],
+          "motion": [
+            0.188833,
+            -0.13641,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 452,
+          "positionExact": [
+            14.888771,
+            18.734083,
+            -3196.060111
+          ],
+          "motion": [
+            0.195025,
+            -0.212082,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 453,
+          "positionExact": [
+            15.109276,
+            18.522002,
+            -3196.060111
+          ],
+          "motion": [
+            0.200659,
+            -0.28624,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 454,
+          "positionExact": [
+            15.335415,
+            18.235762,
+            -3196.060111
+          ],
+          "motion": [
+            0.205787,
+            -0.358915,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 455,
+          "positionExact": [
+            15.566682,
+            17.876847,
+            -3196.060111
+          ],
+          "motion": [
+            0.210453,
+            -0.430137,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 456,
+          "positionExact": [
+            15.802615,
+            17.44671,
+            -3196.060111
+          ],
+          "motion": [
+            0.214699,
+            -0.499934,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 457,
+          "positionExact": [
+            16.042793,
+            17.0,
+            -3196.060111
+          ],
+          "motion": [
+            0.218563,
+            -0.0784,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": true,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 3,
+            "source": [
+              11,
+              12,
+              -3196
+            ],
+            "destination": [
+              15,
+              17,
+              -3196
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "edge": [
+        [
+          15,
+          17,
+          -3196
+        ],
+        [
+          18,
+          23,
+          -3196
+        ]
+      ],
+      "before": {
+        "clientTick": 457,
+        "positionExact": [
+          16.042793,
+          17.0,
+          -3196.060111
+        ],
+        "motion": [
+          0.218563,
+          -0.0784,
+          0.0
+        ],
+        "rotation": [
+          -90.0,
+          0.45
+        ],
+        "onGround": true,
+        "sprinting": true,
+        "sneaking": false,
+        "flying": false,
+        "collidedHorizontally": false,
+        "movementSpeedAttribute": 0.13,
+        "effects": [],
+        "input": {
+          "forward": 1.0,
+          "strafe": 0.0,
+          "jump": false,
+          "sneak": false
+        },
+        "movement": {
+          "type": "MovementPistonLaunch",
+          "index": 3,
+          "source": [
+            11,
+            12,
+            -3196
+          ],
+          "destination": [
+            15,
+            17,
+            -3196
+          ]
+        }
+      },
+      "ticks": [
+        {
+          "clientTick": 458,
+          "positionExact": [
+            16.388756,
+            17.0,
+            -3196.060111
+          ],
+          "motion": [
+            0.188896,
+            -0.0784,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": true,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 459,
+          "positionExact": [
+            16.705052,
+            17.0,
+            -3196.060111
+          ],
+          "motion": [
+            0.172697,
+            -0.0784,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": true,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 460,
+          "positionExact": [
+            17.005149,
+            17.0,
+            -3196.060111
+          ],
+          "motion": [
+            0.163853,
+            -0.0784,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": true,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 461,
+          "positionExact": [
+            17.296402,
+            17.51,
+            -3196.060111
+          ],
+          "motion": [
+            0.159024,
+            1.0,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 462,
+          "positionExact": [
+            17.480906,
+            18.51,
+            -3196.060111
+          ],
+          "motion": [
+            0.167899,
+            0.9016,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 463,
+          "positionExact": [
+            17.674285,
+            19.4116,
+            -3196.060111
+          ],
+          "motion": [
+            0.175975,
+            0.805168,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 464,
+          "positionExact": [
+            17.7,
+            20.216768,
+            -3196.060111
+          ],
+          "motion": [
+            0.0,
+            0.710665,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": true,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 465,
+          "positionExact": [
+            17.7,
+            20.927433,
+            -3196.060111
+          ],
+          "motion": [
+            0.0,
+            0.618051,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": false,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": true,
+          "movementSpeedAttribute": 0.1,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 466,
+          "positionExact": [
+            17.7,
+            21.545484,
+            -3196.060111
+          ],
+          "motion": [
+            0.0,
+            0.52729,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": false,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": true,
+          "movementSpeedAttribute": 0.1,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 467,
+          "positionExact": [
+            17.7,
+            22.072775,
+            -3196.060111
+          ],
+          "motion": [
+            0.0,
+            0.438345,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": false,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": true,
+          "movementSpeedAttribute": 0.1,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 468,
+          "positionExact": [
+            17.7,
+            22.511119,
+            -3196.060111
+          ],
+          "motion": [
+            0.0,
+            0.351178,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": false,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": true,
+          "movementSpeedAttribute": 0.1,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 469,
+          "positionExact": [
+            17.7,
+            22.862297,
+            -3196.060111
+          ],
+          "motion": [
+            0.0,
+            0.265754,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": false,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": true,
+          "movementSpeedAttribute": 0.1,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 470,
+          "positionExact": [
+            17.7196,
+            23.128051,
+            -3196.060111
+          ],
+          "motion": [
+            0.017836,
+            0.182039,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": false,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.1,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 471,
+          "positionExact": [
+            17.757036,
+            23.31009,
+            -3196.060111
+          ],
+          "motion": [
+            0.034067,
+            0.099998,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 472,
+          "positionExact": [
+            17.816583,
+            23.410088,
+            -3196.060111
+          ],
+          "motion": [
+            0.054188,
+            0.019598,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 473,
+          "positionExact": [
+            17.89625,
+            23.429687,
+            -3196.060111
+          ],
+          "motion": [
+            0.072497,
+            -0.059194,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 474,
+          "positionExact": [
+            17.994228,
+            23.370493,
+            -3196.060111
+          ],
+          "motion": [
+            0.08916,
+            -0.13641,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 475,
+          "positionExact": [
+            18.108867,
+            23.234083,
+            -3196.060111
+          ],
+          "motion": [
+            0.104322,
+            -0.212082,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 476,
+          "positionExact": [
+            18.238669,
+            23.022002,
+            -3196.060111
+          ],
+          "motion": [
+            0.11812,
+            -0.28624,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": false,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        },
+        {
+          "clientTick": 477,
+          "positionExact": [
+            18.382269,
+            23.0,
+            -3196.060111
+          ],
+          "motion": [
+            0.130676,
+            -0.0784,
+            0.0
+          ],
+          "rotation": [
+            -90.0,
+            0.45
+          ],
+          "onGround": true,
+          "sprinting": true,
+          "sneaking": false,
+          "flying": false,
+          "collidedHorizontally": false,
+          "movementSpeedAttribute": 0.13,
+          "effects": [],
+          "input": {
+            "forward": 1.0,
+            "strafe": 0.0,
+            "jump": false,
+            "sneak": false
+          },
+          "movement": {
+            "type": "MovementPistonLaunch",
+            "index": 4,
+            "source": [
+              15,
+              17,
+              -3196
+            ],
+            "destination": [
+              18,
+              23,
+              -3196
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

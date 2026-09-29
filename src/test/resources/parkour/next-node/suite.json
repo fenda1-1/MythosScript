@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "origin": [
+    64,
+    24,
+    -3757
+  ],
+  "sessionId": "0409c011-ad03-4f06-b575-8d8838e76881",
+  "player": "test_1122_inj",
+  "captures": [
+    {
+      "region": "west",
+      "file": "west.json",
+      "tick": 2868
+    },
+    {
+      "region": "middle",
+      "file": "middle.json",
+      "tick": 2869
+    },
+    {
+      "region": "relay",
+      "file": "relay.json",
+      "tick": 2870
+    }
+  ],
+  "tests": [
+    {
+      "name": "outer-fence-to-next-relay",
+      "mode": "graph",
+      "start": [
+        43.07499998807907,
+        25,
+        -3757.7024973181838
+      ],
+      "goals": [
+        [
+          95.5,
+          21,
+          -3759.5
+        ]
+      ],
+      "budgetMillis": 3000,
+      "graphBudgetMillis": 10000,
+      "maxTicks": 160
+    },
+    {
+      "name": "live-platform-handoff-to-next-relay",
+      "mode": "graph",
+      "start": [
+        62.63414679111313,
+        21,
+        -3758.44570352125
+      ],
+      "goals": [
+        [
+          95.5,
+          21,
+          -3759.5
+        ]
+      ],
+      "budgetMillis": 3000,
+      "graphBudgetMillis": 10000,
+      "maxTicks": 160
+    }
+  ]
+}

@@ -21,7 +21,12 @@ src/test/**
 !src/test/**/ProfileConfigFieldCodecTest.java
 !src/test/**/ChangelogDocumentTest.java
 !src/test/**/GuiTextPixelGridTest.java
+!src/test/**/BundledUiFontTest.java
+!src/test/**/ModernModalInputTest.java
 !src/test/**/Mcp*Test.java
+!src/test/java/com/mythos/mythosScriptMod/mcp/DragonCanvasTest.java
+!src/test/java/com/mythos/mythosScriptMod/mcp/DragonCoreContractTest.java
+!src/test/java/com/mythos/mythosScriptMod/mcp/WorldInputLeaseTest.java
 !src/test/**/AutoFollowUiListsTest.java
 !src/test/**/AutoFollowPickProjectionTest.java
 !src/test/**/AutoFollowJava8CompatibilityTest.java
@@ -33,6 +38,37 @@ src/test/**
 !src/test/**/KillAuraBlockingContractTest.java
 !src/test/**/KillAuraBlockingGeometryTest.java
 !src/test/**/FlightCorridorClearanceTest.java
+!src/test/**/CachedChunkTest.java
+!src/test/**/ParkourDiagnosticsTest.java
+!src/test/**/ParkourTrajectoryTest.java
+!src/test/**/Level70ParkourTest.java
+!src/test/**/Level70SoulMomentumTest.java
+!src/test/**/NextRelayParkourTest.java
+!src/test/**/CapturedParkourGraphTest.java
+!src/test/**/CapturedParkourWorld.java
+!src/test/**/CapturedParkourSuiteTest.java
+!src/test/**/CapturedPistonReplay.java
+!src/test/**/SwampNetherRegressionTest.java
+!src/test/**/AdditionalParkourRegressionTest.java
+!src/test/**/OfflineParkourTestRunner.java
+!src/test/resources/parkour/README.md
+!src/test/resources/parkour/level70/*.json
+!src/test/resources/parkour/next-node/suite.json
+!src/test/resources/parkour/next-node/*.json
+!src/test/resources/parkour/swamp-nether69/suite.json
+!src/test/resources/parkour/swamp-nether69/*-piston.json
+!src/test/resources/parkour/swamp-nether69/*.zip
+!src/test/resources/parkour/additional-courses/suite.json
+!src/test/resources/parkour/additional-courses/*-piston.json
+!src/test/resources/parkour/additional-courses/*.zip
+!src/test/resources/parkour/slime-pillar/*.json
+!src/test/resources/parkour/slime-east/*.json
+# 离线测试写出的报告，不是输入数据
+src/test/resources/parkour/**/results.json
+# 误提交的本地跑酷诊断测试，保持忽略
+src/test/**/Nether70RegressionTest.java
+src/test/**/SnowFlowTest.java
+src/test/**/UndergroundStallDiagnosticTest.java
 # ====================== IDE ======================
 # Eclipse
 bin/
@@ -59,11 +95,22 @@ out/
 .learnings
 .opencode
 docs
+!/docs/
+/docs/*
+!/docs/parkour-debug.md
 tools
 !/tools/
 /tools/*
 !/tools/generate_mcp_catalog.py
 !/tools/test_mcp_watch.py
+!/tools/parkour_snapshot.py
+!/tools/parkour_offline.py
+!/tools/parkour_offline.gradle
+!/tools/parkour_extract_replay.py
+!/tools/test_parkour_snapshot.py
+!/tools/PARKOUR_OFFLINE.md
+!/tools/parkour_verify.py
+!/tools/build-dragoncore-bridge.py
 .omo
 .codebase-index
 container
@@ -119,3 +166,11 @@ lib/junit-platform-console-standalone-*.jar
 *.old
 *~
 __pycache__/
+
+!src/test/java/com/mythos/mythosScriptMod/gui/MenuFontInitializationTest.java
+!src/test/java/com/mythos/mythosScriptMod/inventory/InventoryViewerTargetTest.java
+
+# ---------------------- 本地调试/构建残留（自动补充） ----------------------
+/agent.gradle
+/src/main/java/dev/
+/src/main/java/AttachBridge.java

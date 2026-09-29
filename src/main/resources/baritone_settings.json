@@ -147,7 +147,7 @@
     },
     {
       "key": "parkourMode",
-      "defaultValue": "false",
+      "defaultValue": "true",
       "type": "boolean",
       "desc": "启用独立跑酷模式（会自动压制 Backfill、跑酷放块和模拟真人路线扰动）"
     },
@@ -208,6 +208,12 @@
       "defaultValue": "false",
       "type": "boolean",
       "desc": "显示跑酷调试渲染（起跳窗口、落点窗口、阶段与失败原因）"
+    },
+    {
+      "key": "parkourInputCache",
+      "defaultValue": "true",
+      "type": "boolean",
+      "desc": "跑酷输入缓存：复用同一目标的已解输入序列，命中时跳过重新搜索；关闭后每次搜索都从头开始（便于对比优化算法）"
     },
     {
       "key": "allowParkour",

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "origin": [
+    11,
+    102,
+    -118
+  ],
+  "sessionId": "b5927dff-ad36-46b3-9d2d-7dc61e6750a8",
+  "player": "test_1122_inj",
+  "captures": [
+    {
+      "region": "platform-102",
+      "file": "platform-102.zip",
+      "tick": 12002
+    }
+  ],
+  "tests": [
+    {
+      "name": "platform-102-continuous",
+      "regions": [
+        "platform-102"
+      ],
+      "start": [
+        11.5,
+        102,
+        -118
+      ],
+      "goals": [
+        [
+          11,
+          102,
+          -149
+        ]
+      ],
+      "mode": "graph"
+    }
+  ]
+}

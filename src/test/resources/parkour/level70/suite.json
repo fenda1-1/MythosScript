@@ -1,0 +1,28 @@
+{
+  "captures": [
+    {
+      "region": "soul-runway",
+      "file": "soul-runway.json"
+    }
+  ],
+  "tests": [
+    {
+      "name": "ordinary-runway-through-soul-to-exit",
+      "mode": "graph",
+      "start": [
+        120.447119,
+        13,
+        -3755.3
+      ],
+      "goals": [
+        [
+          130.5,
+          13,
+          -3755.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "maxReplans": 2
+    }
+  ]
+}

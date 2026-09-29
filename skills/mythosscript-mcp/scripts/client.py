@@ -63,7 +63,7 @@ OFFLINE_TOOLS = [
     _offline_tool("mythos_status", "Read current server, player, nearby entities, active runs, variables and temporary state.", ()),
     _offline_tool("mythos_preflight", "Validate a saved or inline sequence and check world/server readiness.", (("name", "string"), ("sequence", "object"))),
     _offline_tool("mythos_events", "Configure and read the grouped event timeline, watches, filters and cursors.", (("operation", "string"), ("groups", "array"), ("types", "array"), ("entityIds", "array"), ("watchIds", "array"), ("fromMs", "integer"), ("toMs", "integer"), ("afterId", "integer"), ("sessionId", "string"), ("limit", "integer"), ("waitMs", "integer"), ("min", "array"), ("max", "array"), ("query", "string"), ("sampleTicks", "integer"), ("size", "array"), ("watchId", "string"), ("filter", "object"))),
-    _offline_tool("mythos_snapshot", "Read player, inventory, entities, GUI and compact world snapshots.", (("groups", "array"), ("size", "array"), ("origin", "array"), ("entityIds", "array"), ("includeNbt", "boolean"))),
+    _offline_tool("mythos_snapshot", "Read player, inventory, entities, GUI and compact world snapshots, including multi-region physics captures.", (("groups", "array"), ("size", "array"), ("origin", "array"), ("regions", "array"), ("includePhysics", "boolean"), ("entityIds", "array"), ("includeNbt", "boolean"))),
     _offline_tool("mythos_gui", "Inspect and control Minecraft GUI screens using stable semantic element paths.", (("operation", "string"), ("target", "string"), ("path", "string"), ("command", "string"), ("text", "string"), ("value", "any"), ("append", "boolean"), ("button", "string"), ("matchMode", "string"), ("x", "integer"), ("y", "integer"), ("key", "string"), ("keyCode", "integer"), ("character", "string"), ("state", "string"), ("pressDurationTicks", "integer"), ("wheel", "integer"), ("scope", "string")), ("operation",)),
     _offline_tool("mythos_chat", "Read received or displayed chat messages with filters, cursors and component metadata.", (("afterId", "integer"), ("connectionId", "string"), ("stream", "string"), ("type", "string"), ("query", "string"), ("limit", "integer"), ("includeFormatted", "boolean"), ("includeComponent", "boolean"))),
     _offline_tool("mythos_notes", "Read or write the per-server Tools-menu Markdown notebook.", (("operation", "string"), ("server", "string"), ("text", "string"), ("expectedHash", "string"))),
@@ -160,7 +160,7 @@ class LocalClient:
             result = {
                 "protocolVersion": version,
                 "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "MythosScript", "version": "1.0.0"},
+                "serverInfo": {"name": "MythosScript", "version": "1.0.72"},
                 "instructions": OFFLINE_INSTRUCTIONS,
             }
         elif method == "ping":

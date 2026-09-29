@@ -1,0 +1,8 @@
+{
+  "regions": [
+    {"id": "spiral-tower", "min": [3, 105, -180], "max": [20, 126, -158]}
+  ],
+  "tests": [
+    {"name": "spiral-tower-ascent", "regions": ["spiral-tower"], "start": [11.5, 112, -170.5], "goals": [[11.5, 120, -167.5]], "mode": "graph"}
+  ]
+}
