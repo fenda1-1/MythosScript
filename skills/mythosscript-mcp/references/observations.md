@@ -2,7 +2,7 @@
 
 Call `mythos_events` with `{"operation":"groups"}` for stable group IDs, limits and active watches. Groups: session, player, entities, inventory, interaction, input, gui, world, chat. Configuration is runtime-only; enabled MCP captures by default. Disabling MCP stops observation. Group configuration does not change combat, paths or gameplay settings.
 
-`mythos_snapshot` accepts `groups`, `entityIds`, `size`, `origin`, `includeNbt`. Default groups are player/entities/inventory/gui/world. Default spatial size is exactly 10×10×10 blocks. To inspect a specific loaded entity irrespective of region:
+`mythos_snapshot` accepts `groups`, `entityIds`, `size`, `origin`, `includeNbt`, `regions`, `includePhysics`. Default groups are player/entities/inventory/gui/world. Default spatial size is exactly 10×10×10 blocks. To inspect a specific loaded entity irrespective of region:
 
 ```json
 {"groups":["player","inventory","entities"],"entityIds":[21987]}
@@ -78,5 +78,11 @@ World axes: +X east, +Y up, +Z south. The origin is floor(player position), incl
 `world.palette` contains block-state strings including properties, air, `__unloaded__` and `__out_of_world__`. Each cuboid `{min:[x,y,z],max:[x,y,z],state:N}` covers all integer coordinates between both inclusive corners, relative to origin. The two opposite corners imply all eight vertices; eight explicit corners would repeat data. Cuboids partition the entire volume without overlap or gaps. Compression is lossless greedy merging, not a claim of mathematically minimum encoding. Snapshots do not force-load chunks. Entity relative coordinates use the same origin.
 
 # On-screen debug
+
+## Offline physics captures
+
+`regions:[{id,origin,size},...]` replaces the single origin/size. One call reads all regions on the client thread (1–64 regions, at most 32768 total blocks). `includePhysics:true` adds player motion, onGround, collision/ladder state, movement speed, jump acceleration, effects and `world.collisionBoxes` (absolute AABBs from the engine, including multipart shapes). Cuboids remain relative to each region's origin. Moving piston positions appear in `world.dynamicBlocks`; one static snapshot does not model their future motion.
+
+The project tool `tools/parkour_snapshot.py --player NAME --plan PLAN.json --output NEW_DIRECTORY --test` accepts arbitrary many regions and splits oversized volumes into bounded captures. The client writes the requested local directory; the game does not write arbitrary files. Each tile keeps its own tick/session. `tools/parkour_offline.py --suite DIRECTORY/suite.json` reruns exported tests without the game. See `tools/PARKOUR_OFFLINE.md` and `tools/parkour-level70-plan.json` for origins, offsets, inclusive min/max and test goals. Unknown/unloaded cells, inconsistent overlaps and session changes are rejected rather than treated as air.
 
 Top-right Tools → MCP control/debug → toggle Calls / Event timeline. The event view shows the latest 500 matching events and their complete JSON/data. Search accepts `g=entities,gui id=21987 from=EPOCH_MS to=EPOCH_MS` and optional plain text. Multiple IDs/groups use commas. Larger history is read through MCP pagination. The clear button in event mode resets the filter; it does not erase gameplay evidence.

@@ -1,0 +1,1012 @@
+{
+  "samples": [
+    {
+      "clientTick": 117937,
+      "positionExact": [
+        120.447119,
+        13.0,
+        -3755.3
+      ],
+      "motion": [
+        0.0,
+        -0.0784,
+        0.0
+      ],
+      "rotation": [
+        -458.85,
+        23.1
+      ],
+      "input": {
+        "forward": 0.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": false,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.1
+    },
+    {
+      "clientTick": 117938,
+      "positionExact": [
+        120.543953,
+        13.0,
+        -3755.315076
+      ],
+      "motion": [
+        0.052871,
+        -0.0784,
+        -0.008232
+      ],
+      "rotation": [
+        -458.85,
+        23.1
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": false,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.1
+    },
+    {
+      "clientTick": 117939,
+      "positionExact": [
+        120.693657,
+        13.0,
+        -3755.338384
+      ],
+      "motion": [
+        0.081739,
+        -0.0784,
+        -0.012726
+      ],
+      "rotation": [
+        -458.85,
+        22.95
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": false,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.1
+    },
+    {
+      "clientTick": 117940,
+      "positionExact": [
+        120.775396,
+        13.0,
+        -3755.35111
+      ],
+      "motion": [
+        0.044629,
+        -0.0784,
+        -0.006948
+      ],
+      "rotation": [
+        -458.85,
+        22.95
+      ],
+      "input": {
+        "forward": 0.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": false,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.1
+    },
+    {
+      "clientTick": 117941,
+      "positionExact": [
+        120.945909,
+        13.0,
+        -3755.377658
+      ],
+      "motion": [
+        0.0931,
+        -0.0784,
+        -0.014495
+      ],
+      "rotation": [
+        -458.85,
+        22.95
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117942,
+      "positionExact": [
+        121.164892,
+        13.0,
+        -3755.411752
+      ],
+      "motion": [
+        0.119565,
+        -0.0784,
+        -0.018615
+      ],
+      "rotation": [
+        -458.85,
+        22.95
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117943,
+      "positionExact": [
+        121.410391,
+        13.0,
+        -3755.449641
+      ],
+      "motion": [
+        0.134042,
+        -0.0784,
+        -0.020687
+      ],
+      "rotation": [
+        -458.7,
+        22.95
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117944,
+      "positionExact": [
+        121.670367,
+        13.0,
+        -3755.489601
+      ],
+      "motion": [
+        0.141947,
+        -0.0784,
+        -0.021818
+      ],
+      "rotation": [
+        -458.7,
+        22.95
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117945,
+      "positionExact": [
+        121.938298,
+        13.0,
+        -3755.530354
+      ],
+      "motion": [
+        0.146291,
+        -0.0784,
+        -0.022251
+      ],
+      "rotation": [
+        -458.55,
+        22.95
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117946,
+      "positionExact": [
+        122.210623,
+        13.0,
+        -3755.571215
+      ],
+      "motion": [
+        0.148689,
+        -0.0784,
+        -0.02231
+      ],
+      "rotation": [
+        -458.4,
+        22.95
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117947,
+      "positionExact": [
+        122.485579,
+        13.0,
+        -3755.610476
+      ],
+      "motion": [
+        0.150126,
+        -0.0784,
+        -0.021437
+      ],
+      "rotation": [
+        -457.65,
+        23.55
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117948,
+      "positionExact": [
+        122.761972,
+        13.0,
+        -3755.648865
+      ],
+      "motion": [
+        0.150911,
+        -0.0784,
+        -0.02096
+      ],
+      "rotation": [
+        -457.65,
+        23.7
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117949,
+      "positionExact": [
+        123.03915,
+        13.0,
+        -3755.686777
+      ],
+      "motion": [
+        0.151339,
+        -0.0784,
+        -0.0207
+      ],
+      "rotation": [
+        -457.65,
+        24.0
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117950,
+      "positionExact": [
+        123.316757,
+        13.0,
+        -3755.724429
+      ],
+      "motion": [
+        0.151573,
+        -0.0784,
+        -0.020558
+      ],
+      "rotation": [
+        -457.65,
+        24.15
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": false,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117951,
+      "positionExact": [
+        123.792818,
+        13.42,
+        -3755.788551
+      ],
+      "motion": [
+        0.25993,
+        0.3332,
+        -0.035011
+      ],
+      "rotation": [
+        -457.65,
+        24.3
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117952,
+      "positionExact": [
+        124.078002,
+        13.7532,
+        -3755.826952
+      ],
+      "motion": [
+        0.259517,
+        0.248136,
+        -0.034945
+      ],
+      "rotation": [
+        -457.65,
+        24.75
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117953,
+      "positionExact": [
+        124.362837,
+        14.001336,
+        -3755.864759
+      ],
+      "motion": [
+        0.2592,
+        0.164773,
+        -0.034404
+      ],
+      "rotation": [
+        -456.45,
+        26.55
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117954,
+      "positionExact": [
+        124.647404,
+        14.166109,
+        -3755.901561
+      ],
+      "motion": [
+        0.258956,
+        0.083078,
+        -0.03349
+      ],
+      "rotation": [
+        -455.4,
+        27.0
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117955,
+      "positionExact": [
+        124.931751,
+        14.249187,
+        -3755.937183
+      ],
+      "motion": [
+        0.258756,
+        0.003016,
+        -0.032416
+      ],
+      "rotation": [
+        -454.8,
+        27.3
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117956,
+      "positionExact": [
+        125.215952,
+        14.252203,
+        -3755.970933
+      ],
+      "motion": [
+        0.258623,
+        -0.075444,
+        -0.030712
+      ],
+      "rotation": [
+        -453.0,
+        27.9
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117957,
+      "positionExact": [
+        125.500032,
+        14.176759,
+        -3756.002712
+      ],
+      "motion": [
+        0.258513,
+        -0.152335,
+        -0.028919
+      ],
+      "rotation": [
+        -452.4,
+        28.05
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117958,
+      "positionExact": [
+        125.784003,
+        14.024424,
+        -3756.032698
+      ],
+      "motion": [
+        0.258413,
+        -0.227688,
+        -0.027288
+      ],
+      "rotation": [
+        -452.4,
+        28.05
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117959,
+      "positionExact": [
+        126.067874,
+        13.796736,
+        -3756.061053
+      ],
+      "motion": [
+        0.258323,
+        -0.301535,
+        -0.025803
+      ],
+      "rotation": [
+        -452.4,
+        28.05
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117960,
+      "positionExact": [
+        126.351659,
+        13.495201,
+        -3756.087789
+      ],
+      "motion": [
+        0.258245,
+        -0.373904,
+        -0.02433
+      ],
+      "rotation": [
+        -452.1,
+        28.05
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117961,
+      "positionExact": [
+        126.635369,
+        13.121297,
+        -3756.112986
+      ],
+      "motion": [
+        0.258176,
+        -0.444826,
+        -0.022929
+      ],
+      "rotation": [
+        -451.95,
+        27.9
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117962,
+      "positionExact": [
+        126.91899,
+        12.676471,
+        -3756.134581
+      ],
+      "motion": [
+        0.258095,
+        -0.514329,
+        -0.019652
+      ],
+      "rotation": [
+        -447.0,
+        26.25
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117963,
+      "positionExact": [
+        127.202487,
+        12.162141,
+        -3756.152235
+      ],
+      "motion": [
+        0.257982,
+        -0.582443,
+        -0.016065
+      ],
+      "rotation": [
+        -445.5,
+        25.35
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117964,
+      "positionExact": [
+        127.485865,
+        11.875,
+        -3756.166233
+      ],
+      "motion": [
+        0.257874,
+        -0.0784,
+        -0.012738
+      ],
+      "rotation": [
+        -445.35,
+        25.2
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117965,
+      "positionExact": [
+        128.070061,
+        12.295,
+        -3756.152414
+      ],
+      "motion": [
+        0.318971,
+        0.3332,
+        0.007545
+      ],
+      "rotation": [
+        -445.35,
+        25.2
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117966,
+      "positionExact": [
+        128.414433,
+        12.6282,
+        -3756.14287
+      ],
+      "motion": [
+        0.313379,
+        0.248136,
+        0.008685
+      ],
+      "rotation": [
+        -445.5,
+        25.35
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117967,
+      "positionExact": [
+        128.753228,
+        12.876336,
+        -3756.132383
+      ],
+      "motion": [
+        0.308303,
+        0.164773,
+        0.009543
+      ],
+      "rotation": [
+        -445.95,
+        25.95
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117968,
+      "positionExact": [
+        129.086952,
+        13.041109,
+        -3756.121108
+      ],
+      "motion": [
+        0.303689,
+        0.083078,
+        0.010261
+      ],
+      "rotation": [
+        -446.1,
+        26.1
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117969,
+      "positionExact": [
+        129.416071,
+        13.124187,
+        -3756.109245
+      ],
+      "motion": [
+        0.299498,
+        0.003016,
+        0.010795
+      ],
+      "rotation": [
+        -446.4,
+        26.1
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117970,
+      "positionExact": [
+        129.740998,
+        13.127203,
+        -3756.096849
+      ],
+      "motion": [
+        0.295684,
+        -0.075444,
+        0.011281
+      ],
+      "rotation": [
+        -446.4,
+        26.1
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117971,
+      "positionExact": [
+        130.062112,
+        13.051759,
+        -3756.083967
+      ],
+      "motion": [
+        0.292214,
+        -0.152335,
+        0.011723
+      ],
+      "rotation": [
+        -446.4,
+        26.1
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": false,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    },
+    {
+      "clientTick": 117972,
+      "positionExact": [
+        130.379756,
+        13.0,
+        -3756.070643
+      ],
+      "motion": [
+        0.289055,
+        -0.0784,
+        0.012125
+      ],
+      "rotation": [
+        -446.4,
+        26.1
+      ],
+      "input": {
+        "forward": 1.0,
+        "strafe": 0.0,
+        "jump": true,
+        "sneak": false
+      },
+      "sprinting": true,
+      "sneaking": false,
+      "onGround": true,
+      "collidedHorizontally": false,
+      "movementSpeedAttribute": 0.13
+    }
+  ]
+}

@@ -4,7 +4,7 @@ import pathlib
 import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-JAVA = ROOT / "src/main/java/com/zszl/zszlScriptMod"
+JAVA = ROOT / "src/main/java/com/mythos/mythosScriptMod"
 OUTPUT = ROOT / "src/main/resources/mcp"
 OUTPUT.mkdir(parents=True, exist_ok=True)
 modules = []
@@ -19,7 +19,7 @@ for path in sorted(JAVA.rglob("*.java")):
     modules.append({"id": path.stem, "class": package + "." + path.stem,
                     "reload": [x for x in methods if x.startswith(("load", "reload"))],
                     "save": [x for x in methods if x.startswith("save")]})
-modules.append({"id": "PathSequenceManager", "class": "com.zszl.zszlScriptMod.path.PathSequenceManager",
+modules.append({"id": "PathSequenceManager", "class": "com.mythos.mythosScriptMod.path.PathSequenceManager",
                 "reload": ["initializePathSequences"], "save": []})
 (OUTPUT / "modules.json").write_text(json.dumps(modules, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

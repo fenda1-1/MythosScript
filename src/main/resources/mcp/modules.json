@@ -1,7 +1,7 @@
 [
   {
     "id": "BaritoneSettingsConfig",
-    "class": "com.zszl.zszlScriptMod.config.BaritoneSettingsConfig",
+    "class": "com.mythos.mythosScriptMod.config.BaritoneSettingsConfig",
     "reload": [
       "load"
     ],
@@ -11,7 +11,7 @@
   },
   {
     "id": "ChatOptimizationConfig",
-    "class": "com.zszl.zszlScriptMod.config.ChatOptimizationConfig",
+    "class": "com.mythos.mythosScriptMod.config.ChatOptimizationConfig",
     "reload": [
       "load"
     ],
@@ -21,7 +21,7 @@
   },
   {
     "id": "DebugLogManager",
-    "class": "com.zszl.zszlScriptMod.config.DebugLogManager",
+    "class": "com.mythos.mythosScriptMod.config.DebugLogManager",
     "reload": [],
     "save": [
       "saveConfig"
@@ -29,7 +29,7 @@
   },
   {
     "id": "FlightPathingConfig",
-    "class": "com.zszl.zszlScriptMod.config.FlightPathingConfig",
+    "class": "com.mythos.mythosScriptMod.config.FlightPathingConfig",
     "reload": [
       "load"
     ],
@@ -39,7 +39,7 @@
   },
   {
     "id": "HumanLikeMovementConfig",
-    "class": "com.zszl.zszlScriptMod.config.HumanLikeMovementConfig",
+    "class": "com.mythos.mythosScriptMod.config.HumanLikeMovementConfig",
     "reload": [
       "load"
     ],
@@ -49,7 +49,7 @@
   },
   {
     "id": "KeybindActionConfig",
-    "class": "com.zszl.zszlScriptMod.config.KeybindActionConfig",
+    "class": "com.mythos.mythosScriptMod.config.KeybindActionConfig",
     "reload": [
       "load"
     ],
@@ -59,7 +59,7 @@
   },
   {
     "id": "LoopExecutionConfig",
-    "class": "com.zszl.zszlScriptMod.config.LoopExecutionConfig",
+    "class": "com.mythos.mythosScriptMod.config.LoopExecutionConfig",
     "reload": [
       "load"
     ],
@@ -69,7 +69,7 @@
   },
   {
     "id": "ModConfig",
-    "class": "com.zszl.zszlScriptMod.config.ModConfig",
+    "class": "com.mythos.mythosScriptMod.config.ModConfig",
     "reload": [
       "loadAllConfigs"
     ],
@@ -77,7 +77,7 @@
   },
   {
     "id": "MainUiLayoutManager",
-    "class": "com.zszl.zszlScriptMod.gui.MainUiLayoutManager",
+    "class": "com.mythos.mythosScriptMod.gui.MainUiLayoutManager",
     "reload": [
       "reload"
     ],
@@ -87,7 +87,7 @@
   },
   {
     "id": "PacketFilterConfig",
-    "class": "com.zszl.zszlScriptMod.gui.packet.PacketFilterConfig",
+    "class": "com.mythos.mythosScriptMod.gui.packet.PacketFilterConfig",
     "reload": [
       "load"
     ],
@@ -97,7 +97,7 @@
   },
   {
     "id": "PacketInterceptConfig",
-    "class": "com.zszl.zszlScriptMod.gui.packet.PacketInterceptConfig",
+    "class": "com.mythos.mythosScriptMod.gui.packet.PacketInterceptConfig",
     "reload": [
       "load"
     ],
@@ -107,7 +107,7 @@
   },
   {
     "id": "ThemeConfigManager",
-    "class": "com.zszl.zszlScriptMod.gui.theme.ThemeConfigManager",
+    "class": "com.mythos.mythosScriptMod.gui.theme.ThemeConfigManager",
     "reload": [
       "load"
     ],
@@ -117,7 +117,7 @@
   },
   {
     "id": "AutoEatHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.AutoEatHandler",
+    "class": "com.mythos.mythosScriptMod.handlers.AutoEatHandler",
     "reload": [
       "loadAutoEatConfig"
     ],
@@ -127,7 +127,7 @@
   },
   {
     "id": "AutoEscapeHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.AutoEscapeHandler",
+    "class": "com.mythos.mythosScriptMod.handlers.AutoEscapeHandler",
     "reload": [
       "loadConfig"
     ],
@@ -137,7 +137,7 @@
   },
   {
     "id": "AutoFishingHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.AutoFishingHandler",
+    "class": "com.mythos.mythosScriptMod.handlers.AutoFishingHandler",
     "reload": [
       "loadConfig"
     ],
@@ -147,7 +147,7 @@
   },
   {
     "id": "AutoFollowHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.AutoFollowHandler",
+    "class": "com.mythos.mythosScriptMod.handlers.AutoFollowHandler",
     "reload": [
       "loadFollowConfig"
     ],
@@ -157,7 +157,7 @@
   },
   {
     "id": "AutoPickupHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.AutoPickupHandler",
+    "class": "com.mythos.mythosScriptMod.handlers.AutoPickupHandler",
     "reload": [
       "loadConfig"
     ],
@@ -167,7 +167,7 @@
   },
   {
     "id": "AutoUseItemHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.AutoUseItemHandler",
+    "class": "com.mythos.mythosScriptMod.handlers.AutoUseItemHandler",
     "reload": [
       "loadConfig"
     ],
@@ -177,7 +177,7 @@
   },
   {
     "id": "BlockReplacementHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.BlockReplacementHandler",
+    "class": "com.mythos.mythosScriptMod.handlers.BlockReplacementHandler",
     "reload": [
       "loadConfig"
     ],
@@ -187,7 +187,7 @@
   },
   {
     "id": "ConditionalExecutionHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.ConditionalExecutionHandler",
+    "class": "com.mythos.mythosScriptMod.handlers.ConditionalExecutionHandler",
     "reload": [
       "loadConfig"
     ],
@@ -197,7 +197,7 @@
   },
   {
     "id": "DungeonWarehouseHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.DungeonWarehouseHandler",
+    "class": "com.mythos.mythosScriptMod.handlers.DungeonWarehouseHandler",
     "reload": [
       "loadConfig"
     ],
@@ -207,7 +207,7 @@
   },
   {
     "id": "FlyHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.FlyHandler",
+    "class": "com.mythos.mythosScriptMod.handlers.FlyHandler",
     "reload": [
       "loadConfig"
     ],
@@ -217,7 +217,7 @@
   },
   {
     "id": "ItemFilterHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.ItemFilterHandler",
+    "class": "com.mythos.mythosScriptMod.handlers.ItemFilterHandler",
     "reload": [
       "loadFilterConfig"
     ],
@@ -227,7 +227,7 @@
   },
   {
     "id": "KillAuraHandler",
-    "class": "com.zszl.zszlScriptMod.handlers.KillAuraHandler",
+    "class": "com.mythos.mythosScriptMod.handlers.KillAuraHandler",
     "reload": [
       "loadConfig"
     ],
@@ -237,7 +237,7 @@
   },
   {
     "id": "WarehouseManager",
-    "class": "com.zszl.zszlScriptMod.handlers.WarehouseManager",
+    "class": "com.mythos.mythosScriptMod.handlers.WarehouseManager",
     "reload": [
       "loadWarehouses"
     ],
@@ -247,7 +247,7 @@
   },
   {
     "id": "BlockFeatureManager",
-    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.block.BlockFeatureManager",
+    "class": "com.mythos.mythosScriptMod.otherfeatures.handler.block.BlockFeatureManager",
     "reload": [
       "loadConfig"
     ],
@@ -257,7 +257,7 @@
   },
   {
     "id": "ItemFeatureManager",
-    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.item.ItemFeatureManager",
+    "class": "com.mythos.mythosScriptMod.otherfeatures.handler.item.ItemFeatureManager",
     "reload": [
       "loadConfig"
     ],
@@ -267,7 +267,7 @@
   },
   {
     "id": "MiscFeatureManager",
-    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.misc.MiscFeatureManager",
+    "class": "com.mythos.mythosScriptMod.otherfeatures.handler.misc.MiscFeatureManager",
     "reload": [
       "loadConfig"
     ],
@@ -277,7 +277,7 @@
   },
   {
     "id": "MovementFeatureManager",
-    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.movement.MovementFeatureManager",
+    "class": "com.mythos.mythosScriptMod.otherfeatures.handler.movement.MovementFeatureManager",
     "reload": [
       "loadConfig"
     ],
@@ -287,7 +287,7 @@
   },
   {
     "id": "SpeedHandler",
-    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.movement.SpeedHandler",
+    "class": "com.mythos.mythosScriptMod.otherfeatures.handler.movement.SpeedHandler",
     "reload": [
       "loadConfig"
     ],
@@ -297,7 +297,7 @@
   },
   {
     "id": "RenderFeatureManager",
-    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.render.RenderFeatureManager",
+    "class": "com.mythos.mythosScriptMod.otherfeatures.handler.render.RenderFeatureManager",
     "reload": [
       "loadConfig"
     ],
@@ -307,7 +307,7 @@
   },
   {
     "id": "WorldFeatureManager",
-    "class": "com.zszl.zszlScriptMod.otherfeatures.handler.world.WorldFeatureManager",
+    "class": "com.mythos.mythosScriptMod.otherfeatures.handler.world.WorldFeatureManager",
     "reload": [
       "loadConfig"
     ],
@@ -317,7 +317,7 @@
   },
   {
     "id": "OtherFeatureGroupManager",
-    "class": "com.zszl.zszlScriptMod.otherfeatures.OtherFeatureGroupManager",
+    "class": "com.mythos.mythosScriptMod.otherfeatures.OtherFeatureGroupManager",
     "reload": [
       "reload"
     ],
@@ -325,7 +325,7 @@
   },
   {
     "id": "LegacyActionTemplateManager",
-    "class": "com.zszl.zszlScriptMod.path.template.LegacyActionTemplateManager",
+    "class": "com.mythos.mythosScriptMod.path.template.LegacyActionTemplateManager",
     "reload": [
       "reloadTemplates"
     ],
@@ -333,7 +333,7 @@
   },
   {
     "id": "LegacySequenceTriggerManager",
-    "class": "com.zszl.zszlScriptMod.path.trigger.LegacySequenceTriggerManager",
+    "class": "com.mythos.mythosScriptMod.path.trigger.LegacySequenceTriggerManager",
     "reload": [
       "reloadRules"
     ],
@@ -341,7 +341,7 @@
   },
   {
     "id": "PerformanceMonitor",
-    "class": "com.zszl.zszlScriptMod.PerformanceMonitor",
+    "class": "com.mythos.mythosScriptMod.PerformanceMonitor",
     "reload": [
       "loadConfig"
     ],
@@ -351,7 +351,7 @@
   },
   {
     "id": "DebugKeybindManager",
-    "class": "com.zszl.zszlScriptMod.system.DebugKeybindManager",
+    "class": "com.mythos.mythosScriptMod.system.DebugKeybindManager",
     "reload": [
       "loadConfig"
     ],
@@ -361,7 +361,7 @@
   },
   {
     "id": "KeybindManager",
-    "class": "com.zszl.zszlScriptMod.system.KeybindManager",
+    "class": "com.mythos.mythosScriptMod.system.KeybindManager",
     "reload": [
       "loadConfig"
     ],
@@ -371,7 +371,7 @@
   },
   {
     "id": "CapturedIdRuleManager",
-    "class": "com.zszl.zszlScriptMod.utils.CapturedIdRuleManager",
+    "class": "com.mythos.mythosScriptMod.utils.CapturedIdRuleManager",
     "reload": [
       "reloadRules"
     ],
@@ -379,7 +379,7 @@
   },
   {
     "id": "PacketFieldRuleManager",
-    "class": "com.zszl.zszlScriptMod.utils.PacketFieldRuleManager",
+    "class": "com.mythos.mythosScriptMod.utils.PacketFieldRuleManager",
     "reload": [
       "reloadRules"
     ],
@@ -387,7 +387,7 @@
   },
   {
     "id": "PathSequenceManager",
-    "class": "com.zszl.zszlScriptMod.path.PathSequenceManager",
+    "class": "com.mythos.mythosScriptMod.path.PathSequenceManager",
     "reload": [
       "initializePathSequences"
     ],

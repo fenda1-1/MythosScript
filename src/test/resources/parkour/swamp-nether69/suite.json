@@ -1,0 +1,399 @@
+{
+  "schemaVersion": 1,
+  "allowVines": true,
+  "captures": [
+    {
+      "region": "swamp54",
+      "file": "swamp54.zip"
+    },
+    {
+      "region": "swamp55",
+      "file": "swamp55.zip"
+    },
+    {
+      "region": "swamp57",
+      "file": "swamp57.zip"
+    },
+    {
+      "region": "nether69",
+      "file": "nether69.zip"
+    },
+    {
+      "region": "swamp60-front",
+      "file": "swamp60-front.zip"
+    },
+    {
+      "region": "swamp60-middle",
+      "file": "swamp60-middle.zip"
+    },
+    {
+      "region": "swamp60-back",
+      "file": "swamp60-back.zip"
+    },
+    {
+      "region": "swamp60-tower",
+      "file": "swamp60-tower.zip"
+    }
+  ],
+  "tests": [
+    {
+      "name": "swamp54-start-to-gold",
+      "regions": [
+        "swamp54"
+      ],
+      "mode": "graph",
+      "start": [
+        0.5,
+        11,
+        -3007.5
+      ],
+      "goals": [
+        [
+          13.5,
+          14,
+          -3007.5
+        ]
+      ],
+      "graphBudgetMillis": 10000
+    },
+    {
+      "name": "swamp55-start-to-gold",
+      "regions": [
+        "swamp55"
+      ],
+      "mode": "graph",
+      "start": [
+        0.5,
+        11,
+        -3054.5
+      ],
+      "goals": [
+        [
+          5.5,
+          46,
+          -3054.5
+        ]
+      ],
+      "graphBudgetMillis": 10000
+    },
+    {
+      "name": "swamp57-start-to-gold",
+      "regions": [
+        "swamp57"
+      ],
+      "mode": "graph",
+      "start": [
+        0.5,
+        11,
+        -3148.5
+      ],
+      "goals": [
+        [
+          14.5,
+          11,
+          -3148.5
+        ]
+      ],
+      "graphBudgetMillis": 10000
+    },
+    {
+      "name": "nether69-start-to-gold",
+      "regions": [
+        "nether69"
+      ],
+      "mode": "graph",
+      "start": [
+        0.5,
+        26,
+        -3712.5
+      ],
+      "goals": [
+        [
+          12.5,
+          26,
+          -3712.5
+        ]
+      ],
+      "graphBudgetMillis": 10000
+    },
+    {
+      "name": "swamp60-start-to-relay24",
+      "mode": "graph",
+      "start": [
+        0.5,
+        11,
+        -3289.5
+      ],
+      "goals": [
+        [
+          24.5,
+          14,
+          -3290.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "regions": [
+        "swamp60-front"
+      ]
+    },
+    {
+      "name": "swamp60-relay24-to-relay60",
+      "mode": "graph",
+      "start": [
+        24.5,
+        14,
+        -3290.5
+      ],
+      "goals": [
+        [
+          60.5,
+          18,
+          -3289.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "regions": [
+        "swamp60-front"
+      ]
+    },
+    {
+      "name": "swamp60-relay60-to-relay74",
+      "mode": "graph",
+      "dynamicReplay": "swamp60-piston.json",
+      "start": [
+        60.5,
+        18,
+        -3289.5
+      ],
+      "goals": [
+        [
+          74.5,
+          25,
+          -3289.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "regions": [
+        "swamp60-front",
+        "swamp60-middle"
+      ]
+    },
+    {
+      "name": "swamp60-user-start-first-pistons",
+      "mode": "graph",
+      "dynamicReplay": "swamp60-piston.json",
+      "start": [
+        60.5,
+        18,
+        -3290
+      ],
+      "goals": [
+        [
+          76.5,
+          25,
+          -3289.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "regions": [
+        "swamp60-front",
+        "swamp60-middle"
+      ]
+    },
+    {
+      "name": "swamp60-relay74-to-relay84",
+      "mode": "graph",
+      "start": [
+        74.5,
+        25,
+        -3289.5
+      ],
+      "goals": [
+        [
+          84.5,
+          28,
+          -3289.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "regions": [
+        "swamp60-middle"
+      ]
+    },
+    {
+      "name": "swamp60-relay84-to-relay97",
+      "mode": "graph",
+      "start": [
+        84.5,
+        28,
+        -3289.5
+      ],
+      "goals": [
+        [
+          97.5,
+          24,
+          -3289.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "regions": [
+        "swamp60-middle"
+      ]
+    },
+    {
+      "name": "swamp60-relay97-to-relay102",
+      "mode": "graph",
+      "start": [
+        97.5,
+        24,
+        -3289.5
+      ],
+      "goals": [
+        [
+          102.5,
+          25,
+          -3289.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "regions": [
+        "swamp60-middle"
+      ]
+    },
+    {
+      "name": "swamp60-relay102-to-relay104",
+      "mode": "graph",
+      "start": [
+        102.5,
+        25,
+        -3289.5
+      ],
+      "goals": [
+        [
+          104.5,
+          46,
+          -3289.5
+        ]
+      ],
+      "regions": [
+        "swamp60-tower"
+      ],
+      "graphBudgetMillis": 10000
+    },
+    {
+      "name": "swamp60-relay104-to-relay111",
+      "mode": "graph",
+      "start": [
+        104.5,
+        46,
+        -3289.5
+      ],
+      "goals": [
+        [
+          111.5,
+          46,
+          -3286.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "regions": [
+        "swamp60-middle"
+      ]
+    },
+    {
+      "name": "swamp60-relay111-to-relay118",
+      "mode": "graph",
+      "start": [
+        111.5,
+        46,
+        -3286.5
+      ],
+      "goals": [
+        [
+          118.5,
+          45,
+          -3291.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "regions": [
+        "swamp60-middle"
+      ]
+    },
+    {
+      "name": "swamp60-relay118-to-relay148",
+      "mode": "graph",
+      "start": [
+        118.5,
+        45,
+        -3291.5
+      ],
+      "goals": [
+        [
+          148.5,
+          25,
+          -3289.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "regions": [
+        "swamp60-middle",
+        "swamp60-back"
+      ]
+    },
+    {
+      "name": "swamp60-relay148-to-relay160",
+      "mode": "graph",
+      "start": [
+        148.5,
+        25,
+        -3289.5
+      ],
+      "goals": [
+        [
+          160.5,
+          18,
+          -3292.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "regions": [
+        "swamp60-back"
+      ]
+    },
+    {
+      "name": "swamp60-relay160-to-gold",
+      "mode": "graph",
+      "start": [
+        160.5,
+        18,
+        -3292.5
+      ],
+      "goals": [
+        [
+          167.5,
+          18,
+          -3289.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "regions": [
+        "swamp60-back"
+      ]
+    }
+  ],
+  "effectRefresh": [
+    {
+      "source": "Command block [103,5,-3290]: effect @a[x=104,y=34,z=-3290,r=10] 8 2 5 true",
+      "center": [
+        104.5,
+        34.5,
+        -3289.5
+      ],
+      "radius": 10,
+      "id": "minecraft:jump_boost",
+      "amplifier": 5,
+      "duration": 40
+    }
+  ]
+}

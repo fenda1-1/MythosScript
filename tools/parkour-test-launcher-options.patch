@@ -1,0 +1,13 @@
+--- a/launch.py
++++ b/launch.py
+@@ -110,7 +110,9 @@
+         (run/'mods-backup.json').write_text(json.dumps(dict(game=str(game),files=moved),indent=2))
+         options=game/'options.txt'
+         lines=options.read_text(encoding='utf-8').splitlines() if options.exists() else []
+-        for key,value in dict(fullscreen='false',pauseOnLostFocus='false',maxFps='60',renderDistance='6').items():
++        if not any(line.startswith('renderDistance:') for line in lines):
++            lines.append('renderDistance:6')
++        for key,value in dict(fullscreen='false',pauseOnLostFocus='false',maxFps='60').items():
+             lines=[line for line in lines if not line.startswith(key+':')]+[key+':'+value]
+         options.write_text('\n'.join(lines)+'\n',encoding='utf-8')
+         if args.mode == 'mods':

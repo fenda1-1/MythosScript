@@ -1,0 +1,8 @@
+{
+  "regions": [
+    {"id": "platform-102", "min": [3, 94, -157], "max": [20, 113, -110]}
+  ],
+  "tests": [
+    {"name": "platform-102-continuous", "regions": ["platform-102"], "start": [11.5, 102, -118], "goals": [[11, 102, -149]], "mode": "graph"}
+  ]
+}
