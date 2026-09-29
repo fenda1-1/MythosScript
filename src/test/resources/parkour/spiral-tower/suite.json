@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "origin": [
+    10,
+    112,
+    -171
+  ],
+  "sessionId": "f135ca5c-dbcd-4525-abed-715dcc9845c4",
+  "player": "test_1122_inj",
+  "captures": [
+    {
+      "region": "spiral-tower",
+      "file": "spiral-tower.json",
+      "tick": 13118
+    }
+  ],
+  "tests": [
+    {
+      "name": "spiral-tower-ascent",
+      "regions": [
+        "spiral-tower"
+      ],
+      "start": [
+        11.5,
+        112,
+        -170.5
+      ],
+      "goals": [
+        [
+          11.5,
+          120,
+          -167.5
+        ]
+      ],
+      "mode": "graph"
+    }
+  ]
+}

@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "allowVines": true,
+  "captures": [
+    {
+      "region": "swamp52",
+      "file": "swamp52.zip"
+    },
+    {
+      "region": "swamp58",
+      "file": "swamp58.zip"
+    },
+    {
+      "region": "snow03",
+      "file": "snow03.zip"
+    },
+    {
+      "region": "snow08",
+      "file": "snow08.zip"
+    },
+    {
+      "region": "swamp58-tower",
+      "file": "swamp58-tower.zip"
+    }
+  ],
+  "tests": [
+    {
+      "name": "swamp52-start-to-gold",
+      "regions": [
+        "swamp52"
+      ],
+      "mode": "graph",
+      "start": [
+        0.5,
+        11,
+        -2913.5
+      ],
+      "goals": [
+        [
+          7.5,
+          15,
+          -2913.5
+        ]
+      ],
+      "graphBudgetMillis": 10000
+    },
+    {
+      "name": "swamp58-start-to-upper",
+      "regions": [
+        "swamp58"
+      ],
+      "mode": "graph",
+      "start": [
+        0.5,
+        11,
+        -3195.5
+      ],
+      "goals": [
+        [
+          19.5,
+          23,
+          -3195.5
+        ]
+      ],
+      "graphBudgetMillis": 10000,
+      "dynamicReplay": "swamp58-piston.json"
+    },
+    {
+      "name": "swamp58-upper-to-tower",
+      "regions": [
+        "swamp58"
+      ],
+      "mode": "graph",
+      "start": [
+        19.5,
+        23,
+        -3195.5
+      ],
+      "goals": [
+        [
+          26.5,
+          25,
+          -3195.5
+        ]
+      ],
+      "graphBudgetMillis": 10000
+    },
+    {
+      "name": "swamp58-tower-to-gold",
+      "regions": [
+        "swamp58-tower"
+      ],
+      "mode": "graph",
+      "start": [
+        26.5,
+        25,
+        -3195.5
+      ],
+      "goals": [
+        [
+          26.5,
+          45,
+          -3195.5
+        ]
+      ],
+      "graphBudgetMillis": 10000
+    },
+    {
+      "name": "snow03-start-to-gold",
+      "regions": [
+        "snow03"
+      ],
+      "mode": "graph",
+      "start": [
+        0.5,
+        11,
+        -1738.5
+      ],
+      "goals": [
+        [
+          12.5,
+          15,
+          -1738.5
+        ]
+      ],
+      "graphBudgetMillis": 10000
+    },
+    {
+      "name": "snow08-start-to-gold",
+      "regions": [
+        "snow08"
+      ],
+      "mode": "graph",
+      "start": [
+        0.5,
+        11,
+        -1973.5
+      ],
+      "goals": [
+        [
+          26.5,
+          12,
+          -1973.5
+        ]
+      ],
+      "graphBudgetMillis": 10000
+    }
+  ],
+  "effectRefresh": [
+    {
+      "source": "Command block [25,4,-3196]: effect @a[x=26,y=34,z=-3196,r=10] 8 2 5 true",
+      "center": [
+        26.5,
+        34.5,
+        -3195.5
+      ],
+      "radius": 10,
+      "id": "minecraft:jump_boost",
+      "amplifier": 5,
+      "duration": 40
+    }
+  ]
+}

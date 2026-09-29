@@ -1,0 +1,137 @@
+/*
+ * This file is part of Baritone.
+ *
+ * Baritone is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Baritone is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package com.mythos.mythosScriptMod.shadowbaritone.launch.mixins;
+
+import com.mythos.mythosScriptMod.shadowbaritone.api.BaritoneAPI;
+import com.mythos.mythosScriptMod.shadowbaritone.api.IBaritone;
+import com.mythos.mythosScriptMod.shadowbaritone.api.event.events.PacketEvent;
+import com.mythos.mythosScriptMod.shadowbaritone.api.event.events.type.EventState;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
+import net.minecraft.network.EnumPacketDirection;
+import net.minecraft.network.NetworkManager;
+import net.minecraft.network.Packet;
+import net.minecraft.network.play.client.CPacketPlayer;
+import com.mythos.mythosScriptMod.handlers.KillAuraHandler;
+import com.mythos.mythosScriptMod.handlers.KillAuraBlocking;
+import com.mythos.mythosScriptMod.otherfeatures.handler.movement.MovementFeatureManager;
+import org.spongepowered.asm.mixin.Final;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+/**
+ * @author Brady
+ * @since 8/6/2018
+ */
+@Mixin(NetworkManager.class)
+public class MixinNetworkManager {
+
+    @ModifyVariable(method = "dispatchPacket", at = @At("HEAD"), argsOnly = true, ordinal = 0, require = 1)
+    private Packet<?> mythos$sendShieldFacing(Packet<?> packet) {
+        if (this.field_179294_g != EnumPacketDirection.CLIENTBOUND || !(packet instanceof CPacketPlayer)) {
+            return packet;
+        }
+        net.minecraft.client.entity.EntityPlayerSP player = net.minecraft.client.Minecraft.getMinecraft().player;
+        if (player == null || player.connection == null
+                || player.connection.getNetworkManager() != (NetworkManager) (Object) this) return packet;
+        java.util.Optional<com.mythos.mythosScriptMod.shadowbaritone.api.utils.Rotation> facing =
+                KillAuraHandler.INSTANCE.getBlockingServerRotation(player);
+        if (!facing.isPresent()) return packet;
+        return KillAuraBlocking.withRotation((CPacketPlayer) packet, facing.get());
+    }
+
+    @Shadow(remap = false)
+    private Channel field_150746_k;
+
+    @Shadow(remap = false)
+    @Final
+    private EnumPacketDirection field_179294_g;
+
+    @Inject(method = "dispatchPacket", at = @At("HEAD"))
+    private void preDispatchPacket(Packet<?> inPacket,
+            final GenericFutureListener<? extends Future<? super Void>>[] futureListeners, CallbackInfo ci) {
+        if (this.field_179294_g != EnumPacketDirection.CLIENTBOUND) {
+            return;
+        }
+
+        net.minecraft.client.entity.EntityPlayerSP player = net.minecraft.client.Minecraft.getMinecraft().player;
+        if (inPacket instanceof CPacketPlayer && player != null && player.connection != null
+                && player.connection.getNetworkManager() == (Object) this
+                && MovementFeatureManager.isEnabled("no_fall")) {
+            ((AccessorCPacketPlayer) inPacket).mythos$setOnGround(true);
+        }
+
+        for (IBaritone ibaritone : BaritoneAPI.getProvider().getAllBaritones()) {
+            if (ibaritone.getPlayerContext().player() != null && ibaritone.getPlayerContext().player().connection
+                    .getNetworkManager() == (NetworkManager) (Object) this) {
+                ibaritone.getGameEventHandler()
+                        .onSendPacket(new PacketEvent((NetworkManager) (Object) this, EventState.PRE, inPacket));
+            }
+        }
+    }
+
+    @Inject(method = "dispatchPacket", at = @At("RETURN"))
+    private void postDispatchPacket(Packet<?> inPacket,
+            final GenericFutureListener<? extends Future<? super Void>>[] futureListeners, CallbackInfo ci) {
+        if (this.field_179294_g != EnumPacketDirection.CLIENTBOUND) {
+            return;
+        }
+
+        for (IBaritone ibaritone : BaritoneAPI.getProvider().getAllBaritones()) {
+            if (ibaritone.getPlayerContext().player() != null && ibaritone.getPlayerContext().player().connection
+                    .getNetworkManager() == (NetworkManager) (Object) this) {
+                ibaritone.getGameEventHandler()
+                        .onSendPacket(new PacketEvent((NetworkManager) (Object) this, EventState.POST, inPacket));
+            }
+        }
+    }
+
+    @Inject(method = "channelRead0", at = @At(value = "INVOKE", target = "net/minecraft/network/Packet.processPacket(Lnet/minecraft/network/INetHandler;)V"))
+    private void preProcessPacket(ChannelHandlerContext context, Packet<?> packet, CallbackInfo ci) {
+        if (this.field_179294_g != EnumPacketDirection.CLIENTBOUND) {
+            return;
+        }
+        for (IBaritone ibaritone : BaritoneAPI.getProvider().getAllBaritones()) {
+            if (ibaritone.getPlayerContext().player() != null && ibaritone.getPlayerContext().player().connection
+                    .getNetworkManager() == (NetworkManager) (Object) this) {
+                ibaritone.getGameEventHandler()
+                        .onReceivePacket(new PacketEvent((NetworkManager) (Object) this, EventState.PRE, packet));
+            }
+        }
+    }
+
+    @Inject(method = "channelRead0", at = @At("RETURN"))
+    private void postProcessPacket(ChannelHandlerContext context, Packet<?> packet, CallbackInfo ci) {
+        if (!this.field_150746_k.isOpen() || this.field_179294_g != EnumPacketDirection.CLIENTBOUND) {
+            return;
+        }
+        for (IBaritone ibaritone : BaritoneAPI.getProvider().getAllBaritones()) {
+            if (ibaritone.getPlayerContext().player() != null && ibaritone.getPlayerContext().player().connection
+                    .getNetworkManager() == (NetworkManager) (Object) this) {
+                ibaritone.getGameEventHandler()
+                        .onReceivePacket(new PacketEvent((NetworkManager) (Object) this, EventState.POST, packet));
+            }
+        }
+    }
+}

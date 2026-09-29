@@ -12,16 +12,14 @@ set DIRNAME=%~dp0
 if "%DIRNAME%" == "" set DIRNAME=.
 set APP_BASE_NAME=%~n0
 set APP_HOME=%DIRNAME%
+set GRADLE_USER_HOME=%APP_HOME%.gradle
 
 @rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 set DEFAULT_JVM_OPTS=
 
-@rem Find java.exe
-if defined JAVA_HOME goto findJavaFromJavaHome
-
-@rem Project-local default JDK (only used when JAVA_HOME is not already set)
+@rem This project requires Java 8. Force it so a newer JAVA_HOME or
+@rem ~/.gradle/gradle.properties cannot select the wrong compiler.
 set JAVA_HOME=C:\Program Files\Java\jdk1.8.0_202
-goto findJavaFromJavaHome
 
 @rem (unreachable)
 
@@ -60,7 +58,7 @@ set CMD_LINE_ARGS=%*
 set CLASSPATH=%APP_HOME%\gradle\wrapper\gradle-wrapper.jar
 
 @rem Execute Gradle
-"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -classpath "%CLASSPATH%" org.gradle.wrapper.GradleWrapperMain %CMD_LINE_ARGS%
+"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" "-Dorg.gradle.java.home=%JAVA_HOME%" -classpath "%CLASSPATH%" org.gradle.wrapper.GradleWrapperMain %CMD_LINE_ARGS%
 
 :end
 @rem End local scope for the variables with windows NT shell
