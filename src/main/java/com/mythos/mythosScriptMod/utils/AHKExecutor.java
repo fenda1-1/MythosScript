@@ -18,7 +18,6 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 public class AHKExecutor {
 
@@ -58,9 +57,7 @@ public class AHKExecutor {
     static {
         try {
             ensureLatestAHKResource("AutoHotKey/AutoHotkey.exe");
-            ensureLatestAHKResource("AutoHotKey/KeyPress.ahk");
             ensureLatestAHKResource("AutoHotKey/MouseClick.ahk");
-            ensureLatestAHKResource("AutoHotKey/FindAndReturn.ahk");
             // --- 新增代码行 ---
             ensureLatestAHKResource("AutoHotKey/GuiClick.ahk");
             // --- 新增结束 ---
@@ -119,67 +116,6 @@ public class AHKExecutor {
         }
     }
 
-    /**
-     * 在Minecraft窗口中查找文本并返回布尔结果 (不再需要窗口名)
-     * 
-     * @param searchText 要搜索的文本数据
-     * @param err1       文字的黑点容错百分率（0.1=10%）
-     * @param err0       背景的白点容错百分率（0.1=10%）
-     * @param X1         查找区域左上角X坐标
-     * @param Y1         查找区域左上角Y坐标
-     * @param X2         查找区域右下角X坐标
-     * @param Y2         查找区域右下角Y坐标
-     * @return 是否找到文本
-     */
-    public static boolean FindTextInWindow(String searchText, double err1, double err0, String X1, String Y1, String X2,
-            String Y2) {
-        try {
-            Path ahkExe = AHK_DIR.resolve("AutoHotkey.exe");
-            Path scriptPath = AHK_DIR.resolve("FindAndReturn.ahk");
-
-            // 构建参数列表，注意不再传递窗口名
-            List<String> command = new ArrayList<>();
-            command.add(ahkExe.toAbsolutePath().toString());
-            command.add(scriptPath.toAbsolutePath().toString());
-            String processId = getCurrentProcessId();
-            if (!processId.isEmpty()) {
-                command.add(processId);
-            }
-            command.add(searchText); // 搜索文本
-            command.add(Double.toString(err1)); // err1容错率
-            command.add(Double.toString(err0)); // err0容错率
-            command.add(X1); // X1
-            command.add(Y1); // Y1
-            command.add(X2); // X2
-            command.add(Y2); // Y2
-
-            ProcessBuilder pb = new ProcessBuilder(command);
-            Process process = pb.start();
-
-            // 读取输出结果
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line);
-                }
-            }
-
-            // 使用临时文件来获取结果，比读取stdout更可靠
-            process.waitFor(10, TimeUnit.SECONDS);
-            Path resultFile = AHK_DIR.resolve("FindTextResult.txt");
-            if (Files.exists(resultFile)) {
-                String result = new String(Files.readAllBytes(resultFile));
-                Files.deleteIfExists(resultFile); // 清理
-                return "true".equalsIgnoreCase(result.trim());
-            }
-
-            return false;
-        } catch (Exception e) {
-            LOGGER.error("Error occurred while searching text", e);
-            return false;
-        }
-    }
 
     /**
      * *** 新增辅助方法: 计算流的MD5校验和 ***
@@ -217,7 +153,7 @@ public class AHKExecutor {
      * 确保磁盘上的AHK资源文件与Mod内置的最新版本一致。
      * 如果文件不存在，或与内置版本不同（通过MD5校验），则进行提取或覆盖。
      *
-     * @param resourceName 资源在JAR包内的路径 (例如 "AutoHotKey/KeyPress.ahk")
+     * @param resourceName 资源在JAR包内的路径 (例如 "AutoHotKey/GuiClick.ahk")
      * @return 最终在磁盘上的文件路径
      * @throws IOException 如果资源读取或文件写入失败
      */

@@ -208,7 +208,8 @@ public final class ParkourDebugLog {
 
     public synchronized void event(String message) {
         if (suppressed) {
-            System.out.println("[parkour-test] " + message);
+            if (!Boolean.getBoolean("parkour.test.quiet"))
+                System.out.println("[parkour-test] " + message);
             return;
         }
         if (!enabled() || session == null) return;

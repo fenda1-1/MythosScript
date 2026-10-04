@@ -552,9 +552,8 @@ public final class ModernTooltipSupport {
             int screenHeight, ModernMainLayout.Rect anchorBounds, ModernMainLayout.Rect shellBounds,
             String featureTitle, String description, String shortcut, boolean showMouseActions) {
         ModernMainLayout.Rect placementBounds = resolvePlacementBounds(screenWidth, screenHeight, shellBounds);
-        int maxWidth = Math.max(1, Math.min(300, placementBounds.width));
+        int maxWidth = Math.max(1, Math.min(420, placementBounds.width));
         int bodyWidth = Math.max(1, maxWidth - 20);
-        List<String> descriptionLines = wrapLines(fontRenderer, description, bodyWidth);
         String safeTitle = featureTitle == null ? "" : featureTitle.trim();
         String safeShortcut = shortcut == null ? "" : ModernFormI18n.tr(shortcut.trim());
         String infoLabel = ModernFormI18n.tr("gui.modern.tooltip.info");
@@ -562,6 +561,20 @@ public final class ModernTooltipSupport {
                 : ModernFormI18n.tr("gui.modern.tooltip.shortcut", safeShortcut);
         String leftAction = ModernFormI18n.tr("gui.modern.tooltip.left_toggle");
         String rightAction = ModernFormI18n.tr("gui.modern.tooltip.right_config");
+        int lineHeight = Math.max(1, fontRenderer.FONT_HEIGHT);
+        int actionLines = showMouseActions ? 3 : 0;
+        List<String> descriptionLines = wrapLines(fontRenderer, description, bodyWidth);
+        int contentLines = (safeTitle.isEmpty() ? 0 : 1) + descriptionLines.size();
+        int panelHeight = Math.max(35, 27 + (contentLines + actionLines) * lineHeight + 6);
+        if (panelHeight > placementBounds.height && maxWidth < screenWidth - 12) {
+            // Wider lines wrap less: retry against the whole screen before
+            // giving up vertical space.
+            maxWidth = Math.max(1, Math.min(560, screenWidth - 12));
+            bodyWidth = Math.max(1, maxWidth - 20);
+            descriptionLines = wrapLines(fontRenderer, description, bodyWidth);
+            contentLines = (safeTitle.isEmpty() ? 0 : 1) + descriptionLines.size();
+            panelHeight = Math.max(35, 27 + (contentLines + actionLines) * lineHeight + 6);
+        }
         int textWidth = Math.max(fontRenderer.getStringWidth(safeTitle), fontRenderer.getStringWidth(shortcutLabel));
         if (!shortcutLabel.isEmpty()) {
             textWidth = Math.max(textWidth, fontRenderer.getStringWidth(infoLabel)
@@ -575,12 +588,23 @@ public final class ModernTooltipSupport {
             textWidth = Math.max(textWidth, fontRenderer.getStringWidth(rightAction));
         }
         int panelWidth = Math.min(maxWidth, Math.max(Math.min(150, maxWidth), textWidth + 20));
-        int lineHeight = Math.max(1, fontRenderer.FONT_HEIGHT);
-        int contentLines = (safeTitle.isEmpty() ? 0 : 1) + descriptionLines.size();
-        int actionHeight = showMouseActions ? lineHeight * 3 : 0;
-        int panelHeight = Math.max(35, 27 + contentLines * lineHeight + actionHeight + 6);
         ModernMainLayout.Rect panel = calculateTooltipBounds(screenWidth, screenHeight, shellBounds, anchorBounds,
                 panelWidth, panelHeight);
+        if (panel.height < panelHeight || panel.width < panelWidth) {
+            panel = calculateTooltipBounds(screenWidth, screenHeight, null, anchorBounds,
+                    Math.min(panelWidth, Math.max(1, screenWidth - 12)), panelHeight);
+        }
+        // The clamped panel may be narrower than panelWidth — re-wrap the
+        // description at the real width (can produce more lines), then grow the
+        // panel to cover every line. Never drop one.
+        descriptionLines = wrapLines(fontRenderer, description, Math.max(1, panel.width - 20));
+        int neededHeight = Math.max(35,
+                27 + ((safeTitle.isEmpty() ? 0 : 1) + descriptionLines.size() + actionLines) * lineHeight + 6);
+        if (panel.height < neededHeight) {
+            int y = neededHeight >= screenHeight - 4 ? 2
+                    : Math.max(2, Math.min(panel.y, screenHeight - 2 - neededHeight));
+            panel = new ModernMainLayout.Rect(panel.x, y, panel.width, neededHeight);
+        }
         ModernUiRenderer.drawPanel(panel.x, panel.y, panel.width, panel.height, 6, ModernUiRenderer.TOOLTIP_SURFACE,
                 ModernUiRenderer.BORDER);
         ModernUiRenderer.drawInfoIcon(panel.x + 9, panel.y + 7,
@@ -619,20 +643,44 @@ public final class ModernTooltipSupport {
             return;
         }
         ModernMainLayout.Rect placementBounds = resolvePlacementBounds(screenWidth, screenHeight, shellBounds);
-        int maxWidth = Math.max(1, Math.min(280, placementBounds.width));
-        int minimumWidth = Math.min(108, maxWidth);
+        int maxWidth = Math.max(1, Math.min(420, placementBounds.width));
+        int lineHeight = Math.max(1, fontRenderer.FONT_HEIGHT);
         List<String> lines = wrapLines(fontRenderer, tooltip, Math.max(1, maxWidth - 20));
         if (lines.isEmpty()) {
             return;
+        }
+        int panelHeight = Math.max(35, lines.size() * lineHeight + 28);
+        if (panelHeight > placementBounds.height && maxWidth < screenWidth - 12) {
+            // Wider lines wrap less: retry against the whole screen so more
+            // text fits without dropping any line.
+            maxWidth = Math.max(1, Math.min(560, screenWidth - 12));
+            lines = wrapLines(fontRenderer, tooltip, Math.max(1, maxWidth - 20));
+            panelHeight = Math.max(35, lines.size() * lineHeight + 28);
         }
         int textWidth = 0;
         for (String line : lines) {
             textWidth = Math.max(textWidth, fontRenderer.getStringWidth(line));
         }
+        int minimumWidth = Math.min(108, maxWidth);
         int panelWidth = Math.min(maxWidth, Math.max(minimumWidth, textWidth + 20));
-        int panelHeight = Math.max(35, lines.size() * fontRenderer.FONT_HEIGHT + 28);
         ModernMainLayout.Rect panel = calculateTooltipBounds(screenWidth, screenHeight, shellBounds, anchorBounds,
                 panelWidth, panelHeight);
+        if (panel.height < panelHeight || panel.width < panelWidth) {
+            // The shell region is too small to show the full tooltip; fall back
+            // to the whole screen so no line is dropped.
+            panel = calculateTooltipBounds(screenWidth, screenHeight, null, anchorBounds,
+                    Math.min(panelWidth, Math.max(1, screenWidth - 12)), panelHeight);
+        }
+        // The clamped panel may be narrower than panelWidth, so re-wrap at the
+        // real width first — that can produce MORE lines than `lines` — then
+        // grow the panel to cover every one of them. Never drop a line.
+        List<String> visibleLines = wrapLines(fontRenderer, tooltip, Math.max(1, panel.width - 20));
+        int neededHeight = Math.max(35, visibleLines.size() * lineHeight + 28);
+        if (panel.height < neededHeight) {
+            int y = neededHeight >= screenHeight - 4 ? 2
+                    : Math.max(2, Math.min(panel.y, screenHeight - 2 - neededHeight));
+            panel = new ModernMainLayout.Rect(panel.x, y, panel.width, neededHeight);
+        }
         ModernUiRenderer.drawPanel(panel.x, panel.y, panel.width, panel.height, 6, ModernUiRenderer.TOOLTIP_SURFACE,
                 ModernUiRenderer.BORDER);
         if (panel.width >= 45 && panel.height >= 22) {
@@ -644,31 +692,11 @@ public final class ModernTooltipSupport {
                     ModernUiRenderer.BORDER_SUBTLE);
         }
 
-        List<String> visibleLines = wrapLines(fontRenderer, tooltip, Math.max(1, panel.width - 20));
-        int visibleLineCount = Math.max(0, (panel.height - 28) / Math.max(1, fontRenderer.FONT_HEIGHT));
-        visibleLines = limitLines(fontRenderer, visibleLines, visibleLineCount, Math.max(1, panel.width - 20));
         for (int i = 0; i < visibleLines.size(); i++) {
             fontRenderer.drawString(visibleLines.get(i), panel.x + 10,
-                    panel.y + 24 + i * fontRenderer.FONT_HEIGHT,
+                    panel.y + 24 + i * lineHeight,
                     ModernUiRenderer.TOOLTIP_TEXT);
         }
-    }
-
-    private static List<String> limitLines(FontRenderer fontRenderer, List<String> lines, int maxLines,
-            int maxWidth) {
-        if (lines == null || lines.isEmpty() || maxLines <= 0) {
-            return Collections.emptyList();
-        }
-        if (lines.size() <= maxLines) {
-            return lines;
-        }
-        List<String> result = new ArrayList<>(lines.subList(0, maxLines));
-        String suffix = "...";
-        int suffixWidth = fontRenderer.getStringWidth(suffix);
-        int textWidth = Math.max(0, maxWidth - suffixWidth);
-        String lastLine = fontRenderer.trimStringToWidth(result.get(result.size() - 1), textWidth).trim();
-        result.set(result.size() - 1, fontRenderer.trimStringToWidth(lastLine + suffix, maxWidth));
-        return result;
     }
 
     private static ModernMainLayout.Rect resolvePlacementBounds(int screenWidth, int screenHeight,

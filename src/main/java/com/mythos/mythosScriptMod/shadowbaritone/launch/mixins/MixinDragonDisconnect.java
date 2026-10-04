@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public abstract class MixinDragonDisconnect {
     @Redirect(method = "ALLATORIxDEMO(Lnet/minecraftforge/fml/common/network/FMLNetworkEvent$ClientDisconnectionFromServerEvent;)V",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;func_152344_a(Ljava/lang/Runnable;)Lcom/google/common/util/concurrent/ListenableFuture;"),
-        require = 1, remap = false)
+        require = 0, remap = false) // DragonCore versions reshuffle obf members; never fail class init
     private static ListenableFuture<?> mythos$deferDisconnectCleanup(Minecraft mc, Runnable action) {
         return DragonDisconnectTasks.submit(action);
     }

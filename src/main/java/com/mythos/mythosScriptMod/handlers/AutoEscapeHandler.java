@@ -13,6 +13,7 @@ import com.mythos.mythosScriptMod.path.PathSequenceEventListener;
 import com.mythos.mythosScriptMod.path.PathSequenceManager;
 import com.mythos.mythosScriptMod.system.AutoEscapeRule;
 import com.mythos.mythosScriptMod.system.ProfileManager;
+import com.mythos.mythosScriptMod.utils.ModUtils;
 import com.mythos.mythosScriptMod.mythosScriptMod;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
@@ -360,6 +361,13 @@ public class AutoEscapeHandler {
                 return;
             }
 
+            if (anyThreatPresent) {
+                // 威胁仍在范围内：顺延重启计时，等目标离开后才开始倒计时
+                restartExecuteAtMs = System.currentTimeMillis()
+                        + Math.max(0, activeRule.restartDelaySeconds) * 1000L;
+                return;
+            }
+
             if (System.currentTimeMillis() >= restartExecuteAtMs) {
                 runPendingRestartSequence();
             }
@@ -377,7 +385,14 @@ public class AutoEscapeHandler {
                 return;
             }
 
-            if (System.currentTimeMillis() >= restartExecuteAtMs && !anyThreatPresent) {
+            if (anyThreatPresent) {
+                // 威胁仍在范围内：顺延重启计时，等目标离开后才开始倒计时
+                restartExecuteAtMs = System.currentTimeMillis()
+                        + Math.max(0, activeRule == null ? 0 : activeRule.restartDelaySeconds) * 1000L;
+                return;
+            }
+
+            if (System.currentTimeMillis() >= restartExecuteAtMs) {
                 runPendingRestartSequence();
             }
         }
@@ -392,10 +407,19 @@ public class AutoEscapeHandler {
             return;
         }
 
-        if (activeRule.restartEnabled
-                && activeRule.restartSequenceName != null
-                && !activeRule.restartSequenceName.trim().isEmpty()) {
-            pendingRestartSequenceName = activeRule.restartSequenceName.trim();
+        if (activeRule.restartEnabled) {
+            // Empty restart sequence means "restart the current (escape) sequence".
+            String restartName = activeRule.restartSequenceName == null
+                    ? "" : activeRule.restartSequenceName.trim();
+            if (restartName.isEmpty() && activeRule.escapeSequenceName != null) {
+                restartName = activeRule.escapeSequenceName.trim();
+            }
+            if (restartName.isEmpty()) {
+                notifyPlayer(TextFormatting.AQUA + "[自动逃离] " + TextFormatting.GREEN + "逃离序列已完成。");
+                resetRuntimeState();
+                return;
+            }
+            pendingRestartSequenceName = restartName;
             restartExecuteAtMs = System.currentTimeMillis() + Math.max(0, activeRule.restartDelaySeconds) * 1000L;
             runtimeState = RuntimeState.WAITING_RESTART;
             notifyPlayer(TextFormatting.AQUA + "[自动逃离] " + TextFormatting.GREEN
@@ -530,47 +554,15 @@ public class AutoEscapeHandler {
         }
 
         int currentDimension = player.dimension;
-        int currentChunkX = player.chunkCoordX;
-        int currentChunkZ = player.chunkCoordZ;
+        double currentX = player.posX;
+        double currentZ = player.posZ;
 
         for (AutoEscapeRule.AreaBlacklistEntry entry : rule.areaBlacklist) {
-            int[] parsed = parseAreaKey(entry == null ? "" : entry.areaKey);
-            if (parsed == null || parsed[0] != currentDimension) {
-                continue;
-            }
-            int radius = entry == null ? 0 : Math.max(0, entry.chunkRadius);
-            if (Math.abs(currentChunkX - parsed[1]) <= radius
-                    && Math.abs(currentChunkZ - parsed[2]) <= radius) {
+            if (entry != null && entry.contains(currentDimension, currentX, currentZ)) {
                 return true;
             }
         }
         return false;
-    }
-
-    private static int[] parseAreaKey(String areaKey) {
-        String normalized = AutoEscapeRule.normalizeAreaKey(areaKey);
-        if (normalized.isEmpty()) {
-            return null;
-        }
-
-        int colonIndex = normalized.indexOf(':');
-        if (colonIndex <= 0 || colonIndex >= normalized.length() - 1) {
-            return null;
-        }
-
-        int commaIndex = normalized.indexOf(',', colonIndex + 1);
-        if (commaIndex <= colonIndex + 1 || commaIndex >= normalized.length() - 1) {
-            return null;
-        }
-
-        try {
-            int dimension = Integer.parseInt(normalized.substring(0, colonIndex));
-            int chunkX = Integer.parseInt(normalized.substring(colonIndex + 1, commaIndex));
-            int chunkZ = Integer.parseInt(normalized.substring(commaIndex + 1));
-            return new int[] { dimension, chunkX, chunkZ };
-        } catch (NumberFormatException ignored) {
-            return null;
-        }
     }
 
     private static String buildAreaKey(int dimension, int chunkX, int chunkZ) {
@@ -693,7 +685,9 @@ public class AutoEscapeHandler {
                 return entity instanceof EntityLivingBase;
             case "玩家":
             case "player":
-                return entity instanceof EntityPlayer;
+                return ModUtils.isRealPlayer(entity);
+            case "npc":
+                return ModUtils.isNpcPlayer(entity);
             case "怪物":
             case "monster":
             case "mob":
@@ -717,7 +711,6 @@ public class AutoEscapeHandler {
                 return entity instanceof EntityAmbientCreature;
             case "村民":
             case "villager":
-            case "npc":
                 return entity instanceof EntityVillager;
             case "傀儡":
             case "golem":

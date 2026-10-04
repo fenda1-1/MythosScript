@@ -17,11 +17,25 @@ set GRADLE_USER_HOME=%APP_HOME%.gradle
 @rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 set DEFAULT_JVM_OPTS=
 
-@rem This project requires Java 8. Force it so a newer JAVA_HOME or
-@rem ~/.gradle/gradle.properties cannot select the wrong compiler.
-set JAVA_HOME=C:\Program Files\Java\jdk1.8.0_202
+@rem This project requires Java 8. Honour whatever the environment provides
+@rem (JAVA_HOME, then JAVA8_HOME, then JDK8_HOME) and fall back to java.exe on
+@rem PATH. Never hardcode a machine-specific path here: it would break the
+@rem build on every other machine.
+if not defined JAVA_HOME if defined JAVA8_HOME set "JAVA_HOME=%JAVA8_HOME%"
+if not defined JAVA_HOME if defined JDK8_HOME set "JAVA_HOME=%JDK8_HOME%"
+if defined JAVA_HOME goto findJavaFromJavaHome
 
-@rem (unreachable)
+set JAVA_EXE=java.exe
+%JAVA_EXE% -version >NUL 2>&1
+if "%ERRORLEVEL%" == "0" goto init
+
+echo.
+echo ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.
+echo.
+echo Please set the JAVA_HOME variable in your environment to match the
+echo location of your Java installation. A JDK 8 install is required.
+
+goto fail
 
 :findJavaFromJavaHome
 set JAVA_HOME=%JAVA_HOME:"=%
@@ -57,8 +71,14 @@ set CMD_LINE_ARGS=%*
 
 set CLASSPATH=%APP_HOME%\gradle\wrapper\gradle-wrapper.jar
 
+@rem Only pin Gradle's Java home when JAVA_HOME is actually known: passing an
+@rem empty -Dorg.gradle.java.home would break machines that rely on java.exe
+@rem from PATH.
+set JAVA_HOME_ARG=
+if defined JAVA_HOME set JAVA_HOME_ARG="-Dorg.gradle.java.home=%JAVA_HOME%"
+
 @rem Execute Gradle
-"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" "-Dorg.gradle.java.home=%JAVA_HOME%" -classpath "%CLASSPATH%" org.gradle.wrapper.GradleWrapperMain %CMD_LINE_ARGS%
+"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" %JAVA_HOME_ARG% -classpath "%CLASSPATH%" org.gradle.wrapper.GradleWrapperMain %CMD_LINE_ARGS%
 
 :end
 @rem End local scope for the variables with windows NT shell

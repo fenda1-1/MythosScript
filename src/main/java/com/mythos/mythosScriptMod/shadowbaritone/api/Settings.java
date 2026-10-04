@@ -440,6 +440,12 @@ public final class Settings {
     public final Setting<Boolean> flightAutoDescend = new Setting<>(true);
 
     /**
+     * Allow Baritone to path by teleporting the player along the route instead
+     * of flying. Mutually exclusive with {@link #allowFlightPathing}.
+     */
+    public final Setting<Boolean> allowBlinkPathing = new Setting<>(false);
+
+    /**
      * High-level parkour strategy profile.
      */
     public final Setting<ParkourProfile> parkourProfile = new Setting<>(ParkourProfile.STABLE);

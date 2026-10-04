@@ -68,6 +68,7 @@ public final class ModernAutoFollowWorkbenchTab implements ModernSettingsTab {
             { AutoFollowRule.ENTITY_TYPE_VILLAGER, "gui.modern.autofollow.u014" },
             { AutoFollowRule.ENTITY_TYPE_TAMEABLE, "gui.modern.autofollow.u015" },
             { AutoFollowRule.ENTITY_TYPE_PLAYER, "gui.modern.autofollow.u016" },
+            { AutoFollowRule.ENTITY_TYPE_NPC, "gui.modern.autofollow.u210" },
             { AutoFollowRule.ENTITY_TYPE_LIVING, "gui.modern.autofollow.u017" },
             { AutoFollowRule.ENTITY_TYPE_ANY, "gui.modern.autofollow.u018" }
     };

@@ -375,8 +375,7 @@ public final class ActionEditorJson {
             return false;
         }
         String normalized = key.trim();
-        return "delayTicks".equals(normalized)
-                || "chestRows".equals(normalized)
+        return "chestRows".equals(normalized)
                 || "chestCols".equals(normalized)
                 || "inventoryRows".equals(normalized)
                 || "inventoryCols".equals(normalized)

@@ -29,6 +29,7 @@ import com.mythos.mythosScriptMod.shadowbaritone.pathing.calc.openset.BinaryHeap
 import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.CalculationContext;
 import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.MovementHelper;
 import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.Moves;
+import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.movements.MovementFly;
 import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.movements.MovementParkour;
 import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.movements.MovementPistonLaunch;
 import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.parkour.ParkourJumpCandidate;
@@ -78,23 +79,74 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         // A context can survive replans; a geometry cache cannot survive world
         // changes, nor be shared with another concurrent path calculation.
         calcContext.parkourSurfaces.remove();
-        boolean flightPathing = Baritone.settings().allowFlightPathing.value;
+        // Blink pathing reuses the axis-aligned flight move set: teleports
+        // move exactly like FLIGHT_* neighbours (up/down/N/E/S/W), never a
+        // walking traverse that has to route around a wall on foot.
+        boolean flightPathing = Baritone.settings().allowFlightPathing.value
+                || Baritone.settings().allowBlinkPathing.value;
         int seedX = startX, seedY = startY, seedZ = startZ;
-        if (flightPathing && !MovementHelper.canFlyThrough(calcContext, seedX, seedY, seedZ)) {
+        boolean blink = Baritone.settings().allowBlinkPathing.value;
+        if (flightPathing && !(blink
+                ? MovementFly.blinkBoxFits(calcContext, seedX, seedY, seedZ)
+                : MovementHelper.canFlyThrough(calcContext, seedX, seedY, seedZ))) {
             // Player feet can snap inside a solid block (tp into a wall corner,
             // corridor overshoot). Seeding A* inside the wall makes the search
             // escape through the maze exterior; snap to an adjacent flyable cell.
-            int[][] snapOffsets = { { 0, -1, 0 }, { 0, 1, 0 }, { 1, 0, 0 }, { -1, 0, 0 },
-                    { 0, 0, 1 }, { 0, 0, -1 } };
+            // Under blink the seed must also hold the whole player box: standing
+            // on a fence/wall top leaves feet at y+0.5, so the integer cell the
+            // box model needs is ABOVE the occupied one — probe upward escapes
+            // first, then sideways, and down last (down is usually the post
+            // itself).
+            int[][] snapOffsets = { { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 },
+                    { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
+                    { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
+                    { 0, -1, 0 } };
             for (int[] o : snapOffsets) {
                 int nx = startX + o[0], ny = startY + o[1], nz = startZ + o[2];
-                if (MovementHelper.canFlyThrough(calcContext, nx, ny, nz)) {
+                if (blink
+                        ? MovementFly.blinkBoxFits(calcContext, nx, ny, nz)
+                        : MovementHelper.canFlyThrough(calcContext, nx, ny, nz)) {
                     seedX = nx; seedY = ny; seedZ = nz;
                     break;
                 }
             }
         }
         startNode = getNodeAtPosition(seedX, seedY, seedZ, BetterBlockPos.longHash(seedX, seedY, seedZ));
+        // When the seed snapped away from the real start (e.g. feet on a fence
+        // top at y+0.5), PathingBehavior discards any path whose positions don't
+        // contain the requested start cell — so prepend a node chain from the
+        // real start to the seed. Y is walked first so the entry hop climbs off
+        // the fence post before moving sideways. Each hop carries its FLIGHT_*
+        // move so assembleMovements rebuilds MovementFly between the cells;
+        // blinkAlongPath walks positions() only, so execution is unaffected.
+        if (blink && (seedX != startX || seedY != startY || seedZ != startZ)) {
+            java.util.List<int[]> cells = new java.util.ArrayList<>();
+            int px = startX, py = startY, pz = startZ;
+            cells.add(new int[] { px, py, pz });
+            while (px != seedX || py != seedY || pz != seedZ) {
+                if (py != seedY) py += Integer.compare(seedY, py);
+                else if (px != seedX) px += Integer.compare(seedX, px);
+                else pz += Integer.compare(seedZ, pz);
+                cells.add(new int[] { px, py, pz });
+            }
+            PathNode head = null, prev = null;
+            for (int[] c : cells) {
+                // last cell is the seed — reuse the node already fetched above
+                PathNode n = (c == cells.get(cells.size() - 1)) ? startNode
+                        : new PathNode(c[0], c[1], c[2], goal);
+                n.previous = prev;
+                if (prev == null) {
+                    n.cost = 0;
+                } else {
+                    int dx = c[0] - prev.x, dy = c[1] - prev.y, dz = c[2] - prev.z;
+                    n.previousMove = flightMove(dx, dy, dz);
+                    n.cost = prev.cost + Math.sqrt(dx * dx + dy * dy + dz * dz);
+                }
+                if (head == null) head = n;
+                prev = n;
+            }
+            startNode = head;
+        }
         Vec3d initial=calcContext.playerPosition;
         if(calcContext.parkourMode && initial!=null
                 && ParkourSurface.supportedFeet(calcContext,initial).equals(new BetterBlockPos(startX,startY,startZ)))
@@ -371,6 +423,15 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                     + " movements considered");
         }
         return result;
+    }
+
+    private static Moves flightMove(int dx, int dy, int dz) {
+        for (Moves m : Moves.values()) {
+            if (m.flight && m.xOffset == dx && m.yOffset == dy && m.zOffset == dz) {
+                return m;
+            }
+        }
+        return null;
     }
 
     private Optional<IPath> capabilityFrontier(int numNodes) {

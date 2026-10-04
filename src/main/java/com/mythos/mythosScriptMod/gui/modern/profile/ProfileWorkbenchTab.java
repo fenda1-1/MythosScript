@@ -12,6 +12,7 @@ import org.lwjgl.input.Keyboard;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mythos.mythosScriptMod.config.BlinkPathingConfig;
 import com.mythos.mythosScriptMod.config.FlightPathingConfig;
 import com.mythos.mythosScriptMod.gui.modern.ModernHoverScrollbar;
 import com.mythos.mythosScriptMod.gui.modern.ModernMainLayout;
@@ -1034,6 +1035,7 @@ public final class ProfileWorkbenchTab implements ModernSettingsTab {
 
     private void reloadOtherFeatureConfigsForActiveProfile() {
         FlightPathingConfig.load();
+        BlinkPathingConfig.load();
         SpeedHandler.loadConfig();
         MovementFeatureManager.loadConfig();
         BlockFeatureManager.loadConfig();

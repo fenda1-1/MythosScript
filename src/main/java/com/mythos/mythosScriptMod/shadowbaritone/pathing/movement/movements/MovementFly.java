@@ -10,7 +10,12 @@ import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.CalculationCon
 import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.Movement;
 import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.MovementHelper;
 import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.MovementState;
+import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.RouteCollisionSampler;
 import com.mythos.mythosScriptMod.handlers.FlyHandler;
+import net.minecraft.block.state.IBlockState;
+import net.minecraft.util.math.AxisAlignedBB;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -33,21 +38,37 @@ public final class MovementFly extends Movement {
     }
 
     public static double cost(CalculationContext context, int x, int y, int z, int dx, int dy, int dz) {
-        // The script's movement fly feature supplies flight by controlling motion;
-        // it does not grant Minecraft's creative-mode allowFlying capability.
-        // Check FlyHandler first: headless contexts have no player() to query.
-        if (!FlyHandler.enabled && !context.getBaritone().getPlayerContext().player().capabilities.allowFlying) {
+        // Blink pathing teleports along these axis moves without flying, so it
+        // skips the flight-capability and cruise-altitude gates; collision
+        // checks still apply. Plain distance keeps routes flat near ground.
+        boolean blink = Baritone.settings().allowBlinkPathing.value;
+        if (!blink && !FlyHandler.enabled
+                && !context.getBaritone().getPlayerContext().player().capabilities.allowFlying) {
+            // The script's movement fly feature supplies flight by controlling motion;
+            // it does not grant Minecraft's creative-mode allowFlying capability.
+            // Check FlyHandler first: headless contexts have no player() to query.
             return COST_INF;
         }
-        int minimumAltitude = Math.max(1, Math.min(356, Baritone.settings().flightMinAltitude.value));
-        if (dy < minimumAltitude && (dx != x || dz != z)) {
-            return COST_INF;
+        if (!blink) {
+            int minimumAltitude = Math.max(1, Math.min(356, Baritone.settings().flightMinAltitude.value));
+            if (dy < minimumAltitude && (dx != x || dz != z)) {
+                return COST_INF;
+            }
         }
-        int clearance = Math.max(0, Baritone.settings().flightClearance.value);
-        for (int cy = 0; cy <= clearance; cy++) {
+        // Blink nodes are feet positions the player's 0.6x1.8 box gets
+        // teleported through. The feet cell may legitimately hold a thin
+        // standable surface (carpet, half slab, snow layer) whose collision
+        // top the player stands on, so it must NOT be required fly-through —
+        // blinkBoxFits checks the real collision shape instead. Only the
+        // head cell needs to be passable.
+        int clearance = blink ? 1 : Math.max(0, Baritone.settings().flightClearance.value);
+        for (int cy = blink ? 1 : 0; cy <= clearance; cy++) {
             if (!MovementHelper.canFlyThrough(context, dx, dy + cy, dz)) return COST_INF;
         }
         double distance = Math.sqrt((dx - x) * (dx - x) + (dy - y) * (dy - y) + (dz - z) * (dz - z));
+        if (blink) {
+            return blinkBoxFits(context, dx, dy, dz) ? distance : COST_INF;
+        }
         int ascent = Math.max(0, dy - y);
         int altitudeAboveStart = Math.max(0, dy - context.preferredFlightY);
         double clearancePenalty = 0.0D;
@@ -63,6 +84,94 @@ public final class MovementFly extends Movement {
         }
         return distance + ascent * ASCENT_PENALTY
                 + altitudeAboveStart * ABOVE_CRUISE_ALTITUDE_PENALTY + clearancePenalty;
+    }
+
+    /**
+     * Highest collision-box top inside this column the player's feet can rest
+     * on. A node is a feet CELL, but the actual feet Y is the top of a thin
+     * floor: carpet 0.0625, half slab 0.5, snow layers, soul sand 0.875, and
+     * a fence/wall post reaching up from the cell below (top dy+0.5 when the
+     * feet cell sits above the post). Any collision top above dy+1 belongs to
+     * a wall occupying this cell, not a floor. Returned Y is in [dy, dy+1].
+     */
+    public static double blinkSurfaceY(CalculationContext context, int dx, int dy, int dz) {
+        return blinkSurfaceY(context == null ? null : context.world, context, dx, dy, dz);
+    }
+
+    /**
+     * Live-world variant for the executor: identical rule but the collision
+     * boxes come from addCollisionBoxToList straight off the world, so the
+     * route builder can land hops on the real surface Y (carpet 5.0625, slab
+     * 5.5, fence top 6.5) instead of the integer cell bottom that wedges the
+     * box into the block and makes collision physics kick the player back.
+     */
+    public static double blinkSurfaceY(World world, int dx, int dy, int dz) {
+        return blinkSurfaceY(world, null, dx, dy, dz);
+    }
+
+    private static double blinkSurfaceY(World world, CalculationContext context, int dx, int dy, int dz) {
+        // Query only this column's own cells: the box the node produces is
+        // centred in the cell (0.201..0.799), so support outside the column
+        // can't carry it anyway.
+        AxisAlignedBB foot = new AxisAlignedBB(dx + 0.2, dy, dz + 0.2, dx + 0.8, dy + 0.05, dz + 0.8);
+        double surface = dy;
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        List<AxisAlignedBB> boxes = new ArrayList<>();
+        for (int cy = dy - 1; cy <= dy; cy++) {
+            pos.setPos(dx, cy, dz);
+            if (context != null) {
+                for (AxisAlignedBB box : context.collisionBoxes(pos, foot)) {
+                    if (box.maxY <= dy + 1.0 && box.maxY > surface) {
+                        surface = box.maxY;
+                    }
+                }
+            } else if (world != null) {
+                world.getBlockState(pos).addCollisionBoxToList(world, pos, foot, boxes, null, false);
+                for (AxisAlignedBB box : boxes) {
+                    if (box.maxY <= dy + 1.0 && box.maxY > surface) {
+                        surface = box.maxY;
+                    }
+                }
+                boxes.clear();
+            }
+        }
+        return surface;
+    }
+
+    /**
+     * Teleporting drops the 0.6x1.8 player box at the node's surface Y (see
+     * {@link #blinkSurfaceY}), not the integer cell bottom: a carpet or slab
+     * top the player genuinely stands on must not count as an intersection,
+     * while a fence post poking through the cell still rejects it. A node
+     * fits only when the head cell is passable and no neighbouring collision
+     * box clips the raised player box.
+     */
+    public static boolean blinkBoxFits(CalculationContext context, int dx, int dy, int dz) {
+        if (!MovementHelper.canFlyThrough(context, dx, dy + 1, dz)) {
+            return false;
+        }
+        double surfaceY = blinkSurfaceY(context, dx, dy, dz);
+        AxisAlignedBB playerBox = new AxisAlignedBB(
+                dx + 0.5 - RouteCollisionSampler.DEFAULT_PLAYER_HALF_WIDTH, surfaceY,
+                dz + 0.5 - RouteCollisionSampler.DEFAULT_PLAYER_HALF_WIDTH,
+                dx + 0.5 + RouteCollisionSampler.DEFAULT_PLAYER_HALF_WIDTH, surfaceY + 1.8,
+                dz + 0.5 + RouteCollisionSampler.DEFAULT_PLAYER_HALF_WIDTH);
+        // collisionBoxes() goes through addCollisionBoxToList, which is the only
+        // source of the real collision shape: fences/walls return a 1.5-tall
+        // post here while getCollisionBoundingBox only exposes the 1.0-tall
+        // selection box and lets the planner route feet through the post top.
+        for (int cx = dx - 1; cx <= dx + 1; cx++) {
+            for (int cy = dy - 1; cy <= dy + 2; cy++) {
+                for (int cz = dz - 1; cz <= dz + 1; cz++) {
+                    for (AxisAlignedBB box : context.collisionBoxes(new BlockPos(cx, cy, cz), playerBox)) {
+                        if (playerBox.intersects(box)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
     }
 
     @Override

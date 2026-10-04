@@ -11,6 +11,7 @@ import com.mythos.mythosScriptMod.gui.modern.*;
 import com.mythos.mythosScriptMod.gui.modern.ModernMainLayout.Rect;
 import com.mythos.mythosScriptMod.gui.modern.form.ModernFormWidget;
 import com.mythos.mythosScriptMod.handlers.AutoFollowHandler;
+import com.mythos.mythosScriptMod.utils.ModUtils;
 
 /** Bounded, resizable collection editor; coordinates and names stay in the owning draft. */
 final class AutoFollowCollectionPanel implements ModernFormWidget {
@@ -32,6 +33,7 @@ final class AutoFollowCollectionPanel implements ModernFormWidget {
     private String error = "";
     private List<String> rows = Collections.emptyList();
     private List<String> liveRows = Collections.emptyList();
+    private List<String> liveRowTypes = Collections.emptyList();
     private long nextRefresh;
 
     AutoFollowCollectionPanel(Mode mode, String title, Supplier<String> get, Consumer<String> set) {
@@ -130,7 +132,15 @@ final class AutoFollowCollectionPanel implements ModernFormWidget {
                     for (String line : wrap(value, card.width - 14)) {
                         text(line, card.x + 7, lineY, card.width - 14, ModernUiRenderer.TEXT); lineY += 12;
                     }
-                } else text(value, card.x + 8, card.y + 9, card.width - 16, ModernUiRenderer.TEXT);
+                } else {
+                    String typeLabel = suggestions && i < liveRowTypes.size() ? liveRowTypes.get(i) : "";
+                    int typeW = typeLabel.isEmpty() ? 0 : font.getStringWidth(typeLabel) + 10;
+                    text(value, card.x + 8, card.y + 9, card.width - 16 - typeW, ModernUiRenderer.TEXT);
+                    if (!typeLabel.isEmpty()) {
+                        int lw = font.getStringWidth(typeLabel);
+                        text(typeLabel, card.right() - 8 - lw, card.y + 9, lw + 4, ModernUiRenderer.MUTED_TEXT);
+                    }
+                }
             }
             y += h + 4;
         }
@@ -318,10 +328,13 @@ final class AutoFollowCollectionPanel implements ModernFormWidget {
     }
 
     private List<String> nearbyNames() {
-        List<String> result=new ArrayList<>(); Minecraft mc=Minecraft.getMinecraft();
+        List<String> result=new ArrayList<>(); List<String> types=new ArrayList<>();
+        Minecraft mc=Minecraft.getMinecraft();
         if(mc.world!=null) mc.world.loadedEntityList.stream().filter(e->e instanceof EntityLivingBase && e!=mc.player)
                 .sorted(Comparator.comparingDouble(e->mc.player==null?0:e.getDistanceSq(mc.player)))
-                .forEach(e->{ String name=net.minecraft.util.text.TextFormatting.getTextWithoutFormattingCodes(e.getName()); if(name!=null&&!result.contains(name)) result.add(name); });
+                .forEach(e->{ String name=net.minecraft.util.text.TextFormatting.getTextWithoutFormattingCodes(e.getName());
+                    if(name!=null&&!result.contains(name)){ result.add(name); types.add(ModUtils.entityTypeLabel(e)); } });
+        liveRowTypes=types;
         return result;
     }
     private List<String> scoreCards() {

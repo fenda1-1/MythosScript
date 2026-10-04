@@ -116,3 +116,5 @@ gui.inventory.item.block_replacement.tooltip=§e区域方块替换§r\n§7像静
 gui.inv_viewer.title=物品编辑器 (悬停按 F 编辑)
 gui.inventory.item.baritone_flight_pathing.name=飞行寻路
 gui.inventory.item.baritone_flight_pathing.tooltip=§b§l飞行寻路§r\n§7开启后仅按玩家已有的飞行能力规划路径，优先直线飞行，\n§7遇到障碍自动绕行，到达目标后下降落地，不会改变游戏模式。\n\n§b左键:§r §a开启/关闭飞行寻路§r\n§b右键:§r §e打开飞行寻路设置§r
+gui.inventory.item.baritone_blink_pathing.name=瞬移寻路
+gui.inventory.item.baritone_blink_pathing.tooltip=§b§l瞬移寻路§r\n§7沿规划路线按固定步距逐段瞬移前进，无需飞行能力。\n§7可配置每次瞬移的距离、水平与垂直步幅上限。\n\n§b左键:§r §a开启/关闭瞬移寻路§r\n§b右键:§r §e打开瞬移寻路设置§r

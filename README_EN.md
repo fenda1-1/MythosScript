@@ -7,7 +7,7 @@
 <p>A visual automation workbench for Minecraft.<br />Turn individual actions into game workflows you can design, inspect, and run.</p>
 
 <p>
-<img src="https://img.shields.io/badge/VERSION-1.0.72-79B8AB?style=flat-square&amp;labelColor=202B33" alt="Version 1.0.72" />
+<img src="https://img.shields.io/badge/VERSION-1.0.71-79B8AB?style=flat-square&amp;labelColor=202B33" alt="Version 1.0.71" />
 <img src="https://img.shields.io/badge/MINECRAFT-1.12.2-79B8AB?style=flat-square&amp;labelColor=202B33" alt="Minecraft 1.12.2" />
 <img src="https://img.shields.io/badge/FORGE-14.23.5.2860-D8B583?style=flat-square&amp;labelColor=202B33" alt="Forge 14.23.5.2860" />
 <img src="https://img.shields.io/badge/JAVA-8-D8B583?style=flat-square&amp;labelColor=202B33" alt="Java 8" />
@@ -50,7 +50,9 @@ See the [GitHub Releases page](https://github.com/fenda1-1/MythosScript/releases
 
 ## Build from source
 
-The repository uses the Gradle Wrapper, so Gradle does not need to be installed separately. Building requires **JDK 8**. The build checks `JAVA8_HOME`, `JDK8_HOME`, and `JAVA_HOME` for a usable Java 8 installation.
+The repository uses the Gradle Wrapper, so Gradle does not need to be installed separately. Building requires **JDK 8**. `gradlew.bat` / `gradlew` resolve it from `JAVA_HOME`, then `JAVA8_HOME`, then `JDK8_HOME`, and finally fall back to `java` on `PATH`. Make sure the JDK actually selected is 8 (`java -version`) — ForgeGradle 5.1 and Minecraft 1.12.2 reject newer versions.
+
+> **First build (fresh clone)**: it needs network access. ForgeGradle downloads the Minecraft 1.12.2 dependencies and mappings (several hundred MB), so the first run is much slower than later incremental builds. This project pins the Gradle user home to `.gradle/` inside the repository, so the dependency cache lives with the checkout and is not shared with other projects; with an empty cache `--offline` always fails.
 
 From the repository root, run:
 
@@ -62,8 +64,8 @@ On Windows, `build.bat` runs the same command. The build compiles the project, r
 
 | File | Purpose |
 | :--- | :--- |
-| `MythosScript-v1.0.72-mc1.12.2.jar` | Standard build for development and troubleshooting. |
-| `MythosScript-v1.0.72-mc1.12.2-obf.jar` | ProGuard-obfuscated build, intended for distribution. |
+| `MythosScript-v1.0.73-mc1.12.2.jar` | Standard build for development and troubleshooting. |
+| `MythosScript-v1.0.73-mc1.12.2-obf.jar` | ProGuard-obfuscated build, intended for distribution. |
 
 Both are Minecraft 1.12.2 Forge mods. Install only one of them in a game instance's `mods` directory at a time. The build includes the current working tree, so confirm the local changes you intend to ship before creating a release.
 

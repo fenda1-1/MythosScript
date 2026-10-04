@@ -116,3 +116,5 @@ gui.inventory.item.block_replacement.tooltip=§eZone block replacement§r\n§7Ma
 gui.inv_viewer.title=Item Editor (press F on hover to edit)
 gui.inventory.item.baritone_flight_pathing.name=Flight pathing
 gui.inventory.item.baritone_flight_pathing.tooltip=§b§lFlight pathing§r\n§7Uses only the player's existing flight capability and prefers direct routes.\n§7Obstacles are routed around and ground targets are approached safely.\n\n§bLeft click:§r §aToggle flight pathing§r\n§bRight click:§r §eOpen flight pathing settings§r
+gui.inventory.item.baritone_blink_pathing.name=Blink pathing
+gui.inventory.item.baritone_blink_pathing.tooltip=§b§lBlink pathing§r\n§7Teleports along the planned route in fixed steps; no flight capability needed.\n§7Per-blink distance plus horizontal and vertical step caps are configurable.\n\n§bLeft click:§r §aToggle blink pathing§r\n§bRight click:§r §eOpen blink pathing settings§r

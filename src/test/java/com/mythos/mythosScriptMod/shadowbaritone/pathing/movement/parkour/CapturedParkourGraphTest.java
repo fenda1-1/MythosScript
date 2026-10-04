@@ -47,7 +47,13 @@ public class CapturedParkourGraphTest {
         return settings;
     }
     static CalculationContext context(CapturedParkourWorld world, GoalBlock goal, Vec3d start, boolean vines) throws Exception {
-        settings().allowVines.value=vines;
+        return context(world,goal,start,vines,true);
+    }
+    static CalculationContext context(CapturedParkourWorld world, GoalBlock goal, Vec3d start, boolean vines,
+            boolean parkour) throws Exception {
+        Settings s=settings();
+        s.allowVines.value=vines;
+        s.parkourMode.value=parkour;
         IPlayerContext player=unavailable(IPlayerContext.class);
         IBaritone owner=(IBaritone)Proxy.newProxyInstance(IBaritone.class.getClassLoader(),
                 new Class<?>[]{IBaritone.class},(p,m,a)->{

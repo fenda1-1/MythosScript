@@ -26,7 +26,6 @@ import com.mythos.mythosScriptMod.shadowbaritone.api.utils.input.Input;
 import com.mythos.mythosScriptMod.shadowbaritone.behavior.PathingBehavior;
 import com.mythos.mythosScriptMod.shadowbaritone.utils.BlockStateInterface;
 import net.minecraft.block.BlockSnow;
-import net.minecraft.block.BlockFence;
 import net.minecraft.block.BlockLiquid;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.entity.item.EntityFallingBlock;
@@ -285,7 +284,7 @@ public abstract class Movement implements IMovement, MovementHelper {
      * to-break list agree with the cost calculation.
      */
     protected final boolean isPassableFenceClearance(BetterBlockPos blockPos, IBlockState blockState) {
-        if (!(blockState.getBlock() instanceof BlockFence)) {
+        if (!MovementHelper.isFenceLike(blockState.getBlock())) {
             return false;
         }
         if (dest.y > src.y && (blockPos.equals(src.up(2)) || blockPos.equals(dest.up()))) {

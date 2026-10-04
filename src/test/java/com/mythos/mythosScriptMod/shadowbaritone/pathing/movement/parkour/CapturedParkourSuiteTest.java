@@ -76,8 +76,10 @@ public class CapturedParkourSuiteTest {
                     assertEquals("Graph cases specify one final goal; intermediate points must be chosen by A*",1,goals.size());
                     JsonArray end=goals.get(0).getAsJsonArray();
                     GoalBlock destination=new GoalBlock(end.get(0).getAsDouble(),end.get(1).getAsDouble(),end.get(2).getAsDouble());
+                    boolean parkour=!test.has("parkourMode") || test.get("parkourMode").getAsBoolean();
+                    result.addProperty("parkourMode",parkour);
                     CalculationContext c=CapturedParkourGraphTest.context(world,destination,new Vec3d(frame.x,frame.y,frame.z),
-                            index.has("allowVines") && index.get("allowVines").getAsBoolean());
+                            index.has("allowVines") && index.get("allowVines").getAsBoolean(),parkour);
                     graphContext=c;
                     BetterBlockPos start=frame.ground ? ParkourSurface.supportedFeet(c,new Vec3d(frame.x,frame.y,frame.z))
                             : new BetterBlockPos(frame.x,frame.y+.1251,frame.z);
@@ -87,6 +89,12 @@ public class CapturedParkourSuiteTest {
                             .calculate(graphBudget,graphBudget);
                     result.addProperty("graphResult",planned.getType().name());
                     result.addProperty("graphMillis",(System.nanoTime()-graphStart)/1e6);
+                    if(test.has("expectGraphResult")) {
+                        assertEquals("A* result",PathCalculationResult.Type.valueOf(
+                                test.get("expectGraphResult").getAsString()),planned.getType());
+                        result.add("graph",new JsonArray());
+                        break;
+                    }
                     assertEquals("A* did not reach the requested final goal",PathCalculationResult.Type.SUCCESS_TO_GOAL,planned.getType());
                     JsonArray graph=new JsonArray();result.add("graph",graph);goals=new JsonArray();
                     moves=planned.getPath().get().movements();

@@ -11,6 +11,10 @@ import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.gui.inventory.GuiChest;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityCreature;
+import net.minecraft.entity.EnumCreatureType;
+import net.minecraft.entity.monster.IMob;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.ClickType;
 import net.minecraft.inventory.Slot;
 import net.minecraft.nbt.NBTTagCompound;
@@ -2261,6 +2265,51 @@ public class ModUtils {
         }
 
         channel.pipeline().fireChannelRead(packet);
+    }
+
+    /**
+     * 是否为 NPC（假玩家）：EntityPlayer、非本地玩家，且 UUID 为随机 v4。
+     * 该离线服务器上真实玩家使用名字派生的 v3 UUID，NPC 插件生成随机 v4。
+     * ponytail: 启发式——在线模式下真人也是 v4 会误判为 NPC；若需精确可改用玩家列表(GameProfile)比对。
+     */
+    public static boolean isNpcPlayer(Entity entity) {
+        if (!(entity instanceof EntityPlayer)) {
+            return false;
+        }
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc != null && entity == mc.player) {
+            return false;
+        }
+        java.util.UUID uuid = entity.getUniqueID();
+        return uuid != null && uuid.version() == 4;
+    }
+
+    /** 是否为真实玩家：EntityPlayer 且非 NPC（含本地玩家）。 */
+    public static boolean isRealPlayer(Entity entity) {
+        return entity instanceof EntityPlayer && !isNpcPlayer(entity);
+    }
+
+    /**
+     * 实体分类的中文标签，用于 GUI 附近实体列表右侧标记。
+     * 返回 "" 表示无法分类（非实体或为空）。
+     */
+    public static String entityTypeLabel(Entity entity) {
+        if (entity == null) {
+            return "";
+        }
+        if (entity instanceof EntityPlayer) {
+            return isNpcPlayer(entity) ? "NPC" : "玩家";
+        }
+        if (entity instanceof IMob || entity.isCreatureType(EnumCreatureType.MONSTER, false)) {
+            return "敌对";
+        }
+        if (entity instanceof EntityCreature
+                || entity.isCreatureType(EnumCreatureType.CREATURE, false)
+                || entity.isCreatureType(EnumCreatureType.AMBIENT, false)
+                || entity.isCreatureType(EnumCreatureType.WATER_CREATURE, false)) {
+            return "被动";
+        }
+        return "其他";
     }
 }
 

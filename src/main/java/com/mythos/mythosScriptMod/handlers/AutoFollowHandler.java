@@ -1616,7 +1616,9 @@ public class AutoFollowHandler {
                 return entity instanceof EntityLivingBase;
             case "玩家":
             case AutoFollowRule.ENTITY_TYPE_PLAYER:
-                return entity instanceof EntityPlayer;
+                return ModUtils.isRealPlayer(entity);
+            case AutoFollowRule.ENTITY_TYPE_NPC:
+                return ModUtils.isNpcPlayer(entity);
             case "怪物":
             case "mob":
             case "hostile":
@@ -1646,7 +1648,6 @@ public class AutoFollowHandler {
             case AutoFollowRule.ENTITY_TYPE_AMBIENT:
                 return entity instanceof EntityAmbientCreature;
             case "村民":
-            case "npc":
             case AutoFollowRule.ENTITY_TYPE_VILLAGER:
                 return entity instanceof EntityVillager;
             case "傀儡":

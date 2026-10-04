@@ -64,7 +64,7 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
         addCommonSection("config_interaction", "gui.inventory.section.config_interaction", available, Arrays.asList("toggle_mouse_detach",
                 "keybind_manager", "profile_manager", "chat_optimization"));
         addCommonSection("movement_scene", "gui.inventory.section.movement_scene", available,
-                Arrays.asList("toggle_fly", "baritone_flight_pathing", "block_replacement_config", "warehouse_manager", "baritone_settings",
+                Arrays.asList("toggle_fly", "baritone_flight_pathing", "baritone_blink_pathing", "block_replacement_config", "warehouse_manager", "baritone_settings",
                         "baritone_command_table", "baritone_parkour", "baritone_visual_pick"));
 
         for (GroupedItemSection section : commonItemSections) {
@@ -882,6 +882,9 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
         if ("baritone_flight_pathing".equals(command)) {
             return I18n.format(isBaritoneFlightPathingEnabled() ? "gui.modern.inv.fmt.on" : "gui.modern.inv.fmt.off", baseName);
         }
+        if ("baritone_blink_pathing".equals(command)) {
+            return I18n.format(isBaritoneBlinkPathingEnabled() ? "gui.modern.inv.fmt.on" : "gui.modern.inv.fmt.off", baseName);
+        }
         return baseName;
     }
 
@@ -901,6 +904,8 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
             active = FlyHandler.enabled;
         } else if ("baritone_flight_pathing".equals(command)) {
             active = isBaritoneFlightPathingEnabled();
+        } else if ("baritone_blink_pathing".equals(command)) {
+            active = isBaritoneBlinkPathingEnabled();
         } else if ("toggle_auto_pickup".equals(command)) {
             active = AutoPickupHandler.globalEnabled;
         } else if ("conditional_execution".equals(command)) {
@@ -2510,6 +2515,26 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
         }
         boolean enabled = !isBaritoneFlightPathingEnabled();
         BaritoneAPI.getSettings().allowFlightPathing.value = enabled;
+        if (enabled) {
+            BaritoneAPI.getSettings().allowBlinkPathing.value = false;
+        }
+        SettingsUtil.save(BaritoneAPI.getSettings());
+    }
+
+    private static boolean isBaritoneBlinkPathingEnabled() {
+        return BaritoneAPI.getSettings() != null
+                && BaritoneAPI.getSettings().allowBlinkPathing.value;
+    }
+
+    private static void toggleBaritoneBlinkPathing() {
+        if (BaritoneAPI.getSettings() == null) {
+            return;
+        }
+        boolean enabled = !isBaritoneBlinkPathingEnabled();
+        BaritoneAPI.getSettings().allowBlinkPathing.value = enabled;
+        if (enabled) {
+            BaritoneAPI.getSettings().allowFlightPathing.value = false;
+        }
         SettingsUtil.save(BaritoneAPI.getSettings());
     }
 
@@ -2768,6 +2793,14 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
         } else if ("baritone_flight_pathing".equals(command)) {
             if (mouseButton == 0) {
                 toggleBaritoneFlightPathing();
+                refreshGuiLists();
+            } else if (mouseButton == 1) {
+                GuiModernMainScreen.openSettingsTab(mc, command);
+            }
+            return true;
+        } else if ("baritone_blink_pathing".equals(command)) {
+            if (mouseButton == 0) {
+                toggleBaritoneBlinkPathing();
                 refreshGuiLists();
             } else if (mouseButton == 1) {
                 GuiModernMainScreen.openSettingsTab(mc, command);

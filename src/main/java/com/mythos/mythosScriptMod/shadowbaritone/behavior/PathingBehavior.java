@@ -449,6 +449,9 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                     break;
                 case POST:
                     ctx.minecraft().gameSettings.autoJump = lastAutoJump;
+                    if (Baritone.settings().allowBlinkPathing.value) {
+                        current.afterPhysics();
+                    }
                     break;
                 default:
                     break;

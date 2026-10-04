@@ -257,7 +257,7 @@ public class MovementTraverse extends Movement {
         // The target client allows walking beneath a fence in the head-clearance
         // cell. It is neither an obstacle to mine nor a reason to reject a flat
         // traverse before the following upward movement.
-        if (state.getBlock() instanceof BlockFence) {
+        if (MovementHelper.isFenceLike(state.getBlock())) {
             return 0.0D;
         }
         return MovementHelper.getMiningDurationTicks(context, x, y, z, state, true);

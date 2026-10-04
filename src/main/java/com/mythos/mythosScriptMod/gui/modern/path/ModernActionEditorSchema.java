@@ -200,7 +200,7 @@ public final class ModernActionEditorSchema {
         } else if ("debug_print_var".equals(t)) {
             text(result, "gui.modern.path.schema.u133", "varName", "gui.modern.path.schema.u088", "", "");
         } else if ("debug_print_nearby_entities".equals(t)) {
-            choice(result, "gui.modern.path.schema.u133", "entityType", "gui.modern.path.schema.u134", "", "player", "hostile", "passive", "all");
+            choice(result, "gui.modern.path.schema.u133", "entityType", "gui.modern.path.schema.u134", "", "player", "npc", "hostile", "passive", "all");
             text(result, "gui.modern.path.schema.u133", "entityName", "gui.modern.path.schema.u135", "", "");
             text(result, "gui.modern.path.schema.u133", "radius", "gui.modern.path.schema.u056", "", "8");
         } else if ("autoeat".equals(t)) {
@@ -237,7 +237,7 @@ public final class ModernActionEditorSchema {
             text(result, "gui.modern.path.schema.u156", "noTargetSkipCount", "gui.modern.path.schema.u158", "gui.modern.path.schema.u159", "0");
             text(result, "gui.modern.path.schema.u156", "huntUpRange", "gui.modern.path.schema.u160", "", "3.0");
             text(result, "gui.modern.path.schema.u156", "huntDownRange", "gui.modern.path.schema.u161", "", "3.0");
-            choice(result, "gui.modern.path.schema.u156", "entityType", "gui.modern.path.schema.u134", "gui.modern.path.schema.u162", "", "player", "hostile", "passive", "all");
+            choice(result, "gui.modern.path.schema.u156", "entityType", "gui.modern.path.schema.u134", "gui.modern.path.schema.u162", "", "player", "npc", "hostile", "passive", "all");
             toggle(result, "gui.modern.path.schema.u156", "enableAreaSweep", "gui.modern.path.schema.u163", "", "true");
             text(result, "gui.modern.path.schema.u156", "areaSweepCellSize", "gui.modern.path.schema.u164", "gui.modern.path.schema.u165", "8");
             toggle(result, "gui.modern.path.schema.u156", "enableNameWhitelist", "gui.modern.path.schema.u166", "", "false");
@@ -262,7 +262,7 @@ public final class ModernActionEditorSchema {
                     "gui.modern.path.schema.u183");
             text(result, "gui.modern.path.schema.u156", "scanRadius", "gui.modern.path.schema.u184", "gui.modern.path.schema.u185", "10");
         } else if ("follow_entity".equals(t)) {
-            choice(result, "gui.modern.path.schema.u186", "entityType", "gui.modern.path.schema.u134", "", "player", "hostile", "passive", "all");
+            choice(result, "gui.modern.path.schema.u186", "entityType", "gui.modern.path.schema.u134", "", "player", "npc", "hostile", "passive", "all");
             text(result, "gui.modern.path.schema.u186", "targetName", "gui.modern.path.schema.u187", "", "");
             text(result, "gui.modern.path.schema.u186", "searchRadius", "gui.modern.path.schema.u157", "", "16.0");
             text(result, "gui.modern.path.schema.u186", "followDistance", "gui.modern.path.schema.u188", "", "3.0");
@@ -377,7 +377,7 @@ public final class ModernActionEditorSchema {
         } else if (type.contains("player_list")) structuredList(result, section, "entries", "gui.modern.path.schema.u249",
                 "gui.modern.path.schema.u250");
         else if (type.contains("entity_nearby")) {
-            choice(result, section, "entityType", "gui.modern.path.schema.u134", "", "all", "player", "hostile", "passive");
+            choice(result, section, "entityType", "gui.modern.path.schema.u134", "", "all", "player", "npc", "hostile", "passive");
             text(result, section, "entityName", "gui.modern.path.schema.u135", "", "");
             text(result, section, "radius", "gui.modern.path.schema.u056", "", "6");
             text(result, section, "minCount", "gui.modern.path.schema.u251", "", "1");
@@ -420,7 +420,7 @@ public final class ModernActionEditorSchema {
     private static void captureFields(List<Field> result, String type) {
         text(result, "gui.modern.path.schema.u278", "varName", "gui.modern.path.schema.u279", "gui.modern.path.schema.u280", captureVariableDefault(type));
         if (type.contains("nearby_entity") || type.contains("entity_list")) {
-            choice(result, "gui.modern.path.schema.u278", "entityType", "gui.modern.path.schema.u134", "", "all", "player", "hostile", "passive");
+            choice(result, "gui.modern.path.schema.u278", "entityType", "gui.modern.path.schema.u134", "", "all", "player", "npc", "hostile", "passive");
             text(result, "gui.modern.path.schema.u278", "entityName", "gui.modern.path.schema.u135", "", "");
             text(result, "gui.modern.path.schema.u278", "radius", "gui.modern.path.schema.u056", "", type.contains("entity_list") ? "8" : "6");
             if (type.contains("entity_list")) text(result, "gui.modern.path.schema.u278", "maxCount", "gui.modern.path.schema.u281", "", "16");

@@ -6322,7 +6322,8 @@ public class GuiModernMainScreen extends GuiScreen
         try {
             captureActiveSettingsState();
             if ("action_editor".equals(command) || "expression_editor".equals(command)
-                    || "action_variables".equals(command)) {
+                    || "action_variables".equals(command) || "action_templates".equals(command)
+                    || "template_library".equals(command)) {
                 openPathEditorTab(command);
                 return;
             }
@@ -6528,7 +6529,9 @@ public class GuiModernMainScreen extends GuiScreen
 
     private boolean isPathEditorAlias(TabKey key) {
         String command = commandForTabKey(key);
-        return "action_editor".equals(command) || "expression_editor".equals(command);
+        return "action_editor".equals(command) || "expression_editor".equals(command)
+                || "action_variables".equals(command) || "action_templates".equals(command)
+                || "template_library".equals(command);
     }
 
     private boolean isPacketChildCommand(String command) {
@@ -7941,6 +7944,7 @@ public class GuiModernMainScreen extends GuiScreen
         return "autoeat".equals(command) || "toggle_auto_fishing".equals(command)
                 || "toggle_mouse_detach".equals(command) || "toggle_fly".equals(command)
                 || "baritone_flight_pathing".equals(command)
+                || "baritone_blink_pathing".equals(command)
                 || "followconfig".equals(command) || "toggle_kill_aura".equals(command)
                 || "conditional_execution".equals(command) || "auto_escape".equals(command)
                 || "toggle_auto_pickup".equals(command) || "toggle_auto_use_item".equals(command)
@@ -7971,7 +7975,8 @@ public class GuiModernMainScreen extends GuiScreen
         if ("autoeat".equals(command)) return ModernUiRenderer.Icon.FOOD;
         if ("toggle_auto_fishing".equals(command)) return ModernUiRenderer.Icon.FISHING;
         if ("toggle_mouse_detach".equals(command)) return ModernUiRenderer.Icon.MOUSE;
-        if ("toggle_fly".equals(command) || "baritone_flight_pathing".equals(command)) {
+        if ("toggle_fly".equals(command) || "baritone_flight_pathing".equals(command)
+                || "baritone_blink_pathing".equals(command)) {
             return ModernUiRenderer.Icon.FLIGHT;
         }
         if ("followconfig".equals(command)) return ModernUiRenderer.Icon.FOLLOW;

@@ -160,7 +160,7 @@ class LocalClient:
             result = {
                 "protocolVersion": version,
                 "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "MythosScript", "version": "1.0.72"},
+                "serverInfo": {"name": "MythosScript", "version": "1.0.73"},
                 "instructions": OFFLINE_INSTRUCTIONS,
             }
         elif method == "ping":

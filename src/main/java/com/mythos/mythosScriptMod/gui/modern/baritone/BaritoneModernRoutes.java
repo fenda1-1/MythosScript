@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import com.mythos.mythosScriptMod.gui.modern.ModernBaritoneParkourSettingsTab;
+import com.mythos.mythosScriptMod.gui.modern.ModernBlinkPathingSettingsTab;
 import com.mythos.mythosScriptMod.gui.modern.ModernFlightPathingSettingsTab;
 import com.mythos.mythosScriptMod.gui.modern.ModernSettingsTab;
 import com.mythos.mythosScriptMod.gui.modern.core.ModernScreenContext;
@@ -28,6 +29,8 @@ public final class BaritoneModernRoutes {
                         (minecraft, context) -> ModernBaritoneParkourSettingsTab.create("baritone_parkour")),
                 new ModernTabDescriptor("baritone_flight_pathing", "gui.modern.baritone_route.u007",
                         (minecraft, context) -> ModernFlightPathingSettingsTab.create()),
+                new ModernTabDescriptor("baritone_blink_pathing", "gui.modern.baritone_route.u009",
+                        (minecraft, context) -> ModernBlinkPathingSettingsTab.create()),
                 new ModernTabDescriptor("baritone_parkour_preset", "gui.modern.baritone_route.u008",
                         (minecraft, context) -> ModernBaritoneParkourSettingsTab.create("baritone_parkour_preset"))));
     }

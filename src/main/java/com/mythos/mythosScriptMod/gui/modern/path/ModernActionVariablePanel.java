@@ -712,13 +712,13 @@ final class ModernActionVariablePanel {
         } else {
             note = "gui.modern.path.var.u022";
         }
-        List<String> noteLines = wrapText(font, note, Math.max(120, wrapWidth), 3);
+        List<String> noteLines = wrapText(font, tr(note), Math.max(120, wrapWidth), 3);
         List<SourcePopupRow> rows = new ArrayList<SourcePopupRow>();
         int offsetY = noteLines.isEmpty() ? 0 : noteLines.size() * 11 + 10;
         for (SourcePopupVariable variable : sourcePopupState.variables) {
             String displayValue = variable.hasValue
-                    ? (safe(variable.value).trim().isEmpty() ? "gui.modern.path.var.u023" : variable.value)
-                    : "gui.modern.path.var.u024";
+                    ? (safe(variable.value).trim().isEmpty() ? tr("gui.modern.path.var.u023") : variable.value)
+                    : tr("gui.modern.path.var.u024");
             List<String> valueLines = wrapText(font, tr("gui.modern.path.var.fmt.value", displayValue), Math.max(100, wrapWidth - 18), 8);
             int height = Math.max(42, 22 + valueLines.size() * 11 + 8);
             rows.add(new SourcePopupRow(variable, valueLines, offsetY, height));
@@ -1114,7 +1114,7 @@ final class ModernActionVariablePanel {
 
     private String displayValuePreview(ActionVariableRegistry.VariableEntry entry) {
         String value = lookupDisplayValue(entry);
-        return value.isEmpty() ? "gui.modern.path.var.u034" : value;
+        return value.isEmpty() ? tr("gui.modern.path.var.u034") : value;
     }
 
     private String lookupDisplayValue(ActionVariableRegistry.VariableEntry entry) {

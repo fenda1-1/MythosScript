@@ -35,6 +35,7 @@ public class AutoFollowRule {
     public static final String ENTITY_TYPE_VILLAGER = "villager";
     public static final String ENTITY_TYPE_TAMEABLE = "tameable";
     public static final String ENTITY_TYPE_PLAYER = "player";
+    public static final String ENTITY_TYPE_NPC = "npc";
     public static final String ENTITY_TYPE_LIVING = "living";
     public static final String ENTITY_TYPE_ANY = "any";
     private static final List<String> KNOWN_ENTITY_TYPES = Arrays.asList(
@@ -48,6 +49,7 @@ public class AutoFollowRule {
             ENTITY_TYPE_VILLAGER,
             ENTITY_TYPE_TAMEABLE,
             ENTITY_TYPE_PLAYER,
+            ENTITY_TYPE_NPC,
             ENTITY_TYPE_LIVING,
             ENTITY_TYPE_ANY);
 

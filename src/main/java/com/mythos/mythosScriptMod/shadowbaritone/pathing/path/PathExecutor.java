@@ -17,6 +17,7 @@
 
 package com.mythos.mythosScriptMod.shadowbaritone.pathing.path;
 
+import com.mythos.mythosScriptMod.config.BlinkPathingConfig;
 import com.mythos.mythosScriptMod.config.DebugModule;
 import com.mythos.mythosScriptMod.config.ModConfig;
 import com.mythos.mythosScriptMod.shadowbaritone.Baritone;
@@ -37,9 +38,11 @@ import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.PathingSpeedCo
 import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.parkour.ParkourDebugLog;
 import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.movements.*;
 import com.mythos.mythosScriptMod.shadowbaritone.utils.BlockStateInterface;
-import net.minecraft.block.BlockFence;
 import net.minecraft.block.BlockLiquid;
+import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.network.play.client.CPacketPlayer;
 import net.minecraft.util.Tuple;
+import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.math.Vec3i;
@@ -82,6 +85,9 @@ public class PathExecutor implements IPathExecutor, Helper {
     private Integer costEstimateIndex;
     private boolean failed;
     private boolean recalcBP = true;
+    private double blinkLift;
+    private int blinkStuckTicks;
+    private double blinkHoldY = Double.NaN;
     private HashSet<BlockPos> toBreak = new HashSet<>();
     private HashSet<BlockPos> toPlace = new HashSet<>();
     private HashSet<BlockPos> toWalkInto = new HashSet<>();
@@ -90,6 +96,7 @@ public class PathExecutor implements IPathExecutor, Helper {
     private final IPlayerContext ctx;
 
     private boolean sprintNextTick;
+    private int blinkTicksUntilStep;
     private boolean restartRequested;
     private boolean replanAtSafeBoundary;
     private final Map<String, Long> diagnosticTimes = new HashMap<>();
@@ -121,6 +128,9 @@ public class PathExecutor implements IPathExecutor, Helper {
      *         not sneaking out over lava), false otherwise
      */
     public boolean onTick() {
+        if (Baritone.settings().allowBlinkPathing.value) {
+            return blinkAlongPath();
+        }
         for (int reevaluations = 0; reevaluations < MAX_PATH_REEVALUATIONS_PER_TICK; reevaluations++) {
             this.restartRequested = false;
 
@@ -1020,7 +1030,7 @@ public class PathExecutor implements IPathExecutor, Helper {
     }
 
     private static boolean isAscendClearancePassable(IPlayerContext ctx, BlockPos pos, int relativeY) {
-        if (relativeY > 0 && ctx.world().getBlockState(pos).getBlock() instanceof BlockFence) {
+        if (relativeY > 0 && MovementHelper.isFenceLike(ctx.world().getBlockState(pos).getBlock())) {
             return true;
         }
         return MovementHelper.fullyPassable(ctx, pos);
@@ -1049,7 +1059,7 @@ public class PathExecutor implements IPathExecutor, Helper {
     }
 
     private static boolean isOverheadFence(IPlayerContext ctx, BlockPos pos) {
-        return ctx.world().getBlockState(pos).getBlock() instanceof BlockFence;
+        return MovementHelper.isFenceLike(ctx.world().getBlockState(pos).getBlock());
     }
 
     private static boolean canSprintFromDescendInto(IPlayerContext ctx, IMovement current, IMovement next) {
@@ -1063,6 +1073,589 @@ public class PathExecutor implements IPathExecutor, Helper {
             return true;
         }
         return next instanceof MovementDiagonal && Baritone.settings().allowOvershootDiagonalDescend.value;
+    }
+
+    /**
+     * Blink pathing: advance along the ordinary ground path's node polyline via
+     * teleports instead of driving movement inputs. Path selection is unchanged;
+     * only execution differs.
+     */
+    private boolean blinkAlongPath() {
+        List<BetterBlockPos> positions = path.positions();
+        if (pathPosition >= path.length()) {
+            return true;
+        }
+        if (positions.size() < 2) {
+            pathPosition = path.length();
+            return true;
+        }
+        EntityPlayerSP player = ctx.player();
+        if (player == null) {
+            cancel();
+            return false;
+        }
+        clearKeys();
+        if (--blinkTicksUntilStep > 0) {
+            return true;
+        }
+        blinkTicksUntilStep = Math.max(1, BlinkPathingConfig.tickInterval);
+
+        // Fast-forward past nodes already behind the player, so a fresh path
+        // (replan/splice) never snaps the player back to its first node.
+        while (pathPosition + 1 < positions.size()
+                && distSqToNode(player, positions.get(pathPosition + 1))
+                        <= distSqToNode(player, positions.get(pathPosition))) {
+            pathPosition++;
+        }
+        if (pathPosition + 1 >= positions.size()) {
+            pathPosition = path.length();
+            return true;
+        }
+
+        // Escape wedged-inside-a-block first (server pullbacks and corner
+        // clips can embed the feet box in a wall face): probe straight up in
+        // small steps up to the per-packet limit — a 5-block wall needs ~6 —
+        // then probe every horizontal direction for the nearest free spot.
+        if (player.world != null && player.world.collidesWithAnyBlock(player.getEntityBoundingBox())) {
+            double liftCap = Math.min(BlinkPathingConfig.maxVerticalStep, 9.0D);
+            for (double lift = 0.25D; lift <= liftCap + 1.0E-4D; lift += 0.25D) {
+                if (!player.world.collidesWithAnyBlock(player.getEntityBoundingBox().offset(0, lift, 0))) {
+                    blinkTeleport(player, player.posX, player.posY + lift, player.posZ);
+                    blinkHoldY = player.posY;
+                    return true;
+                }
+            }
+            // Fully sealed — find the closest collision-free offset, any
+            // direction, instead of shoving deeper into the wall.
+            double[][] dirs = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 },
+                    { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } };
+            AxisAlignedBB box = player.getEntityBoundingBox();
+            for (double reach = 0.5D; reach <= 4.0D; reach += 0.5D) {
+                for (double[] d : dirs) {
+                    double nl = Math.sqrt(d[0] * d[0] + d[1] * d[1]);
+                    double mx = d[0] / nl * reach;
+                    double mz = d[1] / nl * reach;
+                    for (double dy = 1.0D; dy >= -1.0D; dy -= 0.5D) {
+                        if (!player.world.collidesWithAnyBlock(box.offset(mx, dy, mz))) {
+                            blinkTeleport(player, player.posX + mx, player.posY + dy, player.posZ + mz);
+                            blinkHoldY = player.posY;
+                            return true;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+        // Rectilinear route: every path segment is flattened into
+        // axis-aligned legs — climb first when the node rises, drop last when
+        // it falls, and the horizontal corner picks the side that sweeps
+        // farther — so no hop ever aims along a diagonal that can clip a
+        // fence corner or wall edge.
+        List<Vec3d> route = blinkRoute(positions, pathPosition,
+                new Vec3d(player.posX, player.posY, player.posZ), player);
+        if (ParkourDebugLog.enabled()) {
+            StringBuilder sb = new StringBuilder("blink pos=")
+                    .append(String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", player.posX, player.posY, player.posZ))
+                    .append(" pathPos=").append(pathPosition)
+                    .append(" node=").append(positions.get(Math.min(pathPosition, positions.size() - 1)))
+                    .append(" route=");
+            for (int i = 0; i < Math.min(route.size(), 8); i++) {
+                Vec3d v = route.get(i);
+                sb.append(i == 0 ? "" : " > ").append(String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", v.x, v.y, v.z));
+            }
+            ParkourDebugLog.INSTANCE.event(sb.toString());
+        }
+
+        // Budget this hop's travel along the route and find where it ends.
+        double travel = Math.max(0.1D, BlinkPathingConfig.stepDistance);
+        double remaining = travel;
+        int prefixEnd = 0;
+        Vec3d cursor = route.get(0);
+        while (remaining > 1.0E-4D && prefixEnd + 1 < route.size()) {
+            Vec3d next = route.get(prefixEnd + 1);
+            double leg = Math.abs(next.x - cursor.x) + Math.abs(next.y - cursor.y)
+                    + Math.abs(next.z - cursor.z);
+            if (leg <= remaining) {
+                remaining -= leg;
+                cursor = next;
+                prefixEnd++;
+            } else {
+                double f = remaining / leg;
+                cursor = new Vec3d(cursor.x + (next.x - cursor.x) * f,
+                        cursor.y + (next.y - cursor.y) * f,
+                        cursor.z + (next.z - cursor.z) * f);
+                remaining = 0;
+            }
+        }
+        List<Vec3d> hopRoute = new ArrayList<>(route.subList(0, prefixEnd + 1));
+        hopRoute.add(cursor);
+
+        // Collision margin is clearance above the GROUND under the route, not
+        // an extra lift stacked on the route's own height. Standing on a 2-block
+        // path already uses most of that gap, so the hover collapses toward 0.
+        double margin = BlinkPathingConfig.collisionMargin;
+        if (margin > 0.0D) {
+            double groundY = groundUnder(player, cursor.x, cursor.z, cursor.y);
+            double wanted = groundY < -1000 ? margin : Math.max(0.0D, groundY + margin - cursor.y);
+            double fitted = safeRouteLift(player, hopRoute, wanted);
+            blinkLift = fitted < blinkLift ? fitted : Math.min(fitted, blinkLift + 0.5D);
+        } else {
+            blinkLift = 0.0D;
+        }
+        if (blinkLift != 0.0D) {
+            for (int i = 1; i < route.size(); i++) {
+                route.set(i, route.get(i).addVector(0.0D, blinkLift, 0.0D));
+            }
+        }
+
+        // Walk the route leg by leg. Every leg is single-axis, and each leg
+        // only takes min(travel, leg length, sweep room): a short leg turns
+        // the corner and keeps going, a blocked leg stops at the last
+        // collision-free point — so the hop auto-adapts from 0.1 up to
+        // stepDistance without ever overrunning into a wall.
+        double vCap = Math.min(BlinkPathingConfig.maxVerticalStep, 9.0D);
+        double hCap = Math.min(BlinkPathingConfig.maxHorizontalStep, 9.0D);
+        boolean moved = false;
+        int ri = 0;
+        while (travel > 1.0E-4D && ri + 1 < route.size()) {
+            Vec3d from = route.get(ri);
+            Vec3d target = route.get(ri + 1);
+            // Lock each leg to its own axis. The target point assumes earlier
+            // legs completed; when a horizontal leg stalls short of the
+            // corner, letting a later vertical leg use target-pos deltas adds
+            // a horizontal component and turns the drop diagonal — the sweep
+            // can pass where the landing box cannot, producing a teleport
+            // into a wall face and the ±1 escape-lift oscillation.
+            double lx = target.x != from.x ? target.x - player.posX : 0.0D;
+            double ly = target.y != from.y ? target.y - player.posY : 0.0D;
+            double lz = target.z != from.z ? target.z - player.posZ : 0.0D;
+            // Already past this leg's axis coordinate (overshot or skipped
+            // corner): moving would go backwards — skip the leg instead.
+            if ((lx != 0.0D && lx * (target.x - from.x) <= 0.0D)
+                    || (ly != 0.0D && ly * (target.y - from.y) <= 0.0D)
+                    || (lz != 0.0D && lz * (target.z - from.z) <= 0.0D)) {
+                ri++;
+                continue;
+            }
+            double leg = Math.abs(lx) + Math.abs(ly) + Math.abs(lz);
+            if (leg < 1.0E-4D) {
+                ri++;
+                continue;
+            }
+            double cap = Math.abs(ly) > 1.0E-4D ? vCap : hCap;
+            double hop = Math.min(Math.min(travel, leg), cap);
+            Vec3d legFrom = new Vec3d(player.posX, player.posY, player.posZ);
+            double movedDist = blinkTeleportAxis(player, lx * (hop / leg), ly * (hop / leg),
+                    lz * (hop / leg));
+            Vec3d legTo = new Vec3d(player.posX, player.posY, player.posZ);
+            // Credit nodes swept through mid-hop. A dipping route (down under
+            // an overhang and back up the far side) can pass several node
+            // cells inside one hop and still end near where it started; the
+            // end-of-hop credit alone then leaves pathPosition stuck and the
+            // player loops the same detour every tick.
+            while (pathPosition + 1 < positions.size()
+                    && distSqNodeToSeg(player, positions.get(pathPosition + 1),
+                            legFrom, legTo) < 1.3D) {
+                pathPosition++;
+            }
+            if (movedDist > 1.0E-4D) {
+                moved = true;
+                travel -= movedDist;
+            }
+            ri++; // blocked leg is skipped — later legs (e.g. sliding off a
+                    // fence top when the drop leg stalls) still get tried
+        }
+        if (!moved) {
+            moved = blinkEscapeNudge(player, route);
+        }
+        if (ParkourDebugLog.enabled()) {
+            ParkourDebugLog.INSTANCE.event(String.format(java.util.Locale.ROOT,
+                    "blink move=%b lift=%.2f holdY=%.2f -> %.2f,%.2f,%.2f",
+                    moved, blinkLift, blinkHoldY, player.posX, player.posY, player.posZ));
+        }
+
+        // Stall escape: when every leg collided (wedged against terrain the
+        // route couldn't clear), advance along the route anyway so the path
+        // keeps moving instead of freezing against the block.
+        if (!moved) {
+            blinkStuckTicks++;
+            if (blinkStuckTicks >= 5 && pathPosition + 1 < positions.size()) {
+                pathPosition++;
+                blinkStuckTicks = 0;
+            }
+        } else {
+            blinkStuckTicks = 0;
+        }
+        blinkHoldY = player.posY;
+
+        // Credit path nodes the teleport actually reached.
+        while (pathPosition + 1 < positions.size()
+                && distSqToNode(player, positions.get(pathPosition + 1)) < 0.75D) {
+            pathPosition++;
+        }
+        if (pathPosition + 1 >= positions.size()) {
+            pathPosition = path.length();
+        }
+        onChangeInPathPosition();
+        return true;
+    }
+
+    /**
+     * Called after the entity tick, which applies gravity after pathing and
+     * would otherwise drop the player every frame until the next hop lifts
+     * them back. Re-pin the last teleported height.
+     */
+    public void afterPhysics() {
+        if (!Baritone.settings().allowBlinkPathing.value || Double.isNaN(blinkHoldY)) {
+            return;
+        }
+        EntityPlayerSP player = ctx.player();
+        if (player == null) {
+            return;
+        }
+        player.motionY = 0.0D;
+        player.fallDistance = 0.0F;
+        // Only undo gravity. A real descent updates blinkHoldY downward, so
+        // pinning upward here would yank the player back to the ledge.
+        if (player.posY < blinkHoldY - 1.0E-3D && player.posY > blinkHoldY - 1.0D
+                && player.world != null) {
+            AxisAlignedBB box = player.getEntityBoundingBox()
+                    .offset(0, blinkHoldY - player.posY, 0);
+            if (!player.world.collidesWithAnyBlock(box)) {
+                player.setPosition(player.posX, blinkHoldY, player.posZ);
+                if (player.connection != null) {
+                    player.connection.sendPacket(new CPacketPlayer.Position(
+                            player.posX, blinkHoldY, player.posZ, false));
+                }
+            }
+        }
+    }
+
+    /** Top of the solid block under (x,z), or a sentinel when none is nearby. */
+    private static double groundUnder(EntityPlayerSP player, double x, double z, double fromY) {
+        if (player.world == null) {
+            return Double.NEGATIVE_INFINITY;
+        }
+        int ix = net.minecraft.util.math.MathHelper.floor(x);
+        int iz = net.minecraft.util.math.MathHelper.floor(z);
+        int iy = net.minecraft.util.math.MathHelper.floor(fromY);
+        for (int dy = 0; dy <= 4; dy++) {
+            net.minecraft.util.math.BlockPos pos = new net.minecraft.util.math.BlockPos(ix, iy - dy, iz);
+            net.minecraft.block.state.IBlockState state = player.world.getBlockState(pos);
+            if (state.getMaterial().blocksMovement() && !state.getBlock().isPassable(player.world, pos)) {
+                return pos.getY() + state.getBoundingBox(player.world, pos).maxY;
+            }
+        }
+        return Double.NEGATIVE_INFINITY;
+    }
+
+    /**
+     * Largest lift in [0, margin] under which the player's box stays
+     * collision-free at every sampled point of the hop route. Binary-searches
+     * down from the full margin so a low ceiling anywhere along the hop lowers
+     * the whole hop in advance instead of at the last moment.
+     */
+    private static double safeRouteLift(EntityPlayerSP player, List<Vec3d> route, double margin) {
+        if (player.world == null || route.isEmpty()) {
+            return margin;
+        }
+        AxisAlignedBB base = player.getEntityBoundingBox();
+        if (routeLiftFits(player, base, route, margin)) {
+            return margin;
+        }
+        double lo = 0.0D;
+        double hi = margin;
+        for (int i = 0; i < 8; i++) {
+            double mid = (lo + hi) * 0.5D;
+            if (routeLiftFits(player, base, route, mid)) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        return lo;
+    }
+
+    private static boolean routeLiftFits(EntityPlayerSP player, AxisAlignedBB base, List<Vec3d> route,
+            double lift) {
+        Vec3d previous = null;
+        for (Vec3d point : route) {
+            if (previous != null && routePointCollides(player, base,
+                    (previous.x + point.x) * 0.5D, (previous.y + point.y) * 0.5D,
+                    (previous.z + point.z) * 0.5D, lift)) {
+                return false;
+            }
+            if (routePointCollides(player, base, point.x, point.y, point.z, lift)) {
+                return false;
+            }
+            previous = point;
+        }
+        return true;
+    }
+
+    private static boolean routePointCollides(EntityPlayerSP player, AxisAlignedBB base, double x,
+            double y, double z, double lift) {
+        return player.world.collidesWithAnyBlock(
+                base.offset(x - player.posX, y + lift - player.posY, z - player.posZ));
+    }
+
+    /**
+     * Flatten the upcoming path into an axis-aligned polyline starting at the
+     * player. Each node pair contributes a vertical leg plus one horizontal
+     * leg per changed horizontal axis — climbing first when the node rises,
+     * dropping last when it falls, and ordering the X/Z corner by which side
+     * sweeps farther from the corner point.
+     */
+    public static List<Vec3d> blinkRoute(List<BetterBlockPos> positions, int fromIndex, Vec3d start,
+            EntityPlayerSP player) {
+        List<Vec3d> route = new ArrayList<>();
+        route.add(start);
+        double px = start.x;
+        double py = start.y;
+        double pz = start.z;
+        // Include the current target node: the fast-forward in blinkAlongPath
+        // already advanced pathPosition past nodes the player passed, so
+        // positions[fromIndex] is the node the player is heading toward.
+        for (int i = Math.min(fromIndex, positions.size() - 1); i < positions.size(); i++) {
+            BetterBlockPos node = positions.get(i);
+            double nx = node.x + 0.5D;
+            // Feet lands on the node's real surface (carpet 5.0625, slab 5.5,
+            // fence top 6.5) — the same rule the planner used in blinkBoxFits.
+            // Landing at the integer cell bottom buries the box in the thin
+            // floor and collision physics kicks the player back = the
+            // alternating ±3.5 teleport oscillation seen on slabs/fences.
+            double ny = MovementFly.blinkSurfaceY(player.world, node.x, node.y, node.z);
+            double nz = node.z + 0.5D;
+            double dy = ny - py;
+            if (dy > 1.0E-4D) {
+                route.add(new Vec3d(px, ny, pz));
+                py = ny;
+            }
+            double dx = nx - px;
+            double dz = nz - pz;
+            if (Math.abs(dx) > 1.0E-4D || Math.abs(dz) > 1.0E-4D) {
+                // The L corner: pick the order whose FIRST leg sweeps farther
+                // from the corner point, so the second leg doesn't start
+                // inside a wall.
+                boolean xFirst = Math.abs(dx) >= Math.abs(dz);
+                if (Math.abs(dx) > 1.0E-4D && Math.abs(dz) > 1.0E-4D) {
+                    double xRoom = freeSweepFrom(player, px, py, pz, dx, 0, 0);
+                    double zRoom = freeSweepFrom(player, px, py, pz, 0, 0, dz);
+                    xFirst = xRoom >= zRoom;
+                }
+                double vCap = Math.min(BlinkPathingConfig.maxVerticalStep, 9.0D);
+                if (xFirst) {
+                    py = appendHorizontalLeg(route, player, px, py, pz, dx, 0, vCap);
+                    py = appendHorizontalLeg(route, player, nx, py, pz, 0, dz, vCap);
+                } else {
+                    py = appendHorizontalLeg(route, player, px, py, pz, 0, dz, vCap);
+                    py = appendHorizontalLeg(route, player, px, py, nz, dx, 0, vCap);
+                }
+                px = nx;
+                pz = nz;
+            }
+            if (Math.abs(ny - py) > 1.0E-4D) {
+                // Hover case: the player can stand on a fence/wall top at a
+                // fractional Y (feet 6.5, node cell 6). Dropping into that
+                // cell wedges the box against the post — keep the route at
+                // hover height; the next horizontal leg slides off and the
+                // post leg drops there instead.
+                double drop = ny - py;
+                if (drop > 0.0D || freeSweepFrom(player, px, py, pz, 0, drop, 0) >= -drop - 1.0E-4D) {
+                    route.add(new Vec3d(px, ny, pz));
+                    py = ny;
+                }
+            }
+        }
+        return route;
+    }
+
+    /**
+     * Every route leg stalled — take any small step that is collision-free so
+     * the player never sits frozen on a fence top or wedged edge. Prefers
+     * horizontal steps toward the next route point, then sideways, then
+     * down, then up.
+     */
+    private static boolean blinkEscapeNudge(EntityPlayerSP player, List<Vec3d> route) {
+        if (player.world == null) {
+            return false;
+        }
+        Vec3d target = route.size() > 1 ? route.get(1) : null;
+        double tx = target == null ? 0.0D : target.x - player.posX;
+        double tz = target == null ? 0.0D : target.z - player.posZ;
+        double[][] tries = {
+                { tx, 0, tz }, { tz, 0, -tx }, { -tz, 0, tx }, { -tx, 0, -tz },
+                { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
+                { 0, -1, 0 }, { 0, 1, 0 } };
+        for (double[] d : tries) {
+            double len = Math.sqrt(d[0] * d[0] + d[2] * d[2]) + Math.abs(d[1]);
+            if (len < 1.0E-4D) {
+                continue;
+            }
+            double hop = Math.abs(d[1]) > 0 ? 0.5D : 0.4D;
+            double mx = d[0] / len * hop;
+            double my = d[1] < 0 ? -hop : (d[1] > 0 ? hop : 0.0D);
+            double mz = d[2] / len * hop;
+            if (blinkTeleportAxis(player, mx, my, mz) > 1.0E-4D) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Append one horizontal axis leg to the route. If the straight leg can't
+     * sweep its full length (fence, wall edge), insert the smallest rise that
+     * lets it pass: up → across at that height → back down to the route's Y,
+     * all axis-aligned. Returns the Y the route continues at.
+     */
+    private static double appendHorizontalLeg(List<Vec3d> route, EntityPlayerSP player,
+            double px, double py, double pz, double dx, double dz, double vCap) {
+        double len = Math.abs(dx) + Math.abs(dz);
+        if (len < 1.0E-4D) {
+            return py;
+        }
+        if (freeSweepFrom(player, px, py, pz, dx, 0, dz) >= len - 1.0E-4D) {
+            route.add(new Vec3d(px + dx, py, pz + dz));
+            return py;
+        }
+        // Find the smallest lift that clears the whole horizontal leg. The
+        // rise itself must also be clear (a ceiling above means no lift
+        // helps — stop probing then).
+        for (double lift = 0.25D; lift <= vCap + 1.0E-4D; lift += 0.25D) {
+            if (freeSweepFrom(player, px, py, pz, 0, lift, 0) < lift - 1.0E-4D) {
+                break;
+            }
+            if (freeSweepFrom(player, px, py + lift, pz, dx, 0, dz) >= len - 1.0E-4D) {
+                route.add(new Vec3d(px, py + lift, pz));
+                route.add(new Vec3d(px + dx, py + lift, pz + dz));
+                route.add(new Vec3d(px + dx, py, pz + dz));
+                return py;
+            }
+        }
+        // No lift up to vCap clears it — a real wall. Still queue the leg;
+        // the sweep stops at the obstruction and the stall escape advances.
+        route.add(new Vec3d(px + dx, py, pz + dz));
+        return py;
+    }
+
+    /** Like {@link #freeSweepDistance} but from an arbitrary feet position. */
+    private static double freeSweepFrom(EntityPlayerSP player, double x, double y, double z,
+            double dx, double dy, double dz) {
+        double length = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+        if (length < 1.0E-4D || player.world == null) {
+            return length;
+        }
+        AxisAlignedBB base = player.getEntityBoundingBox()
+                .offset(x - player.posX, y - player.posY, z - player.posZ);
+        double step = Math.min(0.25D, length);
+        double reached = 0.0D;
+        while (reached < length) {
+            double next = Math.min(length, reached + step);
+            double scale = next / length;
+            if (player.world.collidesWithAnyBlock(base.offset(dx * scale, dy * scale, dz * scale))) {
+                break;
+            }
+            reached = next;
+        }
+        return reached;
+    }
+
+    /**
+     * Farthest distance along this single axis the player's box can sweep
+     * without intersecting terrain, in [0, |component|]. Marches in small
+     * steps so thin walls and corner edges the destination check would miss
+     * still stop the leg.
+     */
+    private static double freeSweepDistance(EntityPlayerSP player, double dx, double dy, double dz) {
+        double length = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+        if (length < 1.0E-4D || player.world == null) {
+            return length;
+        }
+        AxisAlignedBB base = player.getEntityBoundingBox();
+        double step = Math.min(0.25D, length);
+        double reached = 0.0D;
+        while (reached < length) {
+            double next = Math.min(length, reached + step);
+            double scale = next / length;
+            AxisAlignedBB box = base.offset(dx * scale, dy * scale, dz * scale);
+            if (player.world.collidesWithAnyBlock(box)) {
+                break;
+            }
+            reached = next;
+        }
+        return reached;
+    }
+
+    /**
+     * Teleport along one axis by up to {@code length}; sweep first and stop at
+     * the last collision-free point so a leg never tunnels through a wall or
+     * corner. Returns the distance actually moved.
+     */
+    private static double blinkTeleportAxis(EntityPlayerSP player, double dx, double dy, double dz) {
+        double length = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+        if (length < 1.0E-4D) {
+            return 0.0D;
+        }
+        if (player.world == null) {
+            blinkTeleport(player, player.posX + dx, player.posY + dy, player.posZ + dz);
+            return length;
+        }
+        double reached = freeSweepDistance(player, dx, dy, dz);
+        if (reached < 1.0E-4D) {
+            return 0.0D;
+        }
+        double scale = reached / length;
+        blinkTeleport(player, player.posX + dx * scale, player.posY + dy * scale,
+                player.posZ + dz * scale);
+        return reached;
+    }
+
+    private static void blinkTeleport(EntityPlayerSP player, double x, double y, double z) {
+        player.setPosition(x, y, z);
+        if (player.connection != null) {
+            player.connection.sendPacket(new CPacketPlayer.Position(x, y, z, player.onGround));
+        }
+        player.motionX = 0;
+        player.motionY = 0;
+        player.motionZ = 0;
+        player.fallDistance = 0.0F;
+        player.velocityChanged = true;
+    }
+
+    private static double distSqToNode(EntityPlayerSP player, BetterBlockPos node) {
+        double dx = node.x + 0.5D - player.posX;
+        double dy = MovementFly.blinkSurfaceY(player.world, node.x, node.y, node.z) - player.posY;
+        double dz = node.z + 0.5D - player.posZ;
+        return dx * dx + dy * dy + dz * dz;
+    }
+
+    /**
+     * Squared distance from a node's surface point to a swept leg segment —
+     * used to credit nodes the teleport passed through, not just the point it
+     * ended at. Compares against the same threshold as distSqToNode.
+     */
+    private static double distSqNodeToSeg(EntityPlayerSP player, BetterBlockPos node,
+            Vec3d a, Vec3d b) {
+        // Compare against the cell CENTER, not the standable surface: route
+        // legs ride a collision-margin lift above the surface, so a node the
+        // hop passes directly over/under sits ~0.5-1.0 off the leg axis even
+        // though it was genuinely traversed.
+        double nx = node.x + 0.5D;
+        double ny = node.y + 0.5D;
+        double nz = node.z + 0.5D;
+        double dx = b.x - a.x;
+        double dy = b.y - a.y;
+        double dz = b.z - a.z;
+        double len2 = dx * dx + dy * dy + dz * dz;
+        double t = len2 < 1.0E-8D ? 0.0D
+                : Math.max(0.0D, Math.min(1.0D,
+                        ((nx - a.x) * dx + (ny - a.y) * dy + (nz - a.z) * dz) / len2));
+        double px = a.x + t * dx - nx;
+        double py = a.y + t * dy - ny;
+        double pz = a.z + t * dz - nz;
+        return px * px + py * py + pz * pz;
     }
 
     private void onChangeInPathPosition() {

@@ -38,6 +38,8 @@ def main():
     # test yesterday's candidate filters after editing today's Java sources.
     sources = sorted((main/'pathing/movement').rglob('*.java'))
     sources += sorted((main/'pathing/calc').rglob('*.java'))
+    # Goal classes are inputs to A*; without them the classpath serves a stale jar copy.
+    sources += sorted((main/'api/pathing/goals').rglob('*.java'))
     sources += [main/'pathing/path/PathExecutor.java']
     sources += [main/'utils/BlockStateInterface.java']
     sources += [main/'api/utils/IPlayerContext.java']
