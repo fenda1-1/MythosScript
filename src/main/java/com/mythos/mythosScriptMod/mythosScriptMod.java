@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.annotations.SerializedName;
 import com.mythos.mythosScriptMod.config.BaritoneSettingsConfig;
 import com.mythos.mythosScriptMod.config.ChatOptimizationConfig;
+import com.mythos.mythosScriptMod.config.BlinkPathingConfig;
 import com.mythos.mythosScriptMod.config.FlightPathingConfig;
 import com.mythos.mythosScriptMod.config.LoopExecutionConfig;
 import com.mythos.mythosScriptMod.config.ModConfig;
@@ -98,7 +99,7 @@ import java.nio.file.Path;
 public class mythosScriptMod {
     public static final String MODID = "mythos_script";
     public static final String NAME = "MythosScript";
-    public static final String VERSION = "v1.0.72";
+    public static final String VERSION = "v1.0.73";
 
     public static final Logger LOGGER = LogManager.getLogger(mythosScriptMod.class);
     public static mythosScriptMod instance;
@@ -179,6 +180,7 @@ public class mythosScriptMod {
         MinecraftForge.EVENT_BUS.register(FlightCorridorCollisionHandler.INSTANCE);
         FlyHandler.loadConfig();
         FlightPathingConfig.load();
+        BlinkPathingConfig.load();
         LOGGER.info("Fly Handler registered!");
 
         MinecraftForge.EVENT_BUS.register(SpeedHandler.INSTANCE);

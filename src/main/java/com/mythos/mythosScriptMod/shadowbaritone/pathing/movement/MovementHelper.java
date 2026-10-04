@@ -603,12 +603,22 @@ public interface MovementHelper extends ActionCosts, Helper {
         return canWalkOnPosition(bsi, x, y, z, state);
     }
 
+    /**
+     * Fences, panes (iron bars, glass panes) and walls all have a 1.5-high
+     * collision box: the body can stand on their top and jump over them, but
+     * cannot occupy their cell. Keep every "fence" special case behind this
+     * predicate so bars and walls are not treated as full solid blocks.
+     */
+    static boolean isFenceLike(Block block) {
+        return block instanceof BlockFence || block instanceof BlockPane || block instanceof BlockWall;
+    }
+
     static Ternary canWalkOnBlockState(IBlockState state) {
         Block block = state.getBlock();
         if (state.isBlockNormalCube()) {
             return isConfiguredDangerousBlock(block) ? NO : YES;
         }
-        if (Baritone.settings().parkourMode.value && block instanceof BlockFence) {
+        if (isFenceLike(block)) {
             return MAYBE;
         }
         if (block == Blocks.LADDER || (block == Blocks.VINE && Baritone.settings().allowVines.value)) { // TODO
@@ -654,8 +664,8 @@ public interface MovementHelper extends ActionCosts, Helper {
 
     static boolean canWalkOnPosition(BlockStateInterface bsi, int x, int y, int z, IBlockState state) {
         Block block = state.getBlock();
-        if (block instanceof BlockFence) {
-            return Baritone.settings().parkourMode.value;
+        if (isFenceLike(block)) {
+            return true;
         }
         if (block instanceof BlockSnow) {
             if (!bsi.worldContainsLoadedChunk(x, z)) {
@@ -673,7 +683,13 @@ public interface MovementHelper extends ActionCosts, Helper {
             if (below == Blocks.AIR || below instanceof BlockLiquid) {
                 return false;
             }
-            return hasSnowHeadroom(bsi, x, y, z, state);
+            // Headroom must be measured at the merged walking surface of the
+            // feet cell above, not this block's own top. When the feet cell
+            // also holds snow (1-5 layers over a 6-8 layer base) the player
+            // wades on the higher combined surface; checking here would make
+            // the feet-cell snow collision count as a ceiling and strand
+            // every low-snow cell next to deep snow.
+            return hasHeadroomAtSurface(bsi, x, z, walkingSurfaceY(bsi, x, y + 1, z));
         }
         if (isWater(block)) {
             // since this is called literally millions of times per second, the benefit of
@@ -873,7 +889,7 @@ public interface MovementHelper extends ActionCosts, Helper {
                 continue;
             }
             if (checkY == firstCheckY
-                    && (aboveBlock == Blocks.CARPET || aboveBlock instanceof BlockFence)) {
+                    && (aboveBlock == Blocks.CARPET || isFenceLike(aboveBlock))) {
                 // Keep the existing route-specific clearance behavior in the
                 // immediate head cell; higher ceiling cells still use collision data.
                 continue;
@@ -911,7 +927,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         return true;
     }
 
-    static AxisAlignedBB getCollisionBoundingBox(BlockStateInterface bsi, int x, int y, int z,
+    public static AxisAlignedBB getCollisionBoundingBox(BlockStateInterface bsi, int x, int y, int z,
             IBlockState state) {
         try {
             return state.getCollisionBoundingBox(bsi.access, bsi.isPassableBlockPos.setPos(x, y, z));
@@ -922,7 +938,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         }
     }
 
-    static boolean hasCollisionVolume(AxisAlignedBB collision) {
+    public static boolean hasCollisionVolume(AxisAlignedBB collision) {
         return collision != null
                 && collision.maxX - collision.minX > SNOW_HEADROOM_EPSILON
                 && collision.maxY - collision.minY > SNOW_HEADROOM_EPSILON

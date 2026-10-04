@@ -38,7 +38,7 @@ public final class McpProtocol {
                     String version = ("2025-06-18".equals(requested) || "2025-03-26".equals(requested)
                             || "2024-11-05".equals(requested)) ? requested : "2025-03-26";
                     result = object("protocolVersion", version, "capabilities", object("tools", object("listChanged", false)),
-                            "serverInfo", object("name", "MythosScript", "version", "1.0.72"),
+                            "serverInfo", object("name", "MythosScript", "version", "1.0.73"),
                             "instructions", "Call mythos_clients first and read players (in-world usernames). If the user named a player, pass player on later tools. If players has exactly one name, use it and do not ask. If several names and the user did not specify, list them and ask; do not guess. pid still selects a process; player=all or pid=-1 broadcasts. Then mythos_discover. For a saved or reusable sequence, call mythos_preflight before mythos_run. Inspect action schemas before execution. Query mythos_templates for wait-then-click and teleport-retry recipes; never click GUI after a blind delay, and confirm teleports by area within ~3s with cooldown/failure retries. Game operations run on the client thread. mythos_run returns an executionSessionId and event baseline; call mythos_wait or inspect mythos_status/mythos_logs, then correlate interaction events with GUI/inventory snapshots. Accepted execution is not completion.");
                     break;
                 case "ping": result = new JsonObject(); break;

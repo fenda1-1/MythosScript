@@ -147,6 +147,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
     public static boolean targetHostile = true;
     public static boolean targetPassive = false;
     public static boolean targetPlayers = false;
+    public static boolean targetNpcs = false;
     public static boolean targetEnderCrystal = false;
     public static boolean onlyWeapon = false;
     public static boolean aimOnlyMode = false;
@@ -506,6 +507,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         public boolean targetHostile = true;
         public boolean targetPassive = false;
         public boolean targetPlayers = false;
+        public boolean targetNpcs = false;
         public boolean targetEnderCrystal = false;
         public boolean onlyWeapon = false;
         public boolean aimOnlyMode = false;
@@ -582,6 +584,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
             this.targetHostile = other.targetHostile;
             this.targetPassive = other.targetPassive;
             this.targetPlayers = other.targetPlayers;
+            this.targetNpcs = other.targetNpcs;
             this.targetEnderCrystal = other.targetEnderCrystal;
             this.onlyWeapon = other.onlyWeapon;
             this.aimOnlyMode = other.aimOnlyMode;
@@ -778,6 +781,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         targetHostile = true;
         targetPassive = false;
         targetPlayers = false;
+        targetNpcs = false;
         targetEnderCrystal = false;
         onlyWeapon = false;
         aimOnlyMode = false;
@@ -876,6 +880,9 @@ public class KillAuraHandler implements AbstractGameEventListener {
             }
             if (json.has("targetPlayers")) {
                 targetPlayers = json.get("targetPlayers").getAsBoolean();
+            }
+            if (json.has("targetNpcs")) {
+                targetNpcs = json.get("targetNpcs").getAsBoolean();
             }
             if (json.has("targetEnderCrystal")) {
                 targetEnderCrystal = json.get("targetEnderCrystal").getAsBoolean();
@@ -1095,6 +1102,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
             json.addProperty("targetHostile", targetHostile);
             json.addProperty("targetPassive", targetPassive);
             json.addProperty("targetPlayers", targetPlayers);
+            json.addProperty("targetNpcs", targetNpcs);
             json.addProperty("targetEnderCrystal", targetEnderCrystal);
             json.addProperty("onlyWeapon", onlyWeapon);
             json.addProperty("aimOnlyMode", aimOnlyMode);
@@ -1341,6 +1349,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         targetHostile = safePreset.targetHostile;
         targetPassive = safePreset.targetPassive;
         targetPlayers = safePreset.targetPlayers;
+        targetNpcs = safePreset.targetNpcs;
         targetEnderCrystal = safePreset.targetEnderCrystal;
         onlyWeapon = safePreset.onlyWeapon;
         aimOnlyMode = safePreset.aimOnlyMode;
@@ -6779,7 +6788,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
             return false;
         }
         if (target instanceof EntityPlayer) {
-            return targetPlayers;
+            return ModUtils.isNpcPlayer(target) ? targetNpcs : targetPlayers;
         }
         if (isHostileTargetType((EntityLivingBase) target)) {
             return targetHostile;
@@ -8804,15 +8813,19 @@ public class KillAuraHandler implements AbstractGameEventListener {
     }
 
     public static List<String> getNearbyEntityNames(float scanRange) {
-        List<String> result = new ArrayList<>();
+        return new ArrayList<>(getNearbyEntityNameTypeMap(scanRange).keySet());
+    }
+
+    /** 附近实体 名字→类型标签（玩家/NPC/敌对/被动/其他），供 GUI 列表右侧标记。 */
+    public static LinkedHashMap<String, String> getNearbyEntityNameTypeMap(float scanRange) {
+        LinkedHashMap<String, String> map = new LinkedHashMap<>();
         Minecraft mc = Minecraft.getMinecraft();
         EntityPlayerSP player = mc == null ? null : mc.player;
         if (player == null || mc.world == null) {
-            return result;
+            return map;
         }
 
         float actualRange = MathHelper.clamp(scanRange, 1.0F, 64.0F);
-        LinkedHashSet<String> unique = new LinkedHashSet<>();
         for (Entity entity : mc.world.loadedEntityList) {
             if (entity == player || entity instanceof EntityArmorStand) {
                 continue;
@@ -8824,14 +8837,18 @@ public class KillAuraHandler implements AbstractGameEventListener {
                 continue;
             }
             String name = getFilterableEntityName(entity);
-            if (!name.isEmpty()) {
-                unique.add(name);
+            if (!name.isEmpty() && !map.containsKey(name)) {
+                map.put(name, ModUtils.entityTypeLabel(entity));
             }
         }
 
-        result.addAll(unique);
-        result.sort((a, b) -> a.compareToIgnoreCase(b));
-        return result;
+        List<String> names = new ArrayList<>(map.keySet());
+        names.sort(String::compareToIgnoreCase);
+        LinkedHashMap<String, String> sorted = new LinkedHashMap<>();
+        for (String name : names) {
+            sorted.put(name, map.get(name));
+        }
+        return sorted;
     }
 
     public static String normalizeFilterName(String rawName) {
@@ -9221,6 +9238,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         preset.targetHostile = targetHostile;
         preset.targetPassive = targetPassive;
         preset.targetPlayers = targetPlayers;
+        preset.targetNpcs = targetNpcs;
         preset.targetEnderCrystal = targetEnderCrystal;
         preset.onlyWeapon = onlyWeapon;
         preset.aimOnlyMode = aimOnlyMode;
@@ -9367,6 +9385,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
         if (!normalizedPreset.targetHostile
                 && !normalizedPreset.targetPassive
                 && !normalizedPreset.targetPlayers
+                && !normalizedPreset.targetNpcs
                 && !normalizedPreset.targetEnderCrystal) {
             normalizedPreset.targetHostile = true;
         }
@@ -9500,7 +9519,7 @@ public class KillAuraHandler implements AbstractGameEventListener {
             visualizeHuntRadius = false;
         }
 
-        if (!targetHostile && !targetPassive && !targetPlayers && !targetEnderCrystal) {
+        if (!targetHostile && !targetPassive && !targetPlayers && !targetNpcs && !targetEnderCrystal) {
             targetHostile = true;
         }
     }

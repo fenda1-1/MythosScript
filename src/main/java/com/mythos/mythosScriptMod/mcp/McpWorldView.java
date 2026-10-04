@@ -32,6 +32,7 @@ public final class McpWorldView {
     private static boolean registered;
     private static int extent=32;
     private static float cameraYaw=135;
+    private static float cameraPitch=0;
     private static final WorldInputLease actionLease=new WorldInputLease();
     private static String action="", actionStatus="";
     private static final Map<Integer,UUID> targets=new LinkedHashMap<>();
@@ -121,7 +122,7 @@ public final class McpWorldView {
         net.minecraft.client.settings.KeyBinding.setKeyBindState(sprintKey.getKeyCode(),sprint);
         if(!sprint)mc.player.setSprinting(false);
         // Projection: screen X = X-Z; screen Y = (X+Z)/2-Y. W points up the screen.
-        mc.player.rotationYaw=cameraYaw;mc.player.rotationPitch=0f;
+        mc.player.rotationYaw=cameraYaw;mc.player.rotationPitch=cameraPitch;
         overridden=movement;
     }
 
@@ -163,7 +164,12 @@ public final class McpWorldView {
             else if(deadline<wall || deadline>wall+2000)reason="控制请求已过期，请重新接管";
             else if(reason.isEmpty()) {
                 accepted=op.equals("acquire")?input.acquire(owner,serial,now):input.update(owner,serial,integer(p,"keys",0,0,127),now);
-                if(accepted && p.has("cameraQuarter"))cameraYaw=135f-90f*integer(p,"cameraQuarter",0,0,3);
+                if(accepted && p.has("cameraQuarter")){cameraYaw=135f-90f*integer(p,"cameraQuarter",0,0,3);cameraPitch=0f;}
+                // 桌面端第一/第三人称鼠标视角：[rotationYaw,rotationPitch]，覆盖离散的 cameraQuarter。
+                if(accepted && p.has("look") && p.get("look").isJsonArray()) {
+                    JsonArray look=p.getAsJsonArray("look");
+                    if(look.size()>=2){cameraYaw=look.get(0).getAsFloat();cameraPitch=Math.max(-90f,Math.min(90f,look.get(1).getAsFloat()));}
+                }
                 if(!accepted)reason="控制租约已失效或已被占用，请重新接管";
             }
         }
@@ -317,6 +323,7 @@ public final class McpWorldView {
                 "yaw",entity.rotationYaw,"height",entity.height,"width",entity.width,"living",entity instanceof EntityLivingBase);
         net.minecraft.util.ResourceLocation type=net.minecraft.entity.EntityList.getKey(entity);
         result.addProperty("type",entity instanceof net.minecraft.entity.player.EntityPlayer ? "minecraft:player" : type==null ? "unknown" : type.toString());
+        if(entity instanceof net.minecraft.entity.player.EntityPlayer) result.addProperty("npc",com.mythos.mythosScriptMod.utils.ModUtils.isNpcPlayer(entity));
         if(entity instanceof EntityLivingBase) {
             EntityLivingBase living=(EntityLivingBase)entity;
             result.addProperty("baby",living.isChild());

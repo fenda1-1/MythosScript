@@ -73,11 +73,16 @@ public class GoalBlock implements Goal, IGoalRenderPos {
 
     @Override
     public boolean isInGoal(int x, int y, int z) {
-        if (exactX == null) return x == this.x && y == this.y && z == this.z;
+        // The node one above the goal cell is the same stance when the goal
+        // cell's top is the standing surface (snow layers, fences, slabs):
+        // the body stands on it with feet inside that cell's upper space.
+        // When the goal cell is open floor, no stance can exist at y+1 in
+        // this column, so accepting it changes nothing.
+        if (exactX == null) return x == this.x && z == this.z && (y == this.y || y == this.y + 1);
         // A fence ledge can sit just outside the cell the pose was floored
         // into. The body occupies that neighbouring cell, so either cell is
         // the goal as long as it actually contains the pose.
-        return Math.abs(x + .5 - exactX) <= .5 && y == this.y && Math.abs(z + .5 - exactZ) <= .5;
+        return Math.abs(x + .5 - exactX) <= .5 && (y == this.y || y == this.y + 1) && Math.abs(z + .5 - exactZ) <= .5;
     }
 
     @Override
@@ -85,11 +90,13 @@ public class GoalBlock implements Goal, IGoalRenderPos {
         if (exactX != null) {
             double xDiff = x + .5 - exactX;
             int yDiff = y - (int) Math.floor(exactY);
+            if (yDiff > 0) yDiff--; // isInGoal also accepts the cell above
             double zDiff = z + .5 - exactZ;
             return calculate(xDiff, yDiff, zDiff);
         }
         int xDiff = x - this.x;
         int yDiff = y - this.y;
+        if (yDiff > 0) yDiff--; // isInGoal also accepts the cell above
         int zDiff = z - this.z;
         return calculate(xDiff, yDiff, zDiff);
     }

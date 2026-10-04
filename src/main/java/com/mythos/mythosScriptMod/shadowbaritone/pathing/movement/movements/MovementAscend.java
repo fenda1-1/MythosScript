@@ -28,7 +28,6 @@ import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.MovementHelper
 import com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.MovementState;
 import com.mythos.mythosScriptMod.shadowbaritone.utils.BlockStateInterface;
 import com.google.common.collect.ImmutableSet;
-import net.minecraft.block.BlockFence;
 import net.minecraft.block.BlockFalling;
 import net.minecraft.block.BlockSnow;
 import net.minecraft.block.state.IBlockState;
@@ -203,7 +202,7 @@ public class MovementAscend extends Movement {
         // break it
         // The target client allows movement beneath a fence above the launch block.
         // Treat it as overhead clearance rather than a block that must be mined.
-        if (!(srcUp2.getBlock() instanceof BlockFence)) {
+        if (!MovementHelper.isFenceLike(srcUp2.getBlock())) {
             totalCost += MovementHelper.getMiningDurationTicks(context, x, y + 2, z, srcUp2, false);
         }
         if (totalCost >= COST_INF) {
@@ -214,7 +213,7 @@ public class MovementAscend extends Movement {
             return COST_INF;
         }
         IBlockState destHead = context.get(destX, destY + 1, destZ);
-        if (!(destHead.getBlock() instanceof BlockFence)) {
+        if (!MovementHelper.isFenceLike(destHead.getBlock())) {
             totalCost += MovementHelper.getMiningDurationTicks(context, destX, destY + 1, destZ, destHead, true);
         }
         return totalCost;
@@ -356,7 +355,7 @@ public class MovementAscend extends Movement {
         for (int i = 0; i < 4; i++) {
             BetterBlockPos check = startUp.offset(EnumFacing.getHorizontal(i));
             if (!MovementHelper.canWalkThrough(ctx, check)
-                    && !(BlockStateInterface.getBlock(ctx, check) instanceof BlockFence)) {
+                    && !MovementHelper.isFenceLike(BlockStateInterface.getBlock(ctx, check))) {
                 // We might bonk our head
                 return false;
             }

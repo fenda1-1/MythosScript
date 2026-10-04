@@ -1,5 +1,27 @@
 # 变更记录
 
+## 2026-10-05 构建修复：全新克隆可直接构建
+
+修复「别人克隆仓库后执行 `gradlew.bat build` 无法构建」的问题。
+
+### 构建脚本
+
+- `gradlew.bat` 不再写死本机 JDK 路径。原来的 `set JAVA_HOME=C:\Program Files\Java\jdk1.8.0_202` 会无条件覆盖环境变量，其他机器上连构建 JVM 都起不来（`ERROR: JAVA_HOME is set to an invalid directory`）。现在按 `JAVA_HOME` → `JAVA8_HOME` → `JDK8_HOME` 解析，都没有时退回 `PATH` 上的 `java`，与 README 的描述一致。
+- 只有 `JAVA_HOME` 存在时才传 `-Dorg.gradle.java.home`，避免空值破坏依赖 `PATH` 的环境。
+- `gradle.properties` 移除写死的 `org.gradle.java.home`（该文件随仓库共享，与本文件第 2 行自身的说明一致）。
+
+### 纳入版本控制的构建必需文件
+
+这些文件原先被 `.gitignore` 忽略，但缺失会让克隆后的构建失败或缺类：
+
+- `agent.gradle`：`build.gradle` 末尾无条件 `apply from: 'agent.gradle'`，缺失时配置阶段直接失败。
+- `src/main/java/AttachBridge.java`、`src/main/java/dev/mythos/inject/MythosAgent.java`、`src/main/java/dev/mythos/inject/runtime/FeatureTransformer1201.java`：manifest 声明的 `Main-Class` 与 `Agent-Class`/`Premain-Class`。缺失时 ProGuard 因 `-dontwarn`/`-ignorewarnings` 静默通过，却产出没有入口类的坏 jar。
+- `src/test/java/com/mythos/mythosScriptMod/shadowbaritone/pathing/movement/parkour/CapturedParkourFlightTest.java`：已跟踪的 `CapturedParkourSuiteTest.java:157` 静态调用了它，缺失时 `:compileTestJava` 报「找不到符号」。
+
+### 文档
+
+- README / README_EN：补充 JDK 8 的解析顺序、首次构建需要联网（ForgeGradle 需下载 Minecraft 1.12.2 依赖与映射）、Gradle 用户目录固定在仓库内 `.gradle/`（缓存不跨项目共享，空缓存时 `--offline` 必然失败）；示例产物文件名版本号由 v1.0.71 更正为 v1.0.73。
+
 ## 2026-08-30 工作区更新
 
 本次更新围绕现代化主界面、快捷键操作和路径序列编辑流程进行了集中调整。

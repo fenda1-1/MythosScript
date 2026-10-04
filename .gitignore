@@ -113,6 +113,8 @@ tools
 !/tools/build-dragoncore-bridge.py
 .omo
 .codebase-index
+.codegraph/
+codegraph.json
 container
 .zcode
 # ====================== Forge / Minecraft 开发专用 ======================
@@ -169,8 +171,17 @@ __pycache__/
 
 !src/test/java/com/mythos/mythosScriptMod/gui/MenuFontInitializationTest.java
 !src/test/java/com/mythos/mythosScriptMod/inventory/InventoryViewerTargetTest.java
+# 必需的测试基类：已跟踪的 CapturedParkourSuiteTest.java:157 静态调用它，
+# 缺了它 :compileTestJava 会失败（找不到符号 类 CapturedParkourFlightTest）。
+!src/test/java/com/mythos/mythosScriptMod/shadowbaritone/pathing/movement/parkour/CapturedParkourFlightTest.java
 
-# ---------------------- 本地调试/构建残留（自动补充） ----------------------
-/agent.gradle
-/src/main/java/dev/
-/src/main/java/AttachBridge.java
+# ---------------------- 本地调试/构建残留 ----------------------
+# 注意：以下三条曾被忽略，现已取消，因为它们是别人克隆后能构建的必要条件——
+#   agent.gradle                     -> build.gradle:504 是无条件 apply from: 'agent.gradle'
+#   src/main/java/AttachBridge.java  -> manifest 的 Main-Class
+#   src/main/java/dev/**             -> manifest 的 Agent-Class/Premain-Class
+# 缺了前两者构建直接失败；缺了第三者 ProGuard 因 -dontwarn 静默通过，
+# 却产出没有入口类的坏 jar。详见 CHANGELOG/README 的“首次构建”一节。
+
+# 临时修复/调试产物
+doc/

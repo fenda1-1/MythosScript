@@ -377,6 +377,7 @@ public class PathSequenceEventListener {
     private boolean huntTargetHostile = true;
     private boolean huntTargetPassive = false;
     private boolean huntTargetPlayers = false;
+    private boolean huntTargetNpcs = false;
     private boolean huntEnableNameWhitelist = false;
     private boolean huntWaitForWhitelistRespawn = false;
     private boolean huntWaitForWhitelistRespawnAfterCompletion = false;
@@ -2272,10 +2273,17 @@ public class PathSequenceEventListener {
             this.huntTargetHostile = KillAuraHandler.targetHostile;
             this.huntTargetPassive = KillAuraHandler.targetPassive;
             this.huntTargetPlayers = KillAuraHandler.targetPlayers;
+            this.huntTargetNpcs = KillAuraHandler.targetNpcs;
         } else if ("player".equalsIgnoreCase(huntEntityType) || "玩家".equalsIgnoreCase(huntEntityType)) {
             this.huntTargetHostile = false;
             this.huntTargetPassive = false;
             this.huntTargetPlayers = true;
+            this.huntTargetNpcs = false;
+        } else if ("npc".equalsIgnoreCase(huntEntityType)) {
+            this.huntTargetHostile = false;
+            this.huntTargetPassive = false;
+            this.huntTargetPlayers = false;
+            this.huntTargetNpcs = true;
         } else if ("hostile".equalsIgnoreCase(huntEntityType)
                 || "monster".equalsIgnoreCase(huntEntityType)
                 || "mob".equalsIgnoreCase(huntEntityType)
@@ -2284,6 +2292,7 @@ public class PathSequenceEventListener {
             this.huntTargetHostile = true;
             this.huntTargetPassive = false;
             this.huntTargetPlayers = false;
+            this.huntTargetNpcs = false;
         } else if ("passive".equalsIgnoreCase(huntEntityType)
                 || "animal".equalsIgnoreCase(huntEntityType)
                 || "被动生物".equalsIgnoreCase(huntEntityType)
@@ -2291,10 +2300,12 @@ public class PathSequenceEventListener {
             this.huntTargetHostile = false;
             this.huntTargetPassive = true;
             this.huntTargetPlayers = false;
+            this.huntTargetNpcs = false;
         } else {
             this.huntTargetHostile = true;
             this.huntTargetPassive = true;
             this.huntTargetPlayers = true;
+            this.huntTargetNpcs = true;
         }
         this.huntRestrictTargetGroups = true;
 
@@ -2348,7 +2359,7 @@ public class PathSequenceEventListener {
         stopNavigation();
         setStatus(getStatus().split(" \\| ")[0] + " | " + I18n.format("status.path.hunting"));
         mythosScriptMod.LOGGER.info(
-                "进入中心搜怪击杀: 半径={}, 垂直范围=+{}/-{}, 战斗配置=杀戮光环当前配置, 实体类型={}, 攻击模式={}, 追击模式={}, 自动绕圈={}, 无目标跳过={}, 无掉血排除次数={}, 目标类型[敌对={}, 被动={}, 玩家={}], 动作白名单={}, 动作黑名单={}, 显示范围={}",
+                "进入中心搜怪击杀: 半径={}, 垂直范围=+{}/-{}, 战斗配置=杀戮光环当前配置, 实体类型={}, 攻击模式={}, 追击模式={}, 自动绕圈={}, 无目标跳过={}, 无掉血排除次数={}, 目标类型[敌对={}, 被动={}, 玩家={}, NPC={}], 动作白名单={}, 动作黑名单={}, 显示范围={}",
                 this.huntRadius,
                 this.huntUpRange,
                 this.huntDownRange,
@@ -2361,6 +2372,7 @@ public class PathSequenceEventListener {
                 this.huntTargetHostile,
                 this.huntTargetPassive,
                 this.huntTargetPlayers,
+                this.huntTargetNpcs,
                 this.huntEnableNameWhitelist ? formatHuntWhitelistForLog() : "关闭",
                 this.huntEnableNameBlacklist ? this.huntNameBlacklist : "关闭",
                 this.huntShowRange);
@@ -2373,6 +2385,7 @@ public class PathSequenceEventListener {
                 + ", 目标类型[敌对=" + this.huntTargetHostile
                 + ", 被动=" + this.huntTargetPassive
                 + ", 玩家=" + this.huntTargetPlayers
+                + ", NPC=" + this.huntTargetNpcs
                 + "], 动作白名单="
                 + (this.huntEnableNameWhitelist ? formatHuntWhitelistForLog() : "关闭")
                 + ", 动作黑名单="
@@ -3490,7 +3503,10 @@ public class PathSequenceEventListener {
             return true;
         }
         if ("player".equals(normalized) || "玩家".equals(normalized)) {
-            return entity instanceof EntityPlayer;
+            return ModUtils.isRealPlayer(entity);
+        }
+        if ("npc".equals(normalized)) {
+            return ModUtils.isNpcPlayer(entity);
         }
         if ("hostile".equals(normalized) || "monster".equals(normalized) || "mob".equals(normalized)
                 || "敌对生物".equals(normalized) || "怪物".equals(normalized)) {
@@ -5480,9 +5496,11 @@ public class PathSequenceEventListener {
         List<String> categories = new ArrayList<>();
         List<Double> distances = new ArrayList<>();
         int playerCount = 0;
+        int npcCount = 0;
         int hostileCount = 0;
         int passiveCount = 0;
         Map<String, Object> nearestPlayer = null;
+        Map<String, Object> nearestNpc = null;
         Map<String, Object> nearestHostile = null;
         for (EntityLivingBase entity : entities) {
             String actualName = entity.getName() == null ? "" : entity.getName();
@@ -5510,6 +5528,11 @@ public class PathSequenceEventListener {
                 if (nearestPlayer == null) {
                     nearestPlayer = entry;
                 }
+            } else if ("NPC".equalsIgnoreCase(category)) {
+                npcCount++;
+                if (nearestNpc == null) {
+                    nearestNpc = entry;
+                }
             } else if ("HOSTILE".equalsIgnoreCase(category)) {
                 hostileCount++;
                 if (nearestHostile == null) {
@@ -5534,6 +5557,7 @@ public class PathSequenceEventListener {
         runtimeVariables.put(varName + "_radius", radius);
         runtimeVariables.put(varName + "_max_count", maxCount);
         runtimeVariables.put(varName + "_player_count", playerCount);
+        runtimeVariables.put(varName + "_npc_count", npcCount);
         runtimeVariables.put(varName + "_hostile_count", hostileCount);
         runtimeVariables.put(varName + "_passive_count", passiveCount);
         if (!list.isEmpty()) {
@@ -5556,6 +5580,13 @@ public class PathSequenceEventListener {
         } else {
             runtimeVariables.put(varName + "_nearest_player_name", "");
             runtimeVariables.put(varName + "_nearest_player_distance", 0D);
+        }
+        if (nearestNpc != null) {
+            runtimeVariables.put(varName + "_nearest_npc_name", nearestNpc.get("name"));
+            runtimeVariables.put(varName + "_nearest_npc_distance", nearestNpc.get("distance"));
+        } else {
+            runtimeVariables.put(varName + "_nearest_npc_name", "");
+            runtimeVariables.put(varName + "_nearest_npc_distance", 0D);
         }
         if (nearestHostile != null) {
             runtimeVariables.put(varName + "_nearest_hostile_name", nearestHostile.get("name"));
@@ -5834,7 +5865,7 @@ public class PathSequenceEventListener {
 
     private String describeEntityCategory(EntityLivingBase entity) {
         if (entity instanceof EntityPlayer) {
-            return "PLAYER";
+            return ModUtils.isNpcPlayer(entity) ? "NPC" : "PLAYER";
         }
         if (entity instanceof EntityDragon) {
             return "BOSS";
@@ -6384,7 +6415,7 @@ public class PathSequenceEventListener {
             return "unknown";
         }
         if (entity instanceof net.minecraft.entity.player.EntityPlayer) {
-            return "player";
+            return ModUtils.isNpcPlayer(entity) ? "npc" : "player";
         }
         if (isHostileHuntTarget(entity)) {
             return "hostile";
@@ -6460,6 +6491,7 @@ public class PathSequenceEventListener {
         this.huntTargetHostile = true;
         this.huntTargetPassive = false;
         this.huntTargetPlayers = false;
+        this.huntTargetNpcs = false;
         this.huntEnableNameWhitelist = false;
         this.huntWaitForWhitelistRespawn = false;
         this.huntWaitForWhitelistRespawnAfterCompletion = false;
@@ -7294,7 +7326,7 @@ public class PathSequenceEventListener {
             return true;
         }
         if (entity instanceof net.minecraft.entity.player.EntityPlayer) {
-            return huntTargetPlayers;
+            return ModUtils.isNpcPlayer(entity) ? huntTargetNpcs : huntTargetPlayers;
         }
         if (isHostileHuntTarget(entity)) {
             return huntTargetHostile;

@@ -71,8 +71,19 @@ public final class ParkourSurface {
                 // Use the same logical-feet convention as IPlayerContext:
                 // floor(posY + .1251). Half slabs, stairs and fence tops are
                 // valid fractional surfaces, not missing graph nodes.
-                if (MathHelper.floor(box.maxY + .1251) != feet.y) continue;
-                candidates.add(box);
+                if (MathHelper.floor(box.maxY + .1251) == feet.y) {
+                    candidates.add(box);
+                    continue;
+                }
+                // Deep snow (6+ layers) is an unwalkable cell in the graph, so
+                // the standable node is the air cell above it — the same remap
+                // Movement.logicalPlayerFeet applies. Its fractional top then
+                // resolves one feet cell lower than the regular convention.
+                if (state.getBlock() instanceof net.minecraft.block.BlockSnow
+                        && state.getValue(net.minecraft.block.BlockSnow.LAYERS) >= 6
+                        && MathHelper.floor(box.maxY + 1.1251) == feet.y) {
+                    candidates.add(box);
+                }
             }
         }
         // Soul sand is only 0.875 tall and sits on a full block in the same

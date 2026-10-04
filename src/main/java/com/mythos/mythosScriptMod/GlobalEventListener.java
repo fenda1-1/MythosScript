@@ -46,6 +46,7 @@ import com.mythos.mythosScriptMod.path.PathSequenceManager;
 import com.mythos.mythosScriptMod.path.node.NodeTriggerManager;
 import com.mythos.mythosScriptMod.path.trigger.LegacySequenceTriggerManager;
 import com.mythos.mythosScriptMod.path.trigger.PlayerListTriggerSupport;
+import com.mythos.mythosScriptMod.utils.ModUtils;
 import com.mythos.mythosScriptMod.utils.ReflectionCompat;
 import com.mythos.mythosScriptMod.handlers.WarehouseEventHandler;
 import com.mythos.mythosScriptMod.listenersupport.PlayerIdleTriggerTracker;
@@ -247,17 +248,32 @@ public class GlobalEventListener {
                     triggerUnifiedEvent(NodeTriggerManager.TRIGGER_INVENTORY_CHANGED,
                             LegacySequenceTriggerManager.TRIGGER_INVENTORY_CHANGED, inventoryTrigger);
                 }
-                boolean inventoryFullNow = isMainInventoryFull(mc);
+                int totalSlots = getMainInventorySlotCount(mc);
+                int filledSlots = countMainInventoryFilledSlots(mc);
+                boolean inventoryFullNow = totalSlots > 0 && filledSlots >= totalSlots;
+                // Level-triggered: while filled count meets the lowest configured
+                // minFilledSlots, emit to legacy rules every poll; each rule's own
+                // cooldownMs paces repeats. Node graphs get the event only on the
+                // true-full edge (they have no min param).
                 if (inventoryFullNow && !wasInventoryFullLastCheck) {
                     JsonObject inventoryFullTrigger = new JsonObject();
-                    int totalSlots = getMainInventorySlotCount(mc);
-                    int filledSlots = countMainInventoryFilledSlots(mc);
                     inventoryFullTrigger.addProperty("filledSlots", filledSlots);
                     inventoryFullTrigger.addProperty("totalSlots", totalSlots);
                     inventoryFullTrigger.addProperty("emptySlots", Math.max(0, totalSlots - filledSlots));
                     inventoryFullTrigger.addProperty("signature", inventorySignature);
                     triggerUnifiedEvent(NodeTriggerManager.TRIGGER_INVENTORY_FULL,
                             LegacySequenceTriggerManager.TRIGGER_INVENTORY_FULL, inventoryFullTrigger);
+                } else {
+                    int legacyMin = LegacySequenceTriggerManager.getMinFilledSlotsThreshold();
+                    if (legacyMin > 0 && filledSlots >= legacyMin) {
+                        JsonObject inventoryFullTrigger = new JsonObject();
+                        inventoryFullTrigger.addProperty("filledSlots", filledSlots);
+                        inventoryFullTrigger.addProperty("totalSlots", totalSlots);
+                        inventoryFullTrigger.addProperty("emptySlots", Math.max(0, totalSlots - filledSlots));
+                        inventoryFullTrigger.addProperty("signature", inventorySignature);
+                        LegacySequenceTriggerManager.triggerEvent(
+                                LegacySequenceTriggerManager.TRIGGER_INVENTORY_FULL, inventoryFullTrigger);
+                    }
                 }
                 wasInventoryFullLastCheck = inventoryFullNow;
                 lastInventorySignature = inventorySignature;
@@ -677,11 +693,6 @@ public class GlobalEventListener {
         return mc.player.inventory.mainInventory.size();
     }
 
-    private boolean isMainInventoryFull(Minecraft mc) {
-        int totalSlots = getMainInventorySlotCount(mc);
-        return totalSlots > 0 && countMainInventoryFilledSlots(mc) >= totalSlots;
-    }
-
     private NearbyEntitySummary scanNearbyEntities(Minecraft mc) {
         if (mc == null || mc.player == null || mc.world == null) {
             return NearbyEntitySummary.EMPTY;
@@ -689,10 +700,12 @@ public class GlobalEventListener {
         double radiusSq = ENTITY_NEARBY_TRIGGER_RADIUS * ENTITY_NEARBY_TRIGGER_RADIUS;
         Set<String> allNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         Set<String> playerNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        Set<String> npcNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         Set<String> hostileNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         Set<String> passiveNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         int allCount = 0;
         int playerCount = 0;
+        int npcCount = 0;
         int hostileCount = 0;
         int passiveCount = 0;
         for (Object entityObj : mc.world.loadedEntityList) {
@@ -712,9 +725,16 @@ public class GlobalEventListener {
                 allNames.add(name);
             }
             if (living instanceof EntityPlayer) {
-                playerCount++;
-                if (!name.isEmpty()) {
-                    playerNames.add(name);
+                if (ModUtils.isNpcPlayer(living)) {
+                    npcCount++;
+                    if (!name.isEmpty()) {
+                        npcNames.add(name);
+                    }
+                } else {
+                    playerCount++;
+                    if (!name.isEmpty()) {
+                        playerNames.add(name);
+                    }
                 }
                 continue;
             }
@@ -735,6 +755,7 @@ public class GlobalEventListener {
         return new NearbyEntitySummary(
                 String.join(", ", allNames), allCount,
                 String.join(", ", playerNames), playerCount,
+                String.join(", ", npcNames), npcCount,
                 String.join(", ", hostileNames), hostileCount,
                 String.join(", ", passiveNames), passiveCount);
     }
@@ -791,12 +812,14 @@ public class GlobalEventListener {
     }
 
     private static final class NearbyEntitySummary {
-        private static final NearbyEntitySummary EMPTY = new NearbyEntitySummary("", 0, "", 0, "", 0, "", 0);
+        private static final NearbyEntitySummary EMPTY = new NearbyEntitySummary("", 0, "", 0, "", 0, "", 0, "", 0);
 
         private final String allSignature;
         private final int allCount;
         private final String playerSignature;
         private final int playerCount;
+        private final String npcSignature;
+        private final int npcCount;
         private final String hostileSignature;
         private final int hostileCount;
         private final String passiveSignature;
@@ -804,12 +827,15 @@ public class GlobalEventListener {
 
         private NearbyEntitySummary(String allSignature, int allCount,
                 String playerSignature, int playerCount,
+                String npcSignature, int npcCount,
                 String hostileSignature, int hostileCount,
                 String passiveSignature, int passiveCount) {
             this.allSignature = allSignature;
             this.allCount = allCount;
             this.playerSignature = playerSignature;
             this.playerCount = playerCount;
+            this.npcSignature = npcSignature;
+            this.npcCount = npcCount;
             this.hostileSignature = hostileSignature;
             this.hostileCount = hostileCount;
             this.passiveSignature = passiveSignature;
@@ -821,6 +847,8 @@ public class GlobalEventListener {
                     && allCount <= 0
                     && playerSignature.isEmpty()
                     && playerCount <= 0
+                    && npcSignature.isEmpty()
+                    && npcCount <= 0
                     && hostileSignature.isEmpty()
                     && hostileCount <= 0
                     && passiveSignature.isEmpty()
@@ -835,6 +863,8 @@ public class GlobalEventListener {
                     || allCount != previous.allCount
                     || !playerSignature.equals(previous.playerSignature)
                     || playerCount != previous.playerCount
+                    || !npcSignature.equals(previous.npcSignature)
+                    || npcCount != previous.npcCount
                     || !hostileSignature.equals(previous.hostileSignature)
                     || hostileCount != previous.hostileCount
                     || !passiveSignature.equals(previous.passiveSignature)
@@ -847,10 +877,12 @@ public class GlobalEventListener {
             }
             target.addProperty(prefix, allSignature);
             target.addProperty(prefix + "Player", playerSignature);
+            target.addProperty(prefix + "Npc", npcSignature);
             target.addProperty(prefix + "Hostile", hostileSignature);
             target.addProperty(prefix + "Passive", passiveSignature);
             target.addProperty(prefix + "Count", allCount);
             target.addProperty(prefix + "PlayerCount", playerCount);
+            target.addProperty(prefix + "NpcCount", npcCount);
             target.addProperty(prefix + "HostileCount", hostileCount);
             target.addProperty(prefix + "PassiveCount", passiveCount);
         }

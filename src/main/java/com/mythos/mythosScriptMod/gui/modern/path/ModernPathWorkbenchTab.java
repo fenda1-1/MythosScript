@@ -390,6 +390,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     private ModernMainLayout.Rect huntEntitySuggestionBounds;
     private final List<ModernMainLayout.Rect> huntEntitySuggestionHits = new ArrayList<>();
     private final List<String> huntEntitySuggestionValues = new ArrayList<>();
+    private final LinkedHashMap<String, String> nearbyEntityLabels = new LinkedHashMap<>();
     private int huntEntitySuggestionScroll;
     private int huntEntitySuggestionMaxScroll;
     private String structuredPlayerMode = PlayerListTriggerSupport.MODE_EXACT;
@@ -3529,7 +3530,15 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             ModernUiRenderer.drawSubtlePanel(item.x, item.y, item.width, item.height, 3,
                     hovered ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SURFACE,
                     hovered ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
-            ModernUiRenderer.drawText(font, name, item.x + 6, item.y + 5, ModernUiRenderer.TEXT, item.width - 12);
+            String typeLabel = nearbyEntityLabels.getOrDefault(name.toLowerCase(Locale.ROOT), "");
+            int typeWidth = typeLabel.isEmpty() ? 0 : font.getStringWidth(typeLabel) + 8;
+            ModernUiRenderer.drawText(font, name, item.x + 6, item.y + 5, ModernUiRenderer.TEXT,
+                    item.width - 12 - typeWidth);
+            if (!typeLabel.isEmpty()) {
+                int labelWidth = font.getStringWidth(typeLabel);
+                ModernUiRenderer.drawText(font, typeLabel, item.x + item.width - 6 - labelWidth, item.y + 5,
+                        ModernUiRenderer.MUTED_TEXT, labelWidth + 4);
+            }
             huntEntitySuggestionHits.add(item);
             huntEntitySuggestionValues.add(name);
             rowY += rowHeight;
@@ -3558,6 +3567,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
 
     private List<String> scanNearbyEntityNames(String query) {
         List<String> result = new ArrayList<>();
+        nearbyEntityLabels.clear();
         Minecraft mc = Minecraft.getMinecraft();
         if (mc == null || mc.player == null || mc.world == null || mc.world.loadedEntityList == null) {
             return result;
@@ -3565,6 +3575,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         float radius = huntScanRadius();
         double maxDistSq = radius * radius;
         LinkedHashMap<String, String> unique = new LinkedHashMap<>();
+        LinkedHashMap<String, String> labelByKey = new LinkedHashMap<>();
         for (Object raw : mc.world.loadedEntityList) {
             if (!(raw instanceof Entity)) continue;
             Entity entity = (Entity) raw;
@@ -3575,11 +3586,16 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             if (name.isEmpty()) name = KillAuraHandler.normalizeFilterName(entity.getName());
             if (name.isEmpty()) continue;
             String key = name.toLowerCase(Locale.ROOT);
-            if (!unique.containsKey(key)) unique.put(key, name);
+            if (!unique.containsKey(key)) {
+                unique.put(key, name);
+                labelByKey.put(key, com.mythos.mythosScriptMod.utils.ModUtils.entityTypeLabel(entity));
+            }
         }
-        for (String name : unique.values()) {
+        for (Map.Entry<String, String> entry : unique.entrySet()) {
+            String name = entry.getValue();
             if (query == null || query.isEmpty() || PinyinSearchHelper.matchesNormalized(name, query)) {
                 result.add(name);
+                nearbyEntityLabels.put(entry.getKey(), labelByKey.getOrDefault(entry.getKey(), ""));
             }
         }
         result.sort(String.CASE_INSENSITIVE_ORDER);

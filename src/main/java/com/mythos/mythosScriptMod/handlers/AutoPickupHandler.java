@@ -1106,18 +1106,25 @@ public class AutoPickupHandler {
 
         BlockPos pickupGoal = resolveLocalPickupGoal((EntityItem) currentTargetItem);
         if (pickupGoal == null) {
-            // Do not let GoalTargetNormalizer climb through every layer in this X/Z column.
-            // The normal pickup retry path will mark the item as unreachable if this remains true.
+            // Item cell and the cell above are both impassable (buried inside a
+            // solid block/wall): permanently skip it instead of holding
+            // currentTargetItem forever and starving every other item.
+            markItemUnreachable(activeRule, currentTargetItem);
             EmbeddedNavigationHandler.INSTANCE.stop();
             lastGotoTick = nowTick;
             lastGotoTargetEntityId = targetId;
-            armPendingNavigationAttempt(nowTick);
+            clearPendingNavigationAttempt();
             if (ModConfig.isDebugFlagEnabled(DebugModule.AUTO_PICKUP)) {
                 mythosScriptMod.LOGGER.info(
-                        "[自动拾取] 掉落物所在方块上方无本层可用目标，跳过跨层修正: {} @ ({}, {}, {})",
+                        "[自动拾取] 掉落物埋在实心方块内，已忽略: {} @ ({}, {}, {})",
                         DroppedPickupTarget.getDisplayName(currentTargetItem), currentTargetItem.posX,
                         currentTargetItem.posY, currentTargetItem.posZ);
             }
+            currentTargetItem = null;
+            currentTargetStackSnapshot = ItemStack.EMPTY;
+            lastGotoTargetEntityId = Integer.MIN_VALUE;
+            lastGotoTick = -99999;
+            currentState = State.SEARCHING;
             return;
         }
 
@@ -1305,6 +1312,35 @@ public class AutoPickupHandler {
         pendingNavigationPlayerX = Double.NaN;
         pendingNavigationPlayerY = Double.NaN;
         pendingNavigationPlayerZ = Double.NaN;
+    }
+
+    private void markItemUnreachable(AutoPickupRule rule, Entity item) {
+        if (rule == null || item == null) {
+            return;
+        }
+        ItemLocationKey locationKey = buildItemLocationKey(item);
+        if (locationKey == null) {
+            return;
+        }
+        String ruleKey = buildRuleAttemptKey(rule);
+        Map<ItemLocationKey, Integer> attempts = failedPickupAttemptsByRule.get(ruleKey);
+        if (attempts == null) {
+            attempts = new HashMap<>();
+            failedPickupAttemptsByRule.put(ruleKey, attempts);
+        }
+        attempts.put(locationKey, getMaxPickupAttempts(rule));
+        if (mc.player != null) {
+            mc.player.sendMessage(new TextComponentString(String.format(
+                    "%s[自动拾取] %s掉落物无法到达，已忽略: %s%s %s@ (%.1f, %.1f, %.1f)",
+                    TextFormatting.YELLOW,
+                    TextFormatting.RED,
+                    TextFormatting.WHITE,
+                    DroppedPickupTarget.getDisplayName(item),
+                    TextFormatting.GRAY,
+                    item.posX,
+                    item.posY,
+                    item.posZ)));
+        }
     }
 
     private int incrementFailedAttempts(AutoPickupRule rule, ItemLocationKey locationKey) {

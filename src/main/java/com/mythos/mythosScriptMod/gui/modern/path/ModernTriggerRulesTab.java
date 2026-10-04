@@ -993,8 +993,8 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
         } else if (LegacySequenceTriggerManager.TRIGGER_PLAYER_IDLE.equals(type)) {
             idleExcludePath = !idleExcludePath;
         } else if (LegacySequenceTriggerManager.TRIGGER_ENTITY_NEARBY.equals(type)) {
-            entityType = entityType.isEmpty() ? "player" : "player".equals(entityType) ? "hostile"
-                    : "hostile".equals(entityType) ? "passive" : "";
+            entityType = entityType.isEmpty() ? "player" : "player".equals(entityType) ? "npc"
+                    : "npc".equals(entityType) ? "hostile" : "hostile".equals(entityType) ? "passive" : "";
         }
         markDirty();
     }
@@ -1331,7 +1331,8 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
     }
 
     private String entityTypeLabel() {
-        return "player".equals(entityType) ? "gui.modern.path.trigger.u121" : "hostile".equals(entityType) ? "gui.modern.path.trigger.u122"
+        return "player".equals(entityType) ? "gui.modern.path.trigger.u121" : "npc".equals(entityType) ? "gui.modern.path.trigger.u130"
+                : "hostile".equals(entityType) ? "gui.modern.path.trigger.u122"
                 : "passive".equals(entityType) ? "gui.modern.path.trigger.u123" : "gui.modern.path.trigger.u124";
     }
 

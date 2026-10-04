@@ -39,7 +39,7 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
     private static final int GROUP_HEIGHT = ModernTreeGuide.GROUP_HEIGHT;
     private static final int RULE_HEIGHT = ModernTreeGuide.ITEM_HEIGHT;
     private static final String[][] ENTITY_TYPES = {
-            {"player", "gui.modern.escape.u008"}, {"monster", "gui.modern.escape.u009"}, {"neutral", "gui.modern.escape.u010"}, {"animal", "gui.modern.escape.u011"},
+            {"player", "gui.modern.escape.u008"}, {"npc", "gui.modern.escape.u094"}, {"monster", "gui.modern.escape.u009"}, {"neutral", "gui.modern.escape.u010"}, {"animal", "gui.modern.escape.u011"},
             {"water", "gui.modern.escape.u012"}, {"ambient", "gui.modern.escape.u013"}, {"villager", "gui.modern.escape.u014"}, {"golem", "gui.modern.escape.u015"},
             {"tameable", "gui.modern.escape.u016"}, {"boss", "gui.modern.escape.u017"}, {"living", "gui.modern.escape.u018"}, {"any", "gui.modern.escape.u019"}
     };
@@ -55,6 +55,7 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
     private AutoEscapeRule editorRule;
     private ModernTextField searchField;
     private AutoEscapeSequencePicker sequencePicker;
+    private AutoEscapeSequencePicker restartPicker;
     private ModernMainLayout.Rect bounds;
     private ModernMainLayout.Rect navigationBounds;
     private ModernMainLayout.Rect editorBounds;
@@ -88,6 +89,8 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
         }
         if (sequencePicker == null) sequencePicker = new AutoEscapeSequencePicker(this::selectSequence);
         sequencePicker.ensureInitialized(fontRenderer);
+        if (restartPicker == null) restartPicker = new AutoEscapeSequencePicker(this::selectRestartSequence);
+        restartPicker.ensureInitialized(fontRenderer);
         ensureEditor();
         editor.ensureInitialized(fontRenderer);
     }
@@ -95,6 +98,7 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
     @Override public void updateScreen() {
         if (searchField != null) searchField.updateCursorCounter();
         if (sequencePicker != null) sequencePicker.updateScreen();
+        if (restartPicker != null) restartPicker.updateScreen();
         ensureEditor();
         editor.updateScreen();
     }
@@ -121,6 +125,7 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
         editor.draw(fontRenderer, formBounds, mouseX, mouseY);
 
         if (sequencePicker != null) sequencePicker.draw(fontRenderer, formBounds, "gui.modern.escape.u020", mouseX, mouseY);
+        if (restartPicker != null) restartPicker.draw(fontRenderer, formBounds, "gui.modern.escape.u007", mouseX, mouseY);
         drawFooter(fontRenderer, mouseX, mouseY);
         navigationActions.drawOverlay(mouseX, mouseY);
     }
@@ -265,6 +270,7 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
     public boolean mouseClicked(int mouseX, int mouseY, int button) {
         if (bounds == null || !bounds.contains(mouseX, mouseY)) return false;
         if (sequencePicker != null && sequencePicker.isOpen()) return sequencePicker.mouseClicked(mouseX, mouseY);
+        if (restartPicker != null && restartPicker.isOpen()) return restartPicker.mouseClicked(mouseX, mouseY);
         if (navigationActions.mouseClicked(mouseX, mouseY, button)) return true;
         if (button == 1 && navigationContext(mouseX, mouseY)) return true;
         if (button != 0) return formBounds != null && formBounds.contains(mouseX, mouseY) && editor != null && editor.mouseClicked(mouseX, mouseY, button);
@@ -312,6 +318,7 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
     @Override public boolean keyTyped(char c, int key) {
         if (navigationActions.keyTyped(c, key)) return true;
         if (sequencePicker != null && sequencePicker.isOpen()) return sequencePicker.keyTyped(c, key);
+        if (restartPicker != null && restartPicker.isOpen()) return restartPicker.keyTyped(c, key);
         if (searchField != null && searchField.textboxKeyTyped(c, key)) { navigationScroll = 0; return true; }
         if (key == Keyboard.KEY_F && (Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL))) {
             searchField.setFocused(true); return true;
@@ -322,6 +329,9 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
     @Override public boolean mouseClickMove(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
         if (sequencePicker != null && sequencePicker.isOpen()) {
             return sequencePicker.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
+        }
+        if (restartPicker != null && restartPicker.isOpen()) {
+            return restartPicker.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
         }
         if (clickedMouseButton == 0 && navigationScrollbar.isDragging()) {
             navigationScrollbar.applyDrag(mouseX, mouseY);
@@ -341,6 +351,9 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
     @Override public boolean mouseReleased(int mouseX, int mouseY, int state) {
         if (sequencePicker != null && sequencePicker.isOpen()) {
             return sequencePicker.mouseReleased(mouseX, mouseY, state);
+        }
+        if (restartPicker != null && restartPicker.isOpen()) {
+            return restartPicker.mouseReleased(mouseX, mouseY, state);
         }
         if (state == 0 && (navigationScrollbar.isDragging())) {
             navigationScrollbar.endDrag();
@@ -362,11 +375,13 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
         }
 
         if (sequencePicker != null && sequencePicker.isOpen()) return sequencePicker.handleMouseWheel(wheel, mouseX, mouseY);
+        if (restartPicker != null && restartPicker.isOpen()) return restartPicker.handleMouseWheel(wheel, mouseX, mouseY);
         return editor != null && editor.handleMouseWheel(wheel, mouseX, mouseY);
     }
     @Override public boolean handleEscape() {
         if (navigationActions.isOpen()) { navigationActions.close(); return true; }
         if (sequencePicker != null && sequencePicker.isOpen()) return sequencePicker.handleEscape();
+        if (restartPicker != null && restartPicker.isOpen()) return restartPicker.handleEscape();
         if (draggingNavigationDivider) {
             draggingNavigationDivider = false;
             return true;
@@ -374,9 +389,9 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
         return editor != null && editor.handleEscape();
     }
     @Override public boolean isTextInputFocused() {
-        if (navigationActions.isOpen()) return true; return searchField != null && searchField.isFocused() || sequencePicker != null && sequencePicker.isTextInputFocused() || editor != null && editor.isTextInputFocused(); }
+        if (navigationActions.isOpen()) return true; return searchField != null && searchField.isFocused() || sequencePicker != null && sequencePicker.isTextInputFocused() || restartPicker != null && restartPicker.isTextInputFocused() || editor != null && editor.isTextInputFocused(); }
     @Override public boolean containsContent(int x, int y) { return bounds != null && bounds.contains(x, y); }
-    @Override public String getHoveredTooltip(int x, int y) { return sequencePicker != null && sequencePicker.isOpen() ? "" : editor == null ? "" : editor.getHoveredTooltip(x, y); }
+    @Override public String getHoveredTooltip(int x, int y) { return sequencePicker != null && sequencePicker.isOpen() || restartPicker != null && restartPicker.isOpen() ? "" : editor == null ? "" : editor.getHoveredTooltip(x, y); }
     @Override public boolean isDirty() { return state.isDirty() || editor != null && editor.isDirty(); }
 
     @Override public void save() {
@@ -435,9 +450,9 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
                 .custom(new AutoFollowCollectionPanel(AutoFollowCollectionPanel.Mode.NAMES, ModernFormI18n.tr("gui.modern.escape.u070"), list(rule.nameBlacklist)::get, list(rule.nameBlacklist)::set))
                 .section("gui.modern.escape.u005", "gui.modern.escape.u071")
                 .toggle("gui.modern.escape.u072", "gui.modern.escape.u073", bool(() -> rule.enableAreaBlacklist, value -> rule.enableAreaBlacklist = value))
-                .text("gui.modern.escape.u074", "gui.modern.escape.u075", areas(rule), "gui.modern.escape.u076", 1024)
-                .action("gui.modern.escape.u089", "gui.modern.escape.u090", "gui.modern.escape.u091",
-                        ModernFormSettingsTab.ActionStyle.PRIMARY, tab -> startAreaPicker())
+                .custom(new AutoEscapeAreaPanel(ModernFormI18n.tr("gui.modern.escape.u074"),
+                        () -> joinAreas(rule.areaBlacklist), value -> rule.areaBlacklist = parseAreas(value),
+                        this::startAreaPicker))
                 .section("gui.modern.escape.u006", "gui.modern.escape.u077")
                 .action("gui.modern.escape.u006", "gui.modern.escape.u078",
                         sequenceButtonLabel(rule.escapeSequenceName), ModernFormSettingsTab.ActionStyle.SECONDARY,
@@ -445,6 +460,9 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
                 .section("gui.modern.escape.u007", "gui.modern.escape.u079")
                 .toggle("gui.modern.escape.u080", "gui.modern.escape.u081",
                         bool(() -> rule.restartEnabled, value -> rule.restartEnabled = value))
+                .action("重启序列", "选择已有序列作为重启时执行的序列，留空则重启当前序列。",
+                        restartButtonLabel(rule.restartSequenceName), ModernFormSettingsTab.ActionStyle.SECONDARY,
+                        tab -> openRestartSequenceSelector())
                 .integer("gui.modern.escape.u082", "gui.modern.escape.u083", integer(() -> rule.restartDelaySeconds, value -> rule.restartDelaySeconds = value), 0, 3600)
                 .toggle("gui.modern.escape.u084", "gui.modern.escape.u085",
                         bool(() -> rule.ignoreTargetsUntilRestartComplete, value -> rule.ignoreTargetsUntilRestartComplete = value));
@@ -458,7 +476,7 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
             public AutoEscapeRule copy(AutoEscapeRule value) { return value == null ? null : value.copy(); }
             public void restore(AutoEscapeRule value) { if (value != null) copyRule(value, rule); }
             public void save() {
-                rule.restartSequenceName = rule.escapeSequenceName;
+                // 逃离序列与重启序列独立：不再强制同步；重启序列留空时回退为重启当前(逃离)序列。
                 rule.normalize();
             }
             public void restoreDefaults() { copyRule(new AutoEscapeRule(), rule); }
@@ -480,37 +498,57 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
         }
         final AutoEscapeRule selected = editorRule;
         final int dimension = minecraft.player.dimension;
-        AutoFollowAreaPicker.startRadius((center, radius) -> {
+        AutoFollowAreaPicker.start((first, second) -> {
+            if (first == null || second == null) return;
             if (selected.areaBlacklist == null) {
                 selected.areaBlacklist = new ArrayList<>();
             }
-            selected.areaBlacklist.add(AutoEscapeRule.fromBlockRadius(dimension, center.getX(), center.getZ(), radius));
+            selected.areaBlacklist.add(AutoEscapeRule.fromArea(dimension,
+                    first.getX(), first.getZ(), second.getX(), second.getZ()));
             selected.enableAreaBlacklist = true;
             if (editorRule == selected && editor instanceof ModernFormSettingsTab) {
                 ((ModernFormSettingsTab<?>) editor).refreshValues();
             }
             status = "gui.modern.escape.u092";
-        }, I18n.format("gui.point_picker.start.radius.escape"));
+        });
     }
 
     private void openSequenceSelector() {
         sequencePicker.open();
     }
 
+    private void openRestartSequenceSelector() {
+        if (restartPicker == null) return;
+        if (editorRule != null) restartPicker.open(editorRule.restartSequenceName);
+        else restartPicker.open();
+    }
+
     private static String sequenceButtonLabel(String value) {
         return safe(value).trim().isEmpty() ? "gui.modern.escape.u088" : safe(value).trim();
+    }
+
+    private static String restartButtonLabel(String value) {
+        return safe(value).trim().isEmpty() ? "当前序列（默认）" : safe(value).trim();
     }
 
     private void selectSequence(String name) {
         if (editorRule == null) return;
         String selected = name == null ? "" : name;
         editorRule.escapeSequenceName = selected;
-        editorRule.restartSequenceName = selected;
 
         rebuildEditor();
         if (editor instanceof ModernFormSettingsTab) {
             ((ModernFormSettingsTab<?>) editor).refreshValues();
 
+        }
+    }
+
+    private void selectRestartSequence(String name) {
+        if (editorRule == null) return;
+        editorRule.restartSequenceName = name == null ? "" : name;
+        rebuildEditor();
+        if (editor instanceof ModernFormSettingsTab) {
+            ((ModernFormSettingsTab<?>) editor).refreshValues();
         }
     }
 
@@ -561,12 +599,44 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
     private static ModernFormSettingsTab.IntValue integer(final IntGet g, final IntSet s) { return new ModernFormSettingsTab.IntValue() { public int get(){return g.get();} public void set(int v){s.set(v);} }; }
     private static ModernFormSettingsTab.ChoiceValue<String> choice(final StringGet g, final StringSet s) { return new ModernFormSettingsTab.ChoiceValue<String>() { public String get(){return g.get();} public void set(String v){s.set(v);} }; }
     private static ModernFormSettingsTab.TextValue list(final List<String> values) { return text(() -> join(values), value -> { values.clear(); values.addAll(split(value, ",")); }); }
-    private static ModernFormSettingsTab.TextValue areas(final AutoEscapeRule rule) { return text(() -> joinAreas(rule.areaBlacklist), value -> rule.areaBlacklist = parseAreas(value)); }
     private static void toggleToken(List<String> values, String token, boolean enabled) { if (enabled) { if (!values.contains(token)) values.add(token); } else values.remove(token); }
     private static String join(List<String> values) { return values == null ? "" : String.join(", ", values); }
     private static List<String> split(String value, String separator) { List<String> out = new ArrayList<>(); for (String item : safe(value).split(separator)) if (!item.trim().isEmpty()) out.add(item.trim()); return out; }
-    private static String joinAreas(List<AutoEscapeRule.AreaBlacklistEntry> entries) { if (entries == null) return ""; List<String> out = new ArrayList<>(); for (AutoEscapeRule.AreaBlacklistEntry e : entries) if (e != null) out.add(e.areaKey + "|" + e.chunkRadius); return String.join("; ", out); }
-    private static List<AutoEscapeRule.AreaBlacklistEntry> parseAreas(String value) { List<AutoEscapeRule.AreaBlacklistEntry> out = new ArrayList<>(); for (String raw : split(value, ";")) { String[] p = raw.split("\\|", 2); int radius = 0; if (p.length > 1) try { radius = Integer.parseInt(p[1].trim()); } catch (NumberFormatException ignored) { } out.add(new AutoEscapeRule.AreaBlacklistEntry(p[0], radius)); } return out; }
+    private static String joinAreas(List<AutoEscapeRule.AreaBlacklistEntry> entries) {
+        if (entries == null) return "";
+        List<String> out = new ArrayList<>();
+        for (AutoEscapeRule.AreaBlacklistEntry e : entries) {
+            if (e == null) continue;
+            if (e.rect) out.add(e.dimension + ":" + e.x1 + "," + e.z1 + "," + e.x2 + "," + e.z2);
+            else if (!e.areaKey.isEmpty()) out.add(e.areaKey + "|" + e.chunkRadius);
+        }
+        return String.join("; ", out);
+    }
+    private static List<AutoEscapeRule.AreaBlacklistEntry> parseAreas(String value) {
+        List<AutoEscapeRule.AreaBlacklistEntry> out = new ArrayList<>();
+        for (String raw : split(value, ";")) {
+            int[] rect = parseRectToken(raw);
+            if (rect != null) { out.add(new AutoEscapeRule.AreaBlacklistEntry(rect[0], rect[1], rect[2], rect[3], rect[4])); continue; }
+            String[] p = raw.split("\\|", 2);
+            int radius = 0;
+            if (p.length > 1) try { radius = Integer.parseInt(p[1].trim()); } catch (NumberFormatException ignored) { }
+            out.add(new AutoEscapeRule.AreaBlacklistEntry(p[0], radius));
+        }
+        return out;
+    }
+    /** Parses "dim:x1,z1,x2,z2" → [dim, x1, z1, x2, z2] or null. */
+    private static int[] parseRectToken(String raw) {
+        String v = raw == null ? "" : raw.trim();
+        int colon = v.indexOf(':');
+        if (colon <= 0) return null;
+        String[] parts = v.substring(colon + 1).split(",");
+        if (parts.length != 4) return null;
+        try {
+            return new int[] { Integer.parseInt(v.substring(0, colon).trim()),
+                    Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()),
+                    Integer.parseInt(parts[2].trim()), Integer.parseInt(parts[3].trim()) };
+        } catch (NumberFormatException invalid) { return null; }
+    }
     private static List<AutoEscapeRule> copyRules(List<AutoEscapeRule> rules) { List<AutoEscapeRule> out = new ArrayList<>(); for (AutoEscapeRule r : rules) out.add(r.copy()); return out; }
     private static void copyRule(AutoEscapeRule source, AutoEscapeRule target) {
         AutoEscapeRule copy = source.copy();

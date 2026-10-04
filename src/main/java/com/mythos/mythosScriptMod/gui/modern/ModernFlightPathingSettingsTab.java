@@ -241,6 +241,9 @@ public final class ModernFlightPathingSettingsTab {
         private void apply() {
             Settings settings = settings();
             settings.allowFlightPathing.value = allowFlightPathing;
+            if (allowFlightPathing) {
+                settings.allowBlinkPathing.value = false;
+            }
             settings.flightDirectLine.value = flightDirectLine;
             settings.flightClearance.value = flightClearance;
             settings.flightCorridorWidth.value = flightCorridorWidth;
@@ -271,7 +274,12 @@ public final class ModernFlightPathingSettingsTab {
 
         private static void setBoolean(String key, boolean value) {
             Settings settings = settings();
-            if ("allowFlightPathing".equals(key)) settings.allowFlightPathing.value = value;
+            if ("allowFlightPathing".equals(key)) {
+                settings.allowFlightPathing.value = value;
+                if (value) {
+                    settings.allowBlinkPathing.value = false;
+                }
+            }
             else if ("flightDirectLine".equals(key)) settings.flightDirectLine.value = value;
             else if ("flightEntityCorridor".equals(key)) settings.flightEntityCorridor.value = value;
             else if ("flightAutoDescend".equals(key)) settings.flightAutoDescend.value = value;

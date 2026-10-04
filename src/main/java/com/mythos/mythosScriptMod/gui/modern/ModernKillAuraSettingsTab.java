@@ -285,6 +285,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     private final Map<RuleInputKey, String> localizedRuleInputSources = new EnumMap<>(RuleInputKey.class);
     private final Map<RuleInputKey, ModernMainLayout.Rect> ruleInputBounds = new EnumMap<>(RuleInputKey.class);
     private final List<String> nearbyNames = new ArrayList<>();
+    private final List<String> nearbyNameTypes = new ArrayList<>();
     private final List<KillAuraPreset> presetCards = new ArrayList<>();
     private final List<HuntScoreDebugEntry> huntScoreEntries = new ArrayList<>();
 
@@ -431,6 +432,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         targets.fields.add(toggle("targetHostile", "gui.modern.killaura.u084", "gui.modern.killaura.u085"));
         targets.fields.add(toggle("targetPassive", "gui.modern.killaura.u086", "gui.modern.killaura.u087"));
         targets.fields.add(toggle("targetPlayers", "gui.modern.killaura.u088", "gui.modern.killaura.u089"));
+        targets.fields.add(toggle("targetNpcs", "gui.modern.killaura.u254", "gui.modern.killaura.u255"));
         targets.fields.add(toggle("targetEnderCrystal", "gui.modern.killaura.u090", "gui.modern.killaura.u091"));
         targets.fields.add(toggle("ignoreInvisible", "gui.modern.killaura.u092", "gui.modern.killaura.u093"));
         targets.fields.add(integer("noDamageAttackLimit", "gui.modern.killaura.u094", "gui.modern.killaura.u095", 0,
@@ -1874,12 +1876,21 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                     selected ? ModernUiRenderer.SELECTED_SURFACE
                             : hovered ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SURFACE,
                     selected ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
+            String typeLabel = kind == NameListKind.NEARBY && i < nearbyNameTypes.size()
+                    ? nearbyNameTypes.get(i) : "";
+            int typeWidth = typeLabel.isEmpty() ? 0 : fontRenderer.getStringWidth(typeLabel) + 10;
             int actionWidth = kind == NameListKind.WHITELIST ? 58 : kind == NameListKind.NEARBY ? 0 : 21;
-            int textRight = row.right() - actionWidth - 4;
+            int textRight = row.right() - actionWidth - 4 - typeWidth;
             ModernUiRenderer.drawText(fontRenderer, (i + 1) + ". " + value, row.x + 7,
                     row.y + (row.height - fontRenderer.FONT_HEIGHT) / 2,
                     selected ? ModernUiRenderer.SELECTED_TEXT : ModernUiRenderer.TEXT,
                     Math.max(24, textRight - row.x - 10));
+            if (!typeLabel.isEmpty()) {
+                int labelWidth = fontRenderer.getStringWidth(typeLabel);
+                ModernUiRenderer.drawText(fontRenderer, typeLabel, row.right() - actionWidth - 4 - labelWidth,
+                        row.y + (row.height - fontRenderer.FONT_HEIGHT) / 2, ModernUiRenderer.MUTED_TEXT,
+                        labelWidth + 4);
+            }
             ModernMainLayout.Rect remove = kind == NameListKind.NEARBY ? null
                     : new ModernMainLayout.Rect(row.right() - 18, row.y + 3, 15, 19);
             ModernMainLayout.Rect moveUp = null;
@@ -2649,6 +2660,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         KillAuraHandler.targetHostile = true;
         KillAuraHandler.targetPassive = false;
         KillAuraHandler.targetPlayers = false;
+        KillAuraHandler.targetNpcs = false;
         KillAuraHandler.targetEnderCrystal = false;
         KillAuraHandler.onlyWeapon = false;
         KillAuraHandler.aimOnlyMode = false;
@@ -2859,7 +2871,11 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
     private void refreshNearbyNames() {
         nearbyNames.clear();
-        nearbyNames.addAll(KillAuraHandler.getNearbyEntityNames(KillAuraHandler.nearbyEntityScanRange));
+        nearbyNameTypes.clear();
+        java.util.LinkedHashMap<String, String> map = KillAuraHandler
+                .getNearbyEntityNameTypeMap(KillAuraHandler.nearbyEntityScanRange);
+        nearbyNames.addAll(map.keySet());
+        nearbyNameTypes.addAll(map.values());
     }
 
     private void refreshHuntScoreEntries() {
@@ -3216,7 +3232,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
     private void enforceTargetSelection() {
         if (!KillAuraHandler.targetHostile && !KillAuraHandler.targetPassive && !KillAuraHandler.targetPlayers
-                && !KillAuraHandler.targetEnderCrystal) {
+                && !KillAuraHandler.targetNpcs && !KillAuraHandler.targetEnderCrystal) {
             KillAuraHandler.targetHostile = true;
         }
     }
@@ -3273,6 +3289,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             value.targetHostile = KillAuraHandler.targetHostile;
             value.targetPassive = KillAuraHandler.targetPassive;
             value.targetPlayers = KillAuraHandler.targetPlayers;
+            value.targetNpcs = KillAuraHandler.targetNpcs;
             value.targetEnderCrystal = KillAuraHandler.targetEnderCrystal;
             value.onlyWeapon = KillAuraHandler.onlyWeapon;
             value.aimOnlyMode = KillAuraHandler.aimOnlyMode;
@@ -3343,6 +3360,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             KillAuraHandler.targetHostile = value.targetHostile;
             KillAuraHandler.targetPassive = value.targetPassive;
             KillAuraHandler.targetPlayers = value.targetPlayers;
+            KillAuraHandler.targetNpcs = value.targetNpcs;
             KillAuraHandler.targetEnderCrystal = value.targetEnderCrystal;
             KillAuraHandler.onlyWeapon = value.onlyWeapon;
             KillAuraHandler.aimOnlyMode = value.aimOnlyMode;
@@ -3404,6 +3422,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             if ("targetHostile".equals(key)) return KillAuraHandler.targetHostile;
             if ("targetPassive".equals(key)) return KillAuraHandler.targetPassive;
             if ("targetPlayers".equals(key)) return KillAuraHandler.targetPlayers;
+            if ("targetNpcs".equals(key)) return KillAuraHandler.targetNpcs;
             if ("targetEnderCrystal".equals(key)) return KillAuraHandler.targetEnderCrystal;
             if ("onlyWeapon".equals(key)) return KillAuraHandler.onlyWeapon;
             if ("aimOnlyMode".equals(key)) return KillAuraHandler.aimOnlyMode;
@@ -3441,6 +3460,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             else if ("targetHostile".equals(key)) KillAuraHandler.targetHostile = value;
             else if ("targetPassive".equals(key)) KillAuraHandler.targetPassive = value;
             else if ("targetPlayers".equals(key)) KillAuraHandler.targetPlayers = value;
+            else if ("targetNpcs".equals(key)) KillAuraHandler.targetNpcs = value;
             else if ("targetEnderCrystal".equals(key)) KillAuraHandler.targetEnderCrystal = value;
             else if ("onlyWeapon".equals(key)) KillAuraHandler.onlyWeapon = value;
             else if ("aimOnlyMode".equals(key)) {

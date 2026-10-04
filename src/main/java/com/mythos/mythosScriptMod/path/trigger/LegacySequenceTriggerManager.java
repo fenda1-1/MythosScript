@@ -171,6 +171,18 @@ public final class LegacySequenceTriggerManager {
         }
     }
 
+    public static int getMinFilledSlotsThreshold() {
+        int threshold = Integer.MAX_VALUE;
+        for (TriggerRule rule : RULES) {
+            if (rule == null || !rule.enabled || !TRIGGER_INVENTORY_FULL.equals(rule.triggerType)) continue;
+            int configured = rule.params != null ? getIntParam(rule.params, "minFilledSlots", 0) : 0;
+            // 0 means "only when fully full" -> treat as maxInt so it never lowers the threshold
+            if (configured <= 0) continue;
+            if (configured < threshold) threshold = configured;
+        }
+        return threshold == Integer.MAX_VALUE ? -1 : threshold;
+    }
+
     public static boolean hasRulesForTrigger(String triggerType) {
         initialize();
         String normalizedType = normalizeTriggerType(triggerType);
@@ -596,6 +608,10 @@ public final class LegacySequenceTriggerManager {
             typeLabel = "玩家";
             actual = getStringValue(eventData, "afterPlayer");
             count = getLongParam(eventData, "afterPlayerCount", 0L);
+        } else if ("npc".equalsIgnoreCase(entityType)) {
+            typeLabel = "NPC";
+            actual = getStringValue(eventData, "afterNpc");
+            count = getLongParam(eventData, "afterNpcCount", 0L);
         } else if ("hostile".equalsIgnoreCase(entityType)
                 || "monster".equalsIgnoreCase(entityType)
                 || "mob".equalsIgnoreCase(entityType)
@@ -722,14 +738,18 @@ public final class LegacySequenceTriggerManager {
     private static RuleEvaluation evaluateInventoryFull(JsonObject params, JsonObject eventData, String prefix) {
         int minFilledSlots = Math.max(0, getIntParam(params, "minFilledSlots", 0));
         long filledSlots = getLongParam(eventData, "filledSlots", 0L);
-        if (filledSlots < minFilledSlots) {
-            return RuleEvaluation.missed(prefix + "背包占用槽位不足: 需要>=" + minFilledSlots + "，实际=" + filledSlots,
-                    "inventory_full_miss|" + minFilledSlots + "|" + filledSlots);
-        }
         long totalSlots = getLongParam(eventData, "totalSlots", 0L);
+        // minFilledSlots <= 0 means "only when fully full"
+        long effectiveMin = minFilledSlots > 0 ? minFilledSlots : totalSlots;
+        // Level check: while filled >= effectiveMin this matches; repeat cadence is
+        // governed by the rule's cooldownMs in triggerEvent.
+        if (filledSlots < effectiveMin) {
+            return RuleEvaluation.missed(prefix + "背包占用槽位不足: 需要>=" + effectiveMin + "，实际=" + filledSlots,
+                    "inventory_full_miss|" + effectiveMin + "|" + filledSlots);
+        }
         return RuleEvaluation.matched(prefix + "背包已满条件命中: 已占 " + filledSlots
                 + (totalSlots > 0L ? ("/" + totalSlots) : "") + " 格。",
-                "inventory_full_match|" + filledSlots + "|" + totalSlots);
+                "inventory_full_match|" + effectiveMin + "|" + filledSlots + "|" + totalSlots);
     }
 
     private static RuleEvaluation evaluateTextParam(JsonObject params, String paramKey, JsonObject eventData,
@@ -903,7 +923,9 @@ public final class LegacySequenceTriggerManager {
     private static boolean matchesInventoryFull(JsonObject params, JsonObject eventData) {
         int minFilledSlots = Math.max(0, getIntParam(params, "minFilledSlots", 0));
         long filledSlots = getLongParam(eventData, "filledSlots", 0L);
-        return filledSlots >= minFilledSlots;
+        long totalSlots = getLongParam(eventData, "totalSlots", 0L);
+        long effectiveMin = minFilledSlots > 0 ? minFilledSlots : totalSlots;
+        return filledSlots >= effectiveMin;
     }
 
     private static boolean matchesTextParam(JsonObject params, String paramKey, JsonObject eventData, String dataKey) {

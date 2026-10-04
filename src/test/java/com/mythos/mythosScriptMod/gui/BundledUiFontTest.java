@@ -11,7 +11,7 @@ public class BundledUiFontTest {
     public void bundledFontLoadsAndRasterizesChineseWithoutSystemFontLookup() throws Exception {
         Font font = BundledUiFont.load().deriveFont(24f);
         assertEquals("Noto Sans CJK SC", font.getFamily(java.util.Locale.ROOT));
-        assertEquals(-1, font.canDisplayUpTo("控制中心路径动作参数搜索默认分类 战斗移动 玩家配置 繁體中文 Default 1.0.72"));
+        assertEquals(-1, font.canDisplayUpTo("控制中心路径动作参数搜索默认分类 战斗移动 玩家配置 繁體中文 Default 1.0.71"));
         BufferedImage image = new BufferedImage(128, 48, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = image.createGraphics();
         try {

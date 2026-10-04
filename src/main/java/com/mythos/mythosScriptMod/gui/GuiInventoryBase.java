@@ -1700,6 +1700,9 @@ abstract class GuiInventoryBase {
         setItems.add("baritone_flight_pathing");
         setItemNames.add(I18n.format("gui.inventory.item.baritone_flight_pathing.name"));
         itemTooltips.put("baritone_flight_pathing", I18n.format("gui.inventory.item.baritone_flight_pathing.tooltip"));
+        setItems.add("baritone_blink_pathing");
+        setItemNames.add(I18n.format("gui.inventory.item.baritone_blink_pathing.name"));
+        itemTooltips.put("baritone_blink_pathing", I18n.format("gui.inventory.item.baritone_blink_pathing.tooltip"));
         setItems.add("followconfig");
         setItemNames.add(I18n.format("gui.inventory.item.autofollow.name"));
         itemTooltips.put("followconfig", I18n.format("gui.inventory.item.autofollow.tooltip"));

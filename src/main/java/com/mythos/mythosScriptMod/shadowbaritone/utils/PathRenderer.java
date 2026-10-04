@@ -123,6 +123,15 @@ public final class PathRenderer implements IRenderer {
             if (current.getPath() instanceof FlightDirectPath) {
                 drawFlightCorridor((FlightDirectPath) current.getPath(), 0, settings.colorCurrentPath.value,
                         settings.fadePath.value, 10, 20, ctx.player().getPositionVector());
+            } else if (settings.allowBlinkPathing.value) {
+                // Blink execution follows axis-aligned legs only — render the
+                // same rectilinear route instead of the planner's diagonal
+                // node polyline so what you see is what the teleports do.
+                List<Vec3d> route = PathExecutor.blinkRoute(current.getPath().positions(),
+                        Math.max(0, current.getPosition() - 1),
+                        ctx.player().getPositionVector(), ctx.player());
+                drawPolyline(route, settings.colorCurrentPath.value, 0.6F,
+                        settings.pathRenderLineWidthPixels.value, settings.renderPathIgnoreDepth.value);
             } else {
                 drawPath(current.getPath(), renderBegin, settings.colorCurrentPath.value,
                         settings.fadePath.value, 10, 20);

@@ -17,6 +17,7 @@
 
 package com.mythos.mythosScriptMod.shadowbaritone.pathing.movement;
 
+import com.mythos.mythosScriptMod.config.BlinkPathingConfig;
 import com.mythos.mythosScriptMod.shadowbaritone.Baritone;
 import com.mythos.mythosScriptMod.shadowbaritone.api.IBaritone;
 import com.mythos.mythosScriptMod.shadowbaritone.api.pathing.goals.Goal;
@@ -127,22 +128,24 @@ public class CalculationContext {
         this.placeBlockCost=Baritone.settings().blockPlacementPenalty.value;
         this.allowBreak=false;
         this.allowBreakAnyway=java.util.Collections.emptyList();
-        this.parkourMode=true;
+        // Mirror the live constructor so a test can flip settings().parkourMode
+        // and exercise the normal Baritone planner against a captured scene.
+        this.parkourMode=Baritone.settings().parkourMode.value;
         this.parkourProfile=ParkourProfile.orDefault(Baritone.settings().parkourProfile.value);
         this.parkourDebugRender=false;
-        this.allowParkour=true;
-        this.allowParkourPlace=false;
+        this.allowParkour=Baritone.settings().allowParkour.value || this.parkourMode;
+        this.allowParkourPlace=!this.parkourMode && Baritone.settings().allowParkourPlace.value;
         this.allowJumpAt256=Baritone.settings().allowJumpAt256.value;
         this.allowParkourAscend=Baritone.settings().allowParkourAscend.value;
         this.assumeWalkOnWater=Baritone.settings().assumeWalkOnWater.value;
         this.frostWalker=0;
-        this.allowDiagonalDescend=true;
-        this.allowDiagonalAscend=true;
+        this.allowDiagonalDescend=Baritone.settings().allowDiagonalDescend.value || this.parkourMode;
+        this.allowDiagonalAscend=Baritone.settings().allowDiagonalAscend.value || this.parkourMode;
         this.allowDownward=Baritone.settings().allowDownward.value;
         this.preferredFlightY=0;
-        this.routeHeightRange=Baritone.settings().routeHeightRange.value;
+        this.routeHeightRange=resolveRouteHeightRange();
         this.minFallHeight=3;
-        this.maxFallHeightNoWater=Baritone.settings().maxFallHeightNoWater.value;
+        this.maxFallHeightNoWater=resolveMaxFallHeightNoWater(this.routeHeightRange);
         this.maxFallHeightBucket=Baritone.settings().maxFallHeightBucket.value;
         this.waterWalkSpeed=ActionCosts.WALK_ONE_IN_WATER_COST;
         this.breakBlockAdditionalCost=Baritone.settings().blockBreakAdditionalPenalty.value;
@@ -212,9 +215,9 @@ public class CalculationContext {
         this.allowDiagonalAscend = Baritone.settings().allowDiagonalAscend.value || this.parkourMode;
         this.allowDownward = Baritone.settings().allowDownward.value;
         this.preferredFlightY = MathHelper.floor(player.posY + 0.1251D);
-        this.routeHeightRange = Math.max(1, Math.min(100, Baritone.settings().routeHeightRange.value));
+        this.routeHeightRange = resolveRouteHeightRange();
         this.minFallHeight = 3; // Minimum fall height used by MovementFall
-        this.maxFallHeightNoWater = Baritone.settings().maxFallHeightNoWater.value;
+        this.maxFallHeightNoWater = resolveMaxFallHeightNoWater(this.routeHeightRange);
         this.maxFallHeightBucket = Baritone.settings().maxFallHeightBucket.value;
         int depth = EnchantmentHelper.getDepthStriderModifier(player);
         if (depth > 3) {
@@ -233,6 +236,27 @@ public class CalculationContext {
         // then you get a wildly inconsistent path that isn't optimal for either
         // scenario.
         this.worldBorder = new BetterWorldBorder(world.getWorldBorder());
+    }
+
+    /** Blink pathing uses its own route height range so teleport routes can climb
+     *  further than the walking planner default. */
+    private static int resolveRouteHeightRange() {
+        int configured = Baritone.settings().allowBlinkPathing.value
+                ? BlinkPathingConfig.routeHeightRange
+                : Baritone.settings().routeHeightRange.value;
+        return Math.max(1, Math.min(100, configured));
+    }
+
+    /** Blink teleports take no fall damage (fallDistance is reset every hop), so
+     *  the walking fall limit would asymmetrically block descents that ascend
+     *  allowed: climbing 5 works via routeHeightRange, dropping 5 found no path.
+     *  While blink pathing, allow falls up to the same route height range. */
+    private static int resolveMaxFallHeightNoWater(int routeHeightRange) {
+        int configured = Baritone.settings().maxFallHeightNoWater.value;
+        if (Baritone.settings().allowBlinkPathing.value) {
+            configured = Math.max(configured, routeHeightRange);
+        }
+        return configured;
     }
 
     public final IBaritone getBaritone() {

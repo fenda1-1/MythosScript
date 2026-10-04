@@ -128,6 +128,16 @@ public final class GoalTargetNormalizer {
             return goal;
         }
         if (!MovementHelper.canWalkOn(bsi, pos.getX(), pos.getY(), pos.getZ(), targetState)) {
+            // A walk-through cell above a fractional surface (low snow,
+            // bottom slab, carpet…) is mid-air: the standing pose lives in
+            // the surface block's own cell. Anchor the goal there instead of
+            // leaving the marker floating one block above the real target.
+            if (pos.getY() > 0
+                    && MovementHelper.canWalkThrough(bsi, pos.getX(), pos.getY(), pos.getZ(), targetState)
+                    && !MovementHelper.canWalkOn(bsi, pos.getX(), pos.getY() - 1, pos.getZ())
+                    && MovementHelper.walkingSurfaceY(bsi, pos.getX(), pos.getY(), pos.getZ()) < pos.getY()) {
+                return new GoalBlock(pos.down());
+            }
             return goal;
         }
         if (!MovementHelper.canWalkThrough(bsi, pos.getX(), pos.getY() + 1, pos.getZ())

@@ -64,8 +64,6 @@ public final class MoveChestEditor {
     private ModernMainLayout.Rect directionBounds;
     private ModernMainLayout.Rect arrowBounds;
     private ModernMainLayout.Rect clickBounds;
-    private ModernMainLayout.Rect delayMinus;
-    private ModernMainLayout.Rect delayPlus;
     private ModernMainLayout.Rect applyLimitsBounds;
     private ModernMainLayout.Rect sizePopupBounds;
     private ModernMainLayout.Rect sizeConfirmBounds;
@@ -131,7 +129,7 @@ public final class MoveChestEditor {
         String clickType = ActionEditorJson.readString(params, "clickType", "PICKUP");
         int button = ActionEditorJson.readInt(params, "button", 0, 0, 8);
         ClickSemantics.Option click = ClickSemantics.resolve(clickType, button);
-        int delay = ActionEditorJson.readInt(params, "delayTicks", 2, 0, 400);
+        int filterCount = InventoryItemFilterExpressionEngine.readExpressions(params).size();
         int inventoryRows = ActionEditorJson.readInt(params, "inventoryRows", 4, 1, 12);
         int inventoryCols = ActionEditorJson.readInt(params, "inventoryCols", 9, 1, 18);
         int chestRows = ActionEditorJson.readInt(params, "chestRows", 6, 1, 12);
@@ -156,16 +154,8 @@ public final class MoveChestEditor {
                 ? I18n.format("gui.path.action_editor.option.move_chest_direction.inventory_to_chest")
                 : I18n.format("gui.path.action_editor.option.move_chest_direction.chest_to_inventory");
         drawChip(font, toolbarDirection, directionLabel, enabled, mouseX, mouseY, false);
-        delayMinus = new ModernMainLayout.Rect(toolbarDirection.right() + 8, toolbarY, 18, 20);
-        ModernMainLayout.Rect delayValue = new ModernMainLayout.Rect(delayMinus.right() + 2, toolbarY, 48, 20);
-        delayPlus = new ModernMainLayout.Rect(delayValue.right() + 2, toolbarY, 18, 20);
-        drawChip(font, delayMinus, "-", enabled, mouseX, mouseY, false);
-        drawChip(font, delayValue, I18n.format("gui.path.action_editor.move_chest.delay", Integer.valueOf(delay)),
-                false, mouseX, mouseY, false);
-        drawChip(font, delayPlus, "+", enabled, mouseX, mouseY, false);
-        int filterCount = InventoryItemFilterExpressionEngine.readExpressions(params).size();
         ModernUiRenderer.drawText(font, I18n.format("gui.path.action_editor.move_chest.filters",
-                Integer.valueOf(filterCount)), delayPlus.right() + 8, toolbarY + 6, ModernUiRenderer.MUTED_TEXT, 90);
+                Integer.valueOf(filterCount)), toolbarDirection.right() + 8, toolbarY + 6, ModernUiRenderer.MUTED_TEXT, 90);
 
         int inventoryHeight = SlotCanvasWidget.height(inventoryRows, row.width);
         ModernMainLayout.Rect inventoryBounds = new ModernMainLayout.Rect(row.x + 8, toolbarY + 28, row.width - 16,
@@ -218,10 +208,10 @@ public final class MoveChestEditor {
         ModernMainLayout.Rect putBounds = new ModernMainLayout.Rect(putLabel.right() + 4, strategyY, 58, 20);
         applyLimitsBounds = new ModernMainLayout.Rect(putBounds.right() + 8, strategyY, 52, 20);
         boolean limitsEnabled = enabled && click.supportsSlotLimits;
-        drawFieldFrame(font, takeBounds, takeField, limitsEnabled, mouseX, mouseY);
+        drawFieldFrame(font, takeBounds, takeField, "move.chest.maxTake", limitsEnabled, mouseX, mouseY);
         ModernUiRenderer.drawText(font, I18n.format("gui.path.action_editor.move_chest.max_put"), putLabel.x,
                 strategyY + 6, ModernUiRenderer.SUBTLE_TEXT, putLabel.width);
-        drawFieldFrame(font, putBounds, putField, limitsEnabled, mouseX, mouseY);
+        drawFieldFrame(font, putBounds, putField, "move.chest.maxPut", limitsEnabled, mouseX, mouseY);
         drawChip(font, applyLimitsBounds, I18n.format("gui.path.action_editor.move_chest.apply_limits"),
                 limitsEnabled, mouseX, mouseY, false);
         if (!click.supportsSlotLimits) {
@@ -281,14 +271,6 @@ public final class MoveChestEditor {
             if ((directionBounds != null && directionBounds.contains(mouseX, mouseY))
                     || (arrowBounds != null && arrowBounds.contains(mouseX, mouseY))) {
                 toggleDirection();
-                return true;
-            }
-            if (delayMinus != null && delayMinus.contains(mouseX, mouseY)) {
-                nudgeDelay(-1);
-                return true;
-            }
-            if (delayPlus != null && delayPlus.contains(mouseX, mouseY)) {
-                nudgeDelay(1);
                 return true;
             }
             if (applyLimitsBounds != null && applyLimitsBounds.contains(mouseX, mouseY)) {
@@ -644,16 +626,6 @@ public final class MoveChestEditor {
         host.markDirty();
     }
 
-    private void nudgeDelay(int delta) {
-        if (params == null || host == null || !host.canEdit()) {
-            return;
-        }
-        host.pushHistory("edit-move-chest-delay");
-        int delay = ActionEditorJson.readInt(params, "delayTicks", 2, 0, 400) + delta;
-        params.addProperty("delayTicks", ActionEditorJson.clamp(delay, 0, 400));
-        host.markDirty();
-    }
-
     private void applyLimits() {
         if (params == null || host == null || !host.canEdit()) {
             return;
@@ -882,8 +854,8 @@ public final class MoveChestEditor {
                 enabled ? ModernUiRenderer.TEXT : ModernUiRenderer.MUTED_TEXT, Math.max(12, rect.width - 12));
     }
 
-    private void drawFieldFrame(FontRenderer font, ModernMainLayout.Rect rect, ModernTextField field, boolean enabled,
-            int mouseX, int mouseY) {
+    private void drawFieldFrame(FontRenderer font, ModernMainLayout.Rect rect, ModernTextField field, String key,
+            boolean enabled, int mouseX, int mouseY) {
         if (rect == null) {
             return;
         }
@@ -892,7 +864,6 @@ public final class MoveChestEditor {
                 enabled ? hovered ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SURFACE : 0xFF151E26,
                 hovered && enabled ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
         if (host != null && field != null) {
-            String key = field == host.field("move.chest.maxTake") ? "move.chest.maxTake" : "move.chest.maxPut";
             host.showField(key, new ModernMainLayout.Rect(rect.x + 4, rect.y + 2, Math.max(12, rect.width - 8),
                     Math.max(14, rect.height - 4)),
                     enabled);

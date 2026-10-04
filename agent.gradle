@@ -1,0 +1,15 @@
+// The normal reobfuscated Forge JAR is also a Java Agent and Attach CLI.
+// Keep original Forge metadata and core-plugin/Mixin startup entries intact.
+jar {
+    manifest {
+        attributes(
+            'Main-Class': 'AttachBridge',
+            'Agent-Class': 'dev.mythos.inject.MythosAgent',
+            'Premain-Class': 'dev.mythos.inject.MythosAgent',
+            'Mythos-Minecraft-Version': '1.12.2',
+            'Mythos-Attach-Mode': 'Forge events and runtime movement hooks',
+            'Can-Redefine-Classes': 'false',
+            'Can-Retransform-Classes': 'true'
+        )
+    }
+}

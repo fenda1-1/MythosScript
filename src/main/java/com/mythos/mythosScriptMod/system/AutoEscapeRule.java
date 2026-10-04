@@ -193,10 +193,10 @@ public class AutoEscapeRule {
                 continue;
             }
             AreaBlacklistEntry normalized = entry.copy();
-            if (normalized.areaKey.isEmpty()) {
+            if (!normalized.rect && normalized.areaKey.isEmpty()) {
                 continue;
             }
-            if (!containsAreaEntry(result, normalized.areaKey, normalized.chunkRadius)) {
+            if (normalized.rect && !containsAreaEntry(result, normalized)) {
                 result.add(normalized);
             }
         }
@@ -228,14 +228,15 @@ public class AutoEscapeRule {
         return false;
     }
 
-    private static boolean containsAreaEntry(List<AreaBlacklistEntry> values, String areaKey, int chunkRadius) {
-        if (values == null) {
+    private static boolean containsAreaEntry(List<AreaBlacklistEntry> values, AreaBlacklistEntry target) {
+        if (values == null || target == null) {
             return false;
         }
         for (AreaBlacklistEntry value : values) {
-            if (value != null
-                    && value.chunkRadius == chunkRadius
-                    && value.areaKey.equalsIgnoreCase(areaKey)) {
+            if (value != null && value.rect == target.rect
+                    && value.dimension == target.dimension
+                    && value.x1 == target.x1 && value.z1 == target.z1
+                    && value.x2 == target.x2 && value.z2 == target.z2) {
                 return true;
             }
         }
@@ -243,11 +244,19 @@ public class AutoEscapeRule {
     }
 
     public static class AreaBlacklistEntry {
+        /** Legacy serialized fields (chunk key + radius); migrated to the rect fields on normalize. */
         public String areaKey;
         public int chunkRadius;
 
+        public boolean rect;
+        public int dimension;
+        public int x1;
+        public int z1;
+        public int x2;
+        public int z2;
+
         public AreaBlacklistEntry() {
-            this("", 0);
+            this.areaKey = "";
         }
 
         public AreaBlacklistEntry(String areaKey, int chunkRadius) {
@@ -256,13 +265,56 @@ public class AutoEscapeRule {
             normalize();
         }
 
+        public AreaBlacklistEntry(int dimension, int x1, int z1, int x2, int z2) {
+            this.dimension = dimension;
+            this.x1 = x1;
+            this.z1 = z1;
+            this.x2 = x2;
+            this.z2 = z2;
+            this.rect = true;
+            this.areaKey = "";
+            normalize();
+        }
+
         public void normalize() {
             areaKey = normalizeAreaKey(areaKey);
             chunkRadius = Math.max(0, chunkRadius);
+            if (!rect && !areaKey.isEmpty()) {
+                int[] legacy = parseLegacyAreaKey(areaKey);
+                if (legacy != null) {
+                    int radius = chunkRadius;
+                    dimension = legacy[0];
+                    x1 = (legacy[1] - radius) << 4;
+                    x2 = ((legacy[1] + radius) << 4) + 15;
+                    z1 = (legacy[2] - radius) << 4;
+                    z2 = ((legacy[2] + radius) << 4) + 15;
+                    rect = true;
+                }
+                areaKey = "";
+                chunkRadius = 0;
+            }
+            if (rect) {
+                if (x2 < x1) { int swap = x1; x1 = x2; x2 = swap; }
+                if (z2 < z1) { int swap = z1; z1 = z2; z2 = swap; }
+            }
+        }
+
+        /** Block-coordinate containment (x2/z2 are inclusive block bounds). */
+        public boolean contains(int dim, double x, double z) {
+            return rect && dim == dimension && x >= x1 && x < x2 + 1 && z >= z1 && z < z2 + 1;
         }
 
         public AreaBlacklistEntry copy() {
-            return new AreaBlacklistEntry(areaKey, chunkRadius);
+            AreaBlacklistEntry copy = new AreaBlacklistEntry();
+            copy.areaKey = areaKey;
+            copy.chunkRadius = chunkRadius;
+            copy.rect = rect;
+            copy.dimension = dimension;
+            copy.x1 = x1;
+            copy.z1 = z1;
+            copy.x2 = x2;
+            copy.z2 = z2;
+            return copy;
         }
     }
 
@@ -277,9 +329,29 @@ public class AutoEscapeRule {
         return dimension + ":" + chunkX + "," + chunkZ;
     }
 
-    /** Converts a world pick (block center + block radius) into the stored chunk exclusion. */
-    public static AreaBlacklistEntry fromBlockRadius(int dimension, int blockX, int blockZ, double radiusBlocks) {
-        int chunkRadius = (int) Math.round(Math.max(0.0D, radiusBlocks) / 16.0D);
-        return new AreaBlacklistEntry(areaKey(dimension, blockX >> 4, blockZ >> 4), Math.max(0, chunkRadius));
+    /** Parses the legacy "dimension:chunkX,chunkZ" key, or null when malformed. */
+    public static int[] parseLegacyAreaKey(String value) {
+        String normalized = normalizeAreaKey(value);
+        int colonIndex = normalized.indexOf(':');
+        if (colonIndex <= 0 || colonIndex >= normalized.length() - 1) {
+            return null;
+        }
+        int commaIndex = normalized.indexOf(',', colonIndex + 1);
+        if (commaIndex <= colonIndex + 1 || commaIndex >= normalized.length() - 1) {
+            return null;
+        }
+        try {
+            return new int[] {
+                    Integer.parseInt(normalized.substring(0, colonIndex)),
+                    Integer.parseInt(normalized.substring(colonIndex + 1, commaIndex)),
+                    Integer.parseInt(normalized.substring(commaIndex + 1)) };
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    /** Converts two picked corners into a stored block-coordinate rectangle. */
+    public static AreaBlacklistEntry fromArea(int dimension, int x1, int z1, int x2, int z2) {
+        return new AreaBlacklistEntry(dimension, x1, z1, x2, z2);
     }
 }

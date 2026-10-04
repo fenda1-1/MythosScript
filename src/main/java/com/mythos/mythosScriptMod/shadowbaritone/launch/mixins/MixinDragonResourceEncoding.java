@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 @Mixin(targets="eos.moe.dragoncore.dh", remap=false)
 public abstract class MixinDragonResourceEncoding {
     @Redirect(method={"u(Ljava/lang/String;)V", "j(Ljava/lang/String;)V"},
-        at=@At(value="INVOKE", target="Ljava/lang/String;getBytes()[B"), require=2, remap=false)
+        at=@At(value="INVOKE", target="Ljava/lang/String;getBytes()[B"), require=0, remap=false)
     private static byte[] mythos$resourcePasswordBytes(String password) {
         return DragonResourceEncoding.encode(password);
     }

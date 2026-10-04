@@ -265,6 +265,9 @@ public class PathSequenceManager {
         if ("player".equalsIgnoreCase(normalized) || "玩家".equalsIgnoreCase(normalized)) {
             return "玩家";
         }
+        if ("npc".equalsIgnoreCase(normalized)) {
+            return "NPC";
+        }
         if ("hostile".equalsIgnoreCase(normalized)
                 || "monster".equalsIgnoreCase(normalized)
                 || "mob".equalsIgnoreCase(normalized)
@@ -616,6 +619,9 @@ public class PathSequenceManager {
         }
         try {
             settings.allowFlightPathing.value = enabled;
+            if (enabled) {
+                settings.allowBlinkPathing.value = false;
+            }
             SettingsUtil.save(settings);
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("设置 Baritone 飞行寻路失败: enabled={}", enabled, e);

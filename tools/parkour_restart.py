@@ -65,7 +65,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--start', action='store_true', help='Start a stopped test client without disconnecting')
     parser.add_argument('--build', action='store_true', help='Run offline reobfJar before disconnecting')
-    parser.add_argument('--jar', type=Path, default=ROOT / 'build/libs/MythosScript-v1.0.72-mc1.12.2.jar')
+    parser.add_argument('--jar', type=Path, default=ROOT / 'build/libs/MythosScript-v1.0.73-mc1.12.2.jar')
     parser.add_argument('--tests-dir', type=Path, default=ROOT.parent / 'MythosTests')
     parser.add_argument('--world', default='§0Just Another §fParkour Map§0')
     parser.add_argument('--player', help='Required if multiple players are connected')
