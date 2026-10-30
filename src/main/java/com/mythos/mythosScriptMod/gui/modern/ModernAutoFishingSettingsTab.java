@@ -36,14 +36,8 @@ public final class ModernAutoFishingSettingsTab {
                 .section("gui.modern.autofishing.section.bite", "gui.modern.autofishing.section.bite.tip")
                 .choice("gui.modern.autofishing.bite_mode", "gui.modern.autofishing.bite_mode.tip", choice("biteDetectMode"),
                         ModernFormSettingsTab.options(
-                                ModernFormSettingsTab.option(AutoFishingHandler.BITE_MODE_SMART, "gui.modern.autofishing.bite.smart"),
-                                ModernFormSettingsTab.option(AutoFishingHandler.BITE_MODE_MOTION_ONLY, "gui.modern.autofishing.bite.motion"),
-                                ModernFormSettingsTab.option(AutoFishingHandler.BITE_MODE_STRICT, "gui.modern.autofishing.bite.strict")))
-                .integer("gui.modern.autofishing.ignore_settle", "gui.modern.autofishing.ignore_settle.tip", integer("ignoreInitialBobberSettleTicks"), 0, 40)
+                                ModernFormSettingsTab.option(AutoFishingHandler.BITE_MODE_SERVER_SIGNAL, "gui.modern.autofishing.bite.server")))
                 .integer("gui.modern.autofishing.reel_delay", "gui.modern.autofishing.reel_delay.tip", integer("reelDelayTicks"), 0, 20)
-                .decimal("gui.modern.autofishing.drop_threshold", "gui.modern.autofishing.drop_threshold.tip", decimal("minVerticalDropThreshold"), 0.01F, 1.0F)
-                .decimal("gui.modern.autofishing.move_threshold", "gui.modern.autofishing.move_threshold.tip", decimal("minHorizontalMoveThreshold"), 0.0F, 1.0F)
-                .integer("gui.modern.autofishing.confirm_ticks", "gui.modern.autofishing.confirm_ticks.tip", integer("confirmBiteTicks"), 1, 5)
                 .toggle("gui.modern.autofishing.debug", "gui.modern.autofishing.debug.tip", bool("debugBiteInfo"))
                 .section("gui.modern.autofishing.section.recover", "gui.modern.autofishing.section.recover.tip")
                 .integer("gui.modern.autofishing.post_reel", "gui.modern.autofishing.post_reel.tip", integer("postReelPauseTicks"), 0, 40)
@@ -168,133 +162,133 @@ public final class ModernAutoFishingSettingsTab {
 
     /** Defensive snapshot of every persisted automatic fishing value. */
     private static final class State {
-        private final boolean enabled = AutoFishingHandler.enabled;
-        private final boolean requireFishingRod = AutoFishingHandler.requireFishingRod;
-        private final boolean autoSwitchToRod = AutoFishingHandler.autoSwitchToRod;
-        private final int preferredRodSlot = AutoFishingHandler.preferredRodSlot;
-        private final boolean disableWhenGuiOpen = AutoFishingHandler.disableWhenGuiOpen;
-        private final boolean allowWhilePlayerMoving = AutoFishingHandler.allowWhilePlayerMoving;
-        private final boolean sendStatusMessage = AutoFishingHandler.sendStatusMessage;
-        private final boolean enableAutoCastOnStart = AutoFishingHandler.enableAutoCastOnStart;
-        private final int initialCastDelayTicks = AutoFishingHandler.initialCastDelayTicks;
-        private final boolean autoRecastAfterCatch = AutoFishingHandler.autoRecastAfterCatch;
-        private final int recastDelayMinTicks = AutoFishingHandler.recastDelayMinTicks;
-        private final int recastDelayMaxTicks = AutoFishingHandler.recastDelayMaxTicks;
-        private final boolean retryCastWhenBobberMissing = AutoFishingHandler.retryCastWhenBobberMissing;
-        private final int retryCastDelayTicks = AutoFishingHandler.retryCastDelayTicks;
-        private final boolean timeoutRecastEnabled = AutoFishingHandler.timeoutRecastEnabled;
-        private final int maxFishingWaitTicks = AutoFishingHandler.maxFishingWaitTicks;
-        private final String biteDetectMode = AutoFishingHandler.biteDetectMode;
-        private final int ignoreInitialBobberSettleTicks = AutoFishingHandler.ignoreInitialBobberSettleTicks;
-        private final int reelDelayTicks = AutoFishingHandler.reelDelayTicks;
-        private final float minVerticalDropThreshold = AutoFishingHandler.minVerticalDropThreshold;
-        private final float minHorizontalMoveThreshold = AutoFishingHandler.minHorizontalMoveThreshold;
-        private final int confirmBiteTicks = AutoFishingHandler.confirmBiteTicks;
-        private final boolean debugBiteInfo = AutoFishingHandler.debugBiteInfo;
-        private final int postReelPauseTicks = AutoFishingHandler.postReelPauseTicks;
-        private final int preventDoubleReelTicks = AutoFishingHandler.preventDoubleReelTicks;
-        private final boolean recastOnlyIfLootSuccess = AutoFishingHandler.recastOnlyIfLootSuccess;
-        private final boolean resetStateWhenHookGone = AutoFishingHandler.resetStateWhenHookGone;
-        private final boolean autoRecoverFromInterruptedCast = AutoFishingHandler.autoRecoverFromInterruptedCast;
-        private final boolean stopWhenRodDurabilityLow = AutoFishingHandler.stopWhenRodDurabilityLow;
-        private final int minRodDurability = AutoFishingHandler.minRodDurability;
-        private final boolean stopWhenNoRodFound = AutoFishingHandler.stopWhenNoRodFound;
-        private final boolean pauseWhenHookedEntity = AutoFishingHandler.pauseWhenHookedEntity;
-        private final boolean stopOnWorldChange = AutoFishingHandler.stopOnWorldChange;
+        private final boolean enabled = AutoFishingHandler.enabled();
+        private final boolean requireFishingRod = AutoFishingHandler.cfg().requireFishingRod;
+        private final boolean autoSwitchToRod = AutoFishingHandler.cfg().autoSwitchToRod;
+        private final int preferredRodSlot = AutoFishingHandler.cfg().preferredRodSlot;
+        private final boolean disableWhenGuiOpen = AutoFishingHandler.cfg().disableWhenGuiOpen;
+        private final boolean allowWhilePlayerMoving = AutoFishingHandler.cfg().allowWhilePlayerMoving;
+        private final boolean sendStatusMessage = AutoFishingHandler.cfg().sendStatusMessage;
+        private final boolean enableAutoCastOnStart = AutoFishingHandler.cfg().enableAutoCastOnStart;
+        private final int initialCastDelayTicks = AutoFishingHandler.cfg().initialCastDelayTicks;
+        private final boolean autoRecastAfterCatch = AutoFishingHandler.cfg().autoRecastAfterCatch;
+        private final int recastDelayMinTicks = AutoFishingHandler.cfg().recastDelayMinTicks;
+        private final int recastDelayMaxTicks = AutoFishingHandler.cfg().recastDelayMaxTicks;
+        private final boolean retryCastWhenBobberMissing = AutoFishingHandler.cfg().retryCastWhenBobberMissing;
+        private final int retryCastDelayTicks = AutoFishingHandler.cfg().retryCastDelayTicks;
+        private final boolean timeoutRecastEnabled = AutoFishingHandler.cfg().timeoutRecastEnabled;
+        private final int maxFishingWaitTicks = AutoFishingHandler.cfg().maxFishingWaitTicks;
+        private final String biteDetectMode = AutoFishingHandler.cfg().biteDetectMode;
+        private final int ignoreInitialBobberSettleTicks = AutoFishingHandler.cfg().ignoreInitialBobberSettleTicks;
+        private final int reelDelayTicks = AutoFishingHandler.cfg().reelDelayTicks;
+        private final float minVerticalDropThreshold = AutoFishingHandler.cfg().minVerticalDropThreshold;
+        private final float minHorizontalMoveThreshold = AutoFishingHandler.cfg().minHorizontalMoveThreshold;
+        private final int confirmBiteTicks = AutoFishingHandler.cfg().confirmBiteTicks;
+        private final boolean debugBiteInfo = AutoFishingHandler.cfg().debugBiteInfo;
+        private final int postReelPauseTicks = AutoFishingHandler.cfg().postReelPauseTicks;
+        private final int preventDoubleReelTicks = AutoFishingHandler.cfg().preventDoubleReelTicks;
+        private final boolean recastOnlyIfLootSuccess = AutoFishingHandler.cfg().recastOnlyIfLootSuccess;
+        private final boolean resetStateWhenHookGone = AutoFishingHandler.cfg().resetStateWhenHookGone;
+        private final boolean autoRecoverFromInterruptedCast = AutoFishingHandler.cfg().autoRecoverFromInterruptedCast;
+        private final boolean stopWhenRodDurabilityLow = AutoFishingHandler.cfg().stopWhenRodDurabilityLow;
+        private final int minRodDurability = AutoFishingHandler.cfg().minRodDurability;
+        private final boolean stopWhenNoRodFound = AutoFishingHandler.cfg().stopWhenNoRodFound;
+        private final boolean pauseWhenHookedEntity = AutoFishingHandler.cfg().pauseWhenHookedEntity;
+        private final boolean stopOnWorldChange = AutoFishingHandler.cfg().stopOnWorldChange;
 
         private void apply() {
-            AutoFishingHandler.requireFishingRod = requireFishingRod;
-            AutoFishingHandler.autoSwitchToRod = autoSwitchToRod;
-            AutoFishingHandler.preferredRodSlot = preferredRodSlot;
-            AutoFishingHandler.disableWhenGuiOpen = disableWhenGuiOpen;
-            AutoFishingHandler.allowWhilePlayerMoving = allowWhilePlayerMoving;
-            AutoFishingHandler.sendStatusMessage = sendStatusMessage;
-            AutoFishingHandler.enableAutoCastOnStart = enableAutoCastOnStart;
-            AutoFishingHandler.initialCastDelayTicks = initialCastDelayTicks;
-            AutoFishingHandler.autoRecastAfterCatch = autoRecastAfterCatch;
-            AutoFishingHandler.recastDelayMinTicks = recastDelayMinTicks;
-            AutoFishingHandler.recastDelayMaxTicks = recastDelayMaxTicks;
-            AutoFishingHandler.retryCastWhenBobberMissing = retryCastWhenBobberMissing;
-            AutoFishingHandler.retryCastDelayTicks = retryCastDelayTicks;
-            AutoFishingHandler.timeoutRecastEnabled = timeoutRecastEnabled;
-            AutoFishingHandler.maxFishingWaitTicks = maxFishingWaitTicks;
-            AutoFishingHandler.biteDetectMode = biteDetectMode;
-            AutoFishingHandler.ignoreInitialBobberSettleTicks = ignoreInitialBobberSettleTicks;
-            AutoFishingHandler.reelDelayTicks = reelDelayTicks;
-            AutoFishingHandler.minVerticalDropThreshold = minVerticalDropThreshold;
-            AutoFishingHandler.minHorizontalMoveThreshold = minHorizontalMoveThreshold;
-            AutoFishingHandler.confirmBiteTicks = confirmBiteTicks;
-            AutoFishingHandler.debugBiteInfo = debugBiteInfo;
-            AutoFishingHandler.postReelPauseTicks = postReelPauseTicks;
-            AutoFishingHandler.preventDoubleReelTicks = preventDoubleReelTicks;
-            AutoFishingHandler.recastOnlyIfLootSuccess = recastOnlyIfLootSuccess;
-            AutoFishingHandler.resetStateWhenHookGone = resetStateWhenHookGone;
-            AutoFishingHandler.autoRecoverFromInterruptedCast = autoRecoverFromInterruptedCast;
-            AutoFishingHandler.stopWhenRodDurabilityLow = stopWhenRodDurabilityLow;
-            AutoFishingHandler.minRodDurability = minRodDurability;
-            AutoFishingHandler.stopWhenNoRodFound = stopWhenNoRodFound;
-            AutoFishingHandler.pauseWhenHookedEntity = pauseWhenHookedEntity;
-            AutoFishingHandler.stopOnWorldChange = stopOnWorldChange;
+            AutoFishingHandler.cfg().requireFishingRod = requireFishingRod;
+            AutoFishingHandler.cfg().autoSwitchToRod = autoSwitchToRod;
+            AutoFishingHandler.cfg().preferredRodSlot = preferredRodSlot;
+            AutoFishingHandler.cfg().disableWhenGuiOpen = disableWhenGuiOpen;
+            AutoFishingHandler.cfg().allowWhilePlayerMoving = allowWhilePlayerMoving;
+            AutoFishingHandler.cfg().sendStatusMessage = sendStatusMessage;
+            AutoFishingHandler.cfg().enableAutoCastOnStart = enableAutoCastOnStart;
+            AutoFishingHandler.cfg().initialCastDelayTicks = initialCastDelayTicks;
+            AutoFishingHandler.cfg().autoRecastAfterCatch = autoRecastAfterCatch;
+            AutoFishingHandler.cfg().recastDelayMinTicks = recastDelayMinTicks;
+            AutoFishingHandler.cfg().recastDelayMaxTicks = recastDelayMaxTicks;
+            AutoFishingHandler.cfg().retryCastWhenBobberMissing = retryCastWhenBobberMissing;
+            AutoFishingHandler.cfg().retryCastDelayTicks = retryCastDelayTicks;
+            AutoFishingHandler.cfg().timeoutRecastEnabled = timeoutRecastEnabled;
+            AutoFishingHandler.cfg().maxFishingWaitTicks = maxFishingWaitTicks;
+            AutoFishingHandler.cfg().biteDetectMode = biteDetectMode;
+            AutoFishingHandler.cfg().ignoreInitialBobberSettleTicks = ignoreInitialBobberSettleTicks;
+            AutoFishingHandler.cfg().reelDelayTicks = reelDelayTicks;
+            AutoFishingHandler.cfg().minVerticalDropThreshold = minVerticalDropThreshold;
+            AutoFishingHandler.cfg().minHorizontalMoveThreshold = minHorizontalMoveThreshold;
+            AutoFishingHandler.cfg().confirmBiteTicks = confirmBiteTicks;
+            AutoFishingHandler.cfg().debugBiteInfo = debugBiteInfo;
+            AutoFishingHandler.cfg().postReelPauseTicks = postReelPauseTicks;
+            AutoFishingHandler.cfg().preventDoubleReelTicks = preventDoubleReelTicks;
+            AutoFishingHandler.cfg().recastOnlyIfLootSuccess = recastOnlyIfLootSuccess;
+            AutoFishingHandler.cfg().resetStateWhenHookGone = resetStateWhenHookGone;
+            AutoFishingHandler.cfg().autoRecoverFromInterruptedCast = autoRecoverFromInterruptedCast;
+            AutoFishingHandler.cfg().stopWhenRodDurabilityLow = stopWhenRodDurabilityLow;
+            AutoFishingHandler.cfg().minRodDurability = minRodDurability;
+            AutoFishingHandler.cfg().stopWhenNoRodFound = stopWhenNoRodFound;
+            AutoFishingHandler.cfg().pauseWhenHookedEntity = pauseWhenHookedEntity;
+            AutoFishingHandler.cfg().stopOnWorldChange = stopOnWorldChange;
             // Apply the enabled flag last so runtime scheduling uses the
             // restored delay and auto-cast values.
             AutoFishingHandler.INSTANCE.setEnabledForSettingsPreview(enabled);
         }
 
         private static void applyDefaults() {
-            AutoFishingHandler.requireFishingRod = true;
-            AutoFishingHandler.autoSwitchToRod = false;
-            AutoFishingHandler.preferredRodSlot = 0;
-            AutoFishingHandler.disableWhenGuiOpen = true;
-            AutoFishingHandler.allowWhilePlayerMoving = false;
-            AutoFishingHandler.sendStatusMessage = true;
-            AutoFishingHandler.enableAutoCastOnStart = true;
-            AutoFishingHandler.initialCastDelayTicks = 8;
-            AutoFishingHandler.autoRecastAfterCatch = true;
-            AutoFishingHandler.recastDelayMinTicks = 10;
-            AutoFishingHandler.recastDelayMaxTicks = 16;
-            AutoFishingHandler.retryCastWhenBobberMissing = true;
-            AutoFishingHandler.retryCastDelayTicks = 20;
-            AutoFishingHandler.timeoutRecastEnabled = true;
-            AutoFishingHandler.maxFishingWaitTicks = 600;
-            AutoFishingHandler.biteDetectMode = AutoFishingHandler.BITE_MODE_SMART;
-            AutoFishingHandler.ignoreInitialBobberSettleTicks = 8;
-            AutoFishingHandler.reelDelayTicks = 2;
-            AutoFishingHandler.minVerticalDropThreshold = 0.08F;
-            AutoFishingHandler.minHorizontalMoveThreshold = 0.03F;
-            AutoFishingHandler.confirmBiteTicks = 1;
-            AutoFishingHandler.debugBiteInfo = false;
-            AutoFishingHandler.postReelPauseTicks = 6;
-            AutoFishingHandler.preventDoubleReelTicks = 6;
-            AutoFishingHandler.recastOnlyIfLootSuccess = false;
-            AutoFishingHandler.resetStateWhenHookGone = true;
-            AutoFishingHandler.autoRecoverFromInterruptedCast = true;
-            AutoFishingHandler.stopWhenRodDurabilityLow = true;
-            AutoFishingHandler.minRodDurability = 5;
-            AutoFishingHandler.stopWhenNoRodFound = true;
-            AutoFishingHandler.pauseWhenHookedEntity = true;
-            AutoFishingHandler.stopOnWorldChange = true;
+            AutoFishingHandler.cfg().requireFishingRod = true;
+            AutoFishingHandler.cfg().autoSwitchToRod = false;
+            AutoFishingHandler.cfg().preferredRodSlot = 0;
+            AutoFishingHandler.cfg().disableWhenGuiOpen = true;
+            AutoFishingHandler.cfg().allowWhilePlayerMoving = false;
+            AutoFishingHandler.cfg().sendStatusMessage = true;
+            AutoFishingHandler.cfg().enableAutoCastOnStart = true;
+            AutoFishingHandler.cfg().initialCastDelayTicks = 8;
+            AutoFishingHandler.cfg().autoRecastAfterCatch = true;
+            AutoFishingHandler.cfg().recastDelayMinTicks = 10;
+            AutoFishingHandler.cfg().recastDelayMaxTicks = 16;
+            AutoFishingHandler.cfg().retryCastWhenBobberMissing = true;
+            AutoFishingHandler.cfg().retryCastDelayTicks = 20;
+            AutoFishingHandler.cfg().timeoutRecastEnabled = true;
+            AutoFishingHandler.cfg().maxFishingWaitTicks = 1200;
+            AutoFishingHandler.cfg().biteDetectMode = AutoFishingHandler.BITE_MODE_SERVER_SIGNAL;
+            AutoFishingHandler.cfg().ignoreInitialBobberSettleTicks = 8;
+            AutoFishingHandler.cfg().reelDelayTicks = 0;
+            AutoFishingHandler.cfg().minVerticalDropThreshold = 0.04F;
+            AutoFishingHandler.cfg().minHorizontalMoveThreshold = 0.10F;
+            AutoFishingHandler.cfg().confirmBiteTicks = 1;
+            AutoFishingHandler.cfg().debugBiteInfo = false;
+            AutoFishingHandler.cfg().postReelPauseTicks = 6;
+            AutoFishingHandler.cfg().preventDoubleReelTicks = 6;
+            AutoFishingHandler.cfg().recastOnlyIfLootSuccess = false;
+            AutoFishingHandler.cfg().resetStateWhenHookGone = true;
+            AutoFishingHandler.cfg().autoRecoverFromInterruptedCast = true;
+            AutoFishingHandler.cfg().stopWhenRodDurabilityLow = true;
+            AutoFishingHandler.cfg().minRodDurability = 5;
+            AutoFishingHandler.cfg().stopWhenNoRodFound = true;
+            AutoFishingHandler.cfg().pauseWhenHookedEntity = true;
+            AutoFishingHandler.cfg().stopOnWorldChange = true;
         }
 
         private static boolean getBoolean(String name) {
             switch (name) {
-                case "enabled": return AutoFishingHandler.enabled;
-                case "requireFishingRod": return AutoFishingHandler.requireFishingRod;
-                case "autoSwitchToRod": return AutoFishingHandler.autoSwitchToRod;
-                case "disableWhenGuiOpen": return AutoFishingHandler.disableWhenGuiOpen;
-                case "allowWhilePlayerMoving": return AutoFishingHandler.allowWhilePlayerMoving;
-                case "sendStatusMessage": return AutoFishingHandler.sendStatusMessage;
-                case "enableAutoCastOnStart": return AutoFishingHandler.enableAutoCastOnStart;
-                case "autoRecastAfterCatch": return AutoFishingHandler.autoRecastAfterCatch;
-                case "retryCastWhenBobberMissing": return AutoFishingHandler.retryCastWhenBobberMissing;
-                case "timeoutRecastEnabled": return AutoFishingHandler.timeoutRecastEnabled;
-                case "debugBiteInfo": return AutoFishingHandler.debugBiteInfo;
-                case "recastOnlyIfLootSuccess": return AutoFishingHandler.recastOnlyIfLootSuccess;
-                case "resetStateWhenHookGone": return AutoFishingHandler.resetStateWhenHookGone;
-                case "autoRecoverFromInterruptedCast": return AutoFishingHandler.autoRecoverFromInterruptedCast;
-                case "stopWhenRodDurabilityLow": return AutoFishingHandler.stopWhenRodDurabilityLow;
-                case "stopWhenNoRodFound": return AutoFishingHandler.stopWhenNoRodFound;
-                case "pauseWhenHookedEntity": return AutoFishingHandler.pauseWhenHookedEntity;
-                case "stopOnWorldChange": return AutoFishingHandler.stopOnWorldChange;
+                case "enabled": return AutoFishingHandler.enabled();
+                case "requireFishingRod": return AutoFishingHandler.cfg().requireFishingRod;
+                case "autoSwitchToRod": return AutoFishingHandler.cfg().autoSwitchToRod;
+                case "disableWhenGuiOpen": return AutoFishingHandler.cfg().disableWhenGuiOpen;
+                case "allowWhilePlayerMoving": return AutoFishingHandler.cfg().allowWhilePlayerMoving;
+                case "sendStatusMessage": return AutoFishingHandler.cfg().sendStatusMessage;
+                case "enableAutoCastOnStart": return AutoFishingHandler.cfg().enableAutoCastOnStart;
+                case "autoRecastAfterCatch": return AutoFishingHandler.cfg().autoRecastAfterCatch;
+                case "retryCastWhenBobberMissing": return AutoFishingHandler.cfg().retryCastWhenBobberMissing;
+                case "timeoutRecastEnabled": return AutoFishingHandler.cfg().timeoutRecastEnabled;
+                case "debugBiteInfo": return AutoFishingHandler.cfg().debugBiteInfo;
+                case "recastOnlyIfLootSuccess": return AutoFishingHandler.cfg().recastOnlyIfLootSuccess;
+                case "resetStateWhenHookGone": return AutoFishingHandler.cfg().resetStateWhenHookGone;
+                case "autoRecoverFromInterruptedCast": return AutoFishingHandler.cfg().autoRecoverFromInterruptedCast;
+                case "stopWhenRodDurabilityLow": return AutoFishingHandler.cfg().stopWhenRodDurabilityLow;
+                case "stopWhenNoRodFound": return AutoFishingHandler.cfg().stopWhenNoRodFound;
+                case "pauseWhenHookedEntity": return AutoFishingHandler.cfg().pauseWhenHookedEntity;
+                case "stopOnWorldChange": return AutoFishingHandler.cfg().stopOnWorldChange;
                 default: return false;
             }
         }
@@ -302,80 +296,80 @@ public final class ModernAutoFishingSettingsTab {
         private static void setBoolean(String name, boolean value) {
             switch (name) {
                 case "enabled": AutoFishingHandler.INSTANCE.setEnabledForSettingsPreview(value); break;
-                case "requireFishingRod": AutoFishingHandler.requireFishingRod = value; break;
-                case "autoSwitchToRod": AutoFishingHandler.autoSwitchToRod = value; break;
-                case "disableWhenGuiOpen": AutoFishingHandler.disableWhenGuiOpen = value; break;
-                case "allowWhilePlayerMoving": AutoFishingHandler.allowWhilePlayerMoving = value; break;
-                case "sendStatusMessage": AutoFishingHandler.sendStatusMessage = value; break;
-                case "enableAutoCastOnStart": AutoFishingHandler.enableAutoCastOnStart = value; break;
-                case "autoRecastAfterCatch": AutoFishingHandler.autoRecastAfterCatch = value; break;
-                case "retryCastWhenBobberMissing": AutoFishingHandler.retryCastWhenBobberMissing = value; break;
-                case "timeoutRecastEnabled": AutoFishingHandler.timeoutRecastEnabled = value; break;
-                case "debugBiteInfo": AutoFishingHandler.debugBiteInfo = value; break;
-                case "recastOnlyIfLootSuccess": AutoFishingHandler.recastOnlyIfLootSuccess = value; break;
-                case "resetStateWhenHookGone": AutoFishingHandler.resetStateWhenHookGone = value; break;
-                case "autoRecoverFromInterruptedCast": AutoFishingHandler.autoRecoverFromInterruptedCast = value; break;
-                case "stopWhenRodDurabilityLow": AutoFishingHandler.stopWhenRodDurabilityLow = value; break;
-                case "stopWhenNoRodFound": AutoFishingHandler.stopWhenNoRodFound = value; break;
-                case "pauseWhenHookedEntity": AutoFishingHandler.pauseWhenHookedEntity = value; break;
-                case "stopOnWorldChange": AutoFishingHandler.stopOnWorldChange = value; break;
+                case "requireFishingRod": AutoFishingHandler.cfg().requireFishingRod = value; break;
+                case "autoSwitchToRod": AutoFishingHandler.cfg().autoSwitchToRod = value; break;
+                case "disableWhenGuiOpen": AutoFishingHandler.cfg().disableWhenGuiOpen = value; break;
+                case "allowWhilePlayerMoving": AutoFishingHandler.cfg().allowWhilePlayerMoving = value; break;
+                case "sendStatusMessage": AutoFishingHandler.cfg().sendStatusMessage = value; break;
+                case "enableAutoCastOnStart": AutoFishingHandler.cfg().enableAutoCastOnStart = value; break;
+                case "autoRecastAfterCatch": AutoFishingHandler.cfg().autoRecastAfterCatch = value; break;
+                case "retryCastWhenBobberMissing": AutoFishingHandler.cfg().retryCastWhenBobberMissing = value; break;
+                case "timeoutRecastEnabled": AutoFishingHandler.cfg().timeoutRecastEnabled = value; break;
+                case "debugBiteInfo": AutoFishingHandler.cfg().debugBiteInfo = value; break;
+                case "recastOnlyIfLootSuccess": AutoFishingHandler.cfg().recastOnlyIfLootSuccess = value; break;
+                case "resetStateWhenHookGone": AutoFishingHandler.cfg().resetStateWhenHookGone = value; break;
+                case "autoRecoverFromInterruptedCast": AutoFishingHandler.cfg().autoRecoverFromInterruptedCast = value; break;
+                case "stopWhenRodDurabilityLow": AutoFishingHandler.cfg().stopWhenRodDurabilityLow = value; break;
+                case "stopWhenNoRodFound": AutoFishingHandler.cfg().stopWhenNoRodFound = value; break;
+                case "pauseWhenHookedEntity": AutoFishingHandler.cfg().pauseWhenHookedEntity = value; break;
+                case "stopOnWorldChange": AutoFishingHandler.cfg().stopOnWorldChange = value; break;
                 default: break;
             }
         }
 
         private static int getInt(String name) {
             switch (name) {
-                case "preferredRodSlot": return AutoFishingHandler.preferredRodSlot;
-                case "initialCastDelayTicks": return AutoFishingHandler.initialCastDelayTicks;
-                case "recastDelayMinTicks": return AutoFishingHandler.recastDelayMinTicks;
-                case "recastDelayMaxTicks": return AutoFishingHandler.recastDelayMaxTicks;
-                case "retryCastDelayTicks": return AutoFishingHandler.retryCastDelayTicks;
-                case "maxFishingWaitTicks": return AutoFishingHandler.maxFishingWaitTicks;
-                case "ignoreInitialBobberSettleTicks": return AutoFishingHandler.ignoreInitialBobberSettleTicks;
-                case "reelDelayTicks": return AutoFishingHandler.reelDelayTicks;
-                case "confirmBiteTicks": return AutoFishingHandler.confirmBiteTicks;
-                case "postReelPauseTicks": return AutoFishingHandler.postReelPauseTicks;
-                case "preventDoubleReelTicks": return AutoFishingHandler.preventDoubleReelTicks;
-                case "minRodDurability": return AutoFishingHandler.minRodDurability;
+                case "preferredRodSlot": return AutoFishingHandler.cfg().preferredRodSlot;
+                case "initialCastDelayTicks": return AutoFishingHandler.cfg().initialCastDelayTicks;
+                case "recastDelayMinTicks": return AutoFishingHandler.cfg().recastDelayMinTicks;
+                case "recastDelayMaxTicks": return AutoFishingHandler.cfg().recastDelayMaxTicks;
+                case "retryCastDelayTicks": return AutoFishingHandler.cfg().retryCastDelayTicks;
+                case "maxFishingWaitTicks": return AutoFishingHandler.cfg().maxFishingWaitTicks;
+                case "ignoreInitialBobberSettleTicks": return AutoFishingHandler.cfg().ignoreInitialBobberSettleTicks;
+                case "reelDelayTicks": return AutoFishingHandler.cfg().reelDelayTicks;
+                case "confirmBiteTicks": return AutoFishingHandler.cfg().confirmBiteTicks;
+                case "postReelPauseTicks": return AutoFishingHandler.cfg().postReelPauseTicks;
+                case "preventDoubleReelTicks": return AutoFishingHandler.cfg().preventDoubleReelTicks;
+                case "minRodDurability": return AutoFishingHandler.cfg().minRodDurability;
                 default: return 0;
             }
         }
 
         private static void setInt(String name, int value) {
             switch (name) {
-                case "preferredRodSlot": AutoFishingHandler.preferredRodSlot = value; break;
-                case "initialCastDelayTicks": AutoFishingHandler.initialCastDelayTicks = value; break;
-                case "recastDelayMinTicks": AutoFishingHandler.recastDelayMinTicks = value; break;
-                case "recastDelayMaxTicks": AutoFishingHandler.recastDelayMaxTicks = value; break;
-                case "retryCastDelayTicks": AutoFishingHandler.retryCastDelayTicks = value; break;
-                case "maxFishingWaitTicks": AutoFishingHandler.maxFishingWaitTicks = value; break;
-                case "ignoreInitialBobberSettleTicks": AutoFishingHandler.ignoreInitialBobberSettleTicks = value; break;
-                case "reelDelayTicks": AutoFishingHandler.reelDelayTicks = value; break;
-                case "confirmBiteTicks": AutoFishingHandler.confirmBiteTicks = value; break;
-                case "postReelPauseTicks": AutoFishingHandler.postReelPauseTicks = value; break;
-                case "preventDoubleReelTicks": AutoFishingHandler.preventDoubleReelTicks = value; break;
-                case "minRodDurability": AutoFishingHandler.minRodDurability = value; break;
+                case "preferredRodSlot": AutoFishingHandler.cfg().preferredRodSlot = value; break;
+                case "initialCastDelayTicks": AutoFishingHandler.cfg().initialCastDelayTicks = value; break;
+                case "recastDelayMinTicks": AutoFishingHandler.cfg().recastDelayMinTicks = value; break;
+                case "recastDelayMaxTicks": AutoFishingHandler.cfg().recastDelayMaxTicks = value; break;
+                case "retryCastDelayTicks": AutoFishingHandler.cfg().retryCastDelayTicks = value; break;
+                case "maxFishingWaitTicks": AutoFishingHandler.cfg().maxFishingWaitTicks = value; break;
+                case "ignoreInitialBobberSettleTicks": AutoFishingHandler.cfg().ignoreInitialBobberSettleTicks = value; break;
+                case "reelDelayTicks": AutoFishingHandler.cfg().reelDelayTicks = value; break;
+                case "confirmBiteTicks": AutoFishingHandler.cfg().confirmBiteTicks = value; break;
+                case "postReelPauseTicks": AutoFishingHandler.cfg().postReelPauseTicks = value; break;
+                case "preventDoubleReelTicks": AutoFishingHandler.cfg().preventDoubleReelTicks = value; break;
+                case "minRodDurability": AutoFishingHandler.cfg().minRodDurability = value; break;
                 default: break;
             }
         }
 
         private static float getFloat(String name) {
-            if ("minVerticalDropThreshold".equals(name)) return AutoFishingHandler.minVerticalDropThreshold;
-            if ("minHorizontalMoveThreshold".equals(name)) return AutoFishingHandler.minHorizontalMoveThreshold;
+            if ("minVerticalDropThreshold".equals(name)) return AutoFishingHandler.cfg().minVerticalDropThreshold;
+            if ("minHorizontalMoveThreshold".equals(name)) return AutoFishingHandler.cfg().minHorizontalMoveThreshold;
             return 0.0F;
         }
 
         private static void setFloat(String name, float value) {
-            if ("minVerticalDropThreshold".equals(name)) AutoFishingHandler.minVerticalDropThreshold = value;
-            if ("minHorizontalMoveThreshold".equals(name)) AutoFishingHandler.minHorizontalMoveThreshold = value;
+            if ("minVerticalDropThreshold".equals(name)) AutoFishingHandler.cfg().minVerticalDropThreshold = value;
+            if ("minHorizontalMoveThreshold".equals(name)) AutoFishingHandler.cfg().minHorizontalMoveThreshold = value;
         }
 
         private static String getString(String name) {
-            return "biteDetectMode".equals(name) ? AutoFishingHandler.biteDetectMode : "";
+            return "biteDetectMode".equals(name) ? AutoFishingHandler.cfg().biteDetectMode : "";
         }
 
         private static void setString(String name, String value) {
-            if ("biteDetectMode".equals(name)) AutoFishingHandler.biteDetectMode = value;
+            if ("biteDetectMode".equals(name)) AutoFishingHandler.cfg().biteDetectMode = value;
         }
     }
 }

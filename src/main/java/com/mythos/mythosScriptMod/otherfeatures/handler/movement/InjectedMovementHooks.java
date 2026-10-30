@@ -15,7 +15,9 @@ public final class InjectedMovementHooks {
         return entity instanceof EntityPlayerSP && WallClimbFeatureHandler.travel((EntityPlayerSP) entity);
     }
     public static boolean turn(Object entity, double yaw, double pitch) {
-        return FreecamFeatureHandler.turn((Entity) entity, (float) yaw, (float) pitch);
+        return FreecamFeatureHandler.turn((Entity) entity, (float) yaw, (float) pitch)
+                || com.mythos.mythosScriptMod.handlers.TeleportCompanionHandler.turn(
+                        (Entity) entity, (float) yaw, (float) pitch);
     }
     public static boolean push(Object entity, Object other) {
         return MovementFeatureManager.hasNoCollision((Entity) entity) || MovementFeatureManager.hasNoCollision((Entity) other);

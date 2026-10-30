@@ -51,6 +51,21 @@ import net.minecraftforge.fml.common.network.internal.FMLProxyPacket;
 
 public class PacketCaptureHandler extends ChannelDuplexHandler {
 
+    /**
+     * Session owning this pipeline; "" is the human client. Every bot has its
+     * own channel, so the owner has to live on the handler instance — no thread
+     * context is available later on the Netty thread.
+     */
+    private final String owner;
+
+    public PacketCaptureHandler() {
+        this("");
+    }
+
+    public PacketCaptureHandler(String owner) {
+        this.owner = owner == null ? "" : owner;
+    }
+
     private static final int MAX_PACKET_PROCESS_QUEUE = 512;
     private static final long MAX_PACKET_PROCESS_RETAINED_BYTES = 16L * 1024 * 1024;
     private static final int MAX_BUSINESS_TASKS = 1024;
@@ -78,6 +93,35 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
     public static final List<CapturedPacketData> capturedPackets = Collections.synchronizedList(new ArrayList<>());
     public static final List<CapturedPacketData> capturedReceivedPackets = Collections
             .synchronizedList(new ArrayList<>());
+    /** Which sessions have capture switched on. Buffers stay shared but every
+     *  packet carries its owner, so reads are filtered per session. */
+    private static final java.util.Set<String> CAPTURING = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    public static void setCapturing(String owner, boolean capturing) {
+        String key = owner == null ? "" : owner;
+        if (capturing) CAPTURING.add(key); else CAPTURING.remove(key);
+        isCapturing = !CAPTURING.isEmpty();
+    }
+
+    public static boolean isCapturing(String owner) {
+        return CAPTURING.contains(owner == null ? "" : owner);
+    }
+
+    /**
+     * 界面按钮、快捷键和路径录制操作的都是当前挂载的会话。它们以前直接改 isCapturing，
+     * 但收发钩子只认 CAPTURING，结果开关显示已开、捕获数却一直是 0，所以统一走这里。
+     */
+    public static String foregroundOwner() {
+        return tickOwnerKey();
+    }
+
+    public static boolean isCapturingForeground() {
+        return isCapturing(foregroundOwner());
+    }
+
+    public static void setCapturingForeground(boolean capturing) {
+        setCapturing(foregroundOwner(), capturing);
+    }
 
     // 捕获队列与节流参数：避免同一帧内大量 addScheduledTask 造成主线程卡顿
     private static final int MAX_CAPTURE_QUEUE = 6000;
@@ -125,9 +169,10 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
         final String channel;
         final byte[] rawData;
         final boolean isSent;
+        final String owner;
 
         PendingPacketSnapshot(long timestamp, String packetClassName, boolean isFmlPacket, Integer packetId,
-                String channel, byte[] rawData, boolean isSent) {
+                String channel, byte[] rawData, boolean isSent, String owner) {
             this.timestamp = timestamp;
             this.packetClassName = packetClassName;
             this.isFmlPacket = isFmlPacket;
@@ -135,6 +180,7 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
             this.channel = channel;
             this.rawData = rawData;
             this.isSent = isSent;
+            this.owner = owner == null ? "" : owner;
         }
     }
 
@@ -153,6 +199,9 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
         public final Integer packetId;
         public final String channel;
         public final byte[] rawData;
+        /** "" for the human client, otherwise the bot session that sent or
+         *  received this packet. Reads filter on it. */
+        public final String owner;
         private volatile SoftReference<String> hexData;
         private volatile SoftReference<String> decodedData;
         private volatile SoftReference<String> decodedDetailData;
@@ -164,6 +213,12 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
 
         public CapturedPacketData(long timestamp, String packetClassName, boolean isFmlPacket, Integer packetId,
                 String channel, byte[] rawData, String decodedData) {
+            this(timestamp, packetClassName, isFmlPacket, packetId, channel, rawData, decodedData, "");
+        }
+
+        public CapturedPacketData(long timestamp, String packetClassName, boolean isFmlPacket, Integer packetId,
+                String channel, byte[] rawData, String decodedData, String owner) {
+            this.owner = owner == null ? "" : owner;
             this.timestamp = timestamp;
             this.packetClassName = packetClassName;
             this.isFmlPacket = isFmlPacket;
@@ -199,9 +254,6 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
             return totalPayloadBytes;
         }
 
-        public boolean isAggregated() {
-            return occurrenceCount > 1;
-        }
 
         public String getHexData() {
             String local = dereference(hexData);
@@ -315,13 +367,7 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
         }
     }
 
-    public static byte[] getOwlViewSessionID() {
-        return CapturedIdRuleManager.getCapturedIdBytes("id");
-    }
 
-    public static String getSessionIdAsHex() {
-        return CapturedIdRuleManager.getCapturedIdHex("id");
-    }
 
     private static String bytesToHex(byte[] bytes) {
         if (bytes == null)
@@ -377,23 +423,39 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
     /**
      * 客户端 Tick 钩子（兼容旧调用点）。 当前会话更新逻辑已改为“无自动动作”，此处保留空实现避免编译失败。
      */
-    private static Object attachedNetwork;
-    private static io.netty.channel.Channel attachedChannel;
+    private static final java.util.Map<String, Object> attachedNetwork = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<String, io.netty.channel.Channel> attachedChannel = new java.util.concurrent.ConcurrentHashMap<>();
     private static int connectionProbeTicks;
+
+    /** Resolve the owner key of the session being ticked: "null" tick owner
+     *  means we are on the human client, which is keyed as "". */
+    private static String tickOwnerKey() {
+        if (!com.mythos.mythosScriptMod.mcp.NexusSessions.present()) return "";
+        String owner = com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner();
+        return owner == null ? "" : owner;
+    }
 
     /** Reconcile an existing connection after late attach; login events have already fired. */
     public static void onClientTick() {
         Minecraft client = Minecraft.getMinecraft();
-        Object listener = client.getConnection();
+        String owner = tickOwnerKey();
+        // A bot's connection lives on its own player, not on Minecraft#getConnection()
+        // (that one stays the human's even while a bot is mounted).
+        net.minecraft.client.entity.EntityPlayerSP sessionPlayer =
+                com.mythos.mythosScriptMod.mcp.NexusSessions.present()
+                        ? com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() : null;
+        Object listener = sessionPlayer != null && sessionPlayer.connection != null
+                ? sessionPlayer.connection : client.getConnection();
         if (listener == null) {
-            if (attachedNetwork != null) com.mythos.mythosScriptMod.mcp.McpChatHistory.INSTANCE.disconnect(attachedNetwork);
-            attachedNetwork = null;
-            attachedChannel = null;
+            Object previous = attachedNetwork.remove(owner);
+            attachedChannel.remove(owner);
+            if (previous != null) com.mythos.mythosScriptMod.mcp.McpChatHistory.INSTANCE.disconnect(previous);
             return;
         }
-        if (attachedChannel != null && attachedChannel.isOpen() && ++connectionProbeTicks % 20 != 0) return;
+        io.netty.channel.Channel ownChannel = attachedChannel.get(owner);
+        if (ownChannel != null && ownChannel.isOpen() && ++connectionProbeTicks % 20 != 0) return;
         try {
-            Object network = client.getConnection().getNetworkManager();
+            Object network = ((net.minecraft.client.network.NetHandlerPlayClient) listener).getNetworkManager();
             io.netty.channel.Channel channel = null;
             for (java.lang.reflect.Field field : network.getClass().getDeclaredFields()) {
                 if (io.netty.channel.Channel.class.isAssignableFrom(field.getType())) {
@@ -403,17 +465,23 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
                 }
             }
             if (channel == null || !channel.isOpen()) return;
-            if (network != attachedNetwork) {
-                attachedNetwork = network;
-                attachedChannel = channel;
-                String address = client.isSingleplayer() ? "singleplayer" : String.valueOf(channel.remoteAddress());
-                com.mythos.mythosScriptMod.mcp.McpChatHistory.INSTANCE.connect(network, address);
+            if (network != attachedNetwork.get(owner)) {
+                attachedNetwork.put(owner, network);
+                attachedChannel.put(owner, channel);
+                // Chat history is a single human stream; a bot joining must not
+                // rebind it.
+                if (owner.isEmpty()) {
+                    String address = client.isSingleplayer() ? "singleplayer" : String.valueOf(channel.remoteAddress());
+                    com.mythos.mythosScriptMod.mcp.McpChatHistory.INSTANCE.connect(network, address);
+                }
             }
             final io.netty.channel.Channel target = channel;
+            final String targetOwner = owner;
             if (target.pipeline().get("keycommand_packet_handler") == null) {
                 target.eventLoop().execute(() -> {
                     if (target.pipeline().get("keycommand_packet_handler") == null && target.pipeline().get("packet_handler") != null)
-                        target.pipeline().addBefore("packet_handler", "keycommand_packet_handler", new PacketCaptureHandler());
+                        target.pipeline().addBefore("packet_handler", "keycommand_packet_handler",
+                                new PacketCaptureHandler(targetOwner));
                 });
             }
         } catch (Exception error) {
@@ -446,6 +514,7 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
     /** Releases all packet-capture state that must not survive a server session. */
     public static void clearRuntimeState() {
         isCapturing = false;
+        CAPTURING.clear();
         clearAllPackets();
         pendingBusinessTasks.clear();
         pendingBusinessTaskBytes.set(0L);
@@ -505,21 +574,9 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
         }
     }
 
-    public static int getPendingCaptureQueueSize() {
-        return lastKnownCaptureQueueSize;
-    }
 
-    public static long getSampledPacketCount() {
-        return sampledPacketCount;
-    }
 
-    public static long getDroppedPacketCount() {
-        return droppedPacketCount;
-    }
 
-    public static int getActiveSamplingModulo() {
-        return activeSamplingModulo;
-    }
 
     public static PacketCaptureUiSnapshot getUiSnapshot() {
         PacketCaptureUiSnapshot snapshot = lastUiSnapshot;
@@ -535,17 +592,7 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
         return snapshot;
     }
 
-    public static List<String> getRecentOwlViewIncomingHexSnapshot() {
-        synchronized (recentOwlViewIncomingHex) {
-            return new ArrayList<>(recentOwlViewIncomingHex);
-        }
-    }
 
-    public static void clearRecentOwlViewIncomingHex() {
-        synchronized (recentOwlViewIncomingHex) {
-            recentOwlViewIncomingHex.clear();
-        }
-    }
 
     public static List<String> getRecentPacketTextsSnapshot() {
         synchronized (recentPacketTexts) {
@@ -601,7 +648,7 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
     }
 
     private boolean isRecentPacketTextFeedNeeded() {
-        return PathSequenceEventListener.instance != null && PathSequenceEventListener.instance.isTracking();
+        return PathSequenceEventListener.foregroundRunner() != null && PathSequenceEventListener.foregroundRunner().isTracking();
     }
 
     private boolean enqueueBusinessTask(Runnable task) {
@@ -983,7 +1030,7 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
 
             // --- 第二部分：由用户开关控制的通用捕获逻辑 ---
             // 只有当用户在GUI中打开“行为捕获”且性能面板允许时，才执行通用的数据包记录功能
-            if (inboundFeatureEnabled && isCapturing && inboundMsg instanceof Packet) {
+            if (inboundFeatureEnabled && isCapturing(owner) && inboundMsg instanceof Packet) {
                 handlePacketCapture((Packet<?>) inboundMsg, false);
             }
 
@@ -1067,7 +1114,7 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
             }
 
             // --- 通用捕获逻辑，由开关控制 ---
-            if (outboundFeatureEnabled && isCapturing && msg instanceof Packet) {
+            if (outboundFeatureEnabled && isCapturing(owner) && msg instanceof Packet) {
                 handlePacketCapture((Packet<?>) msg, true);
             }
 
@@ -1164,8 +1211,9 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
             mythosScriptMod.LOGGER.error("捕获并序列化数据包时出错: " + packet.getClass().getName(), e);
             if (Minecraft.getMinecraft().player != null) {
                 String packetSimpleName = packet.getClass().getSimpleName();
-                // SPacketSpawnPlayer 在部分场景下可能无法稳定序列化，避免在聊天栏刷屏干扰用户。
-                if (!"SPacketSpawnPlayer".equals(packetSimpleName)) {
+                // SPacketSpawnPlayer/SPacketSpawnMob 在序列化时常 NPE（dataManager 已被读空），静默避免刷屏。
+                if (!"SPacketSpawnPlayer".equals(packetSimpleName)
+                        && !"SPacketSpawnMob".equals(packetSimpleName)) {
                     String errorMessage = "§c[数据包捕获失败] " + packetSimpleName;
                     Minecraft.getMinecraft().player.sendMessage(new TextComponentString(errorMessage));
                 }
@@ -1201,12 +1249,17 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
                 }
                 rawData = new byte[buffer.readableBytes()];
                 buffer.readBytes(rawData);
+            } catch (Exception e) {
+                // 有些包（例如 SPacketSpawnMob）的 writePacketData 依赖运行时才具备的实体/元数据，
+                // 直接序列化会 NPE。快照只是旁路观测，不能让它把异常抛进 Netty 管道打断正常收包。
+                return null;
             } finally {
                 buffer.release();
             }
         }
 
-        return new PendingPacketSnapshot(captureTimestamp, packetClassName, isFml, packetId, channel, rawData, isSent);
+        return new PendingPacketSnapshot(captureTimestamp, packetClassName, isFml, packetId, channel, rawData, isSent,
+                owner);
     }
 
     private boolean shouldCapture(PendingPacketSnapshot snapshot) {
@@ -1392,7 +1445,7 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
             }
 
             CapturedPacketData packetData = new CapturedPacketData(snapshot.timestamp, snapshot.packetClassName,
-                    snapshot.isFmlPacket, snapshot.packetId, snapshot.channel, snapshot.rawData, null);
+                    snapshot.isFmlPacket, snapshot.packetId, snapshot.channel, snapshot.rawData, null, snapshot.owner);
 
             if (snapshot.isSent) {
                 appendCapturedPacket(capturedPackets, packetData, capturedSentRawBytes);
@@ -1578,16 +1631,6 @@ public class PacketCaptureHandler extends ChannelDuplexHandler {
                 || name.contains("chunksbiomes");
     }
 
-    public static List<String> getRecentOwlViewDecodedSnapshot() {
-        synchronized (recentOwlViewDecoded) {
-            return new ArrayList<>(recentOwlViewDecoded);
-        }
-    }
 
-    public static void clearRecentOwlViewDecoded() {
-        synchronized (recentOwlViewDecoded) {
-            recentOwlViewDecoded.clear();
-        }
-    }
 
 }

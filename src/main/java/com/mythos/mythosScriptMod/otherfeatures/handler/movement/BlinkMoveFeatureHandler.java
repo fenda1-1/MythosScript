@@ -15,6 +15,7 @@ final class BlinkMoveFeatureHandler {
         boolean sneakDown = player != null && player.movementInput != null && player.movementInput.sneak;
         boolean sprintTrigger = mc != null && mc.gameSettings != null && mc.gameSettings.keyBindSprint.isKeyDown();
         boolean triggerDown = sneakDown && sprintTrigger;
+        MovementFeatureManager.RuntimeState rt = MovementFeatureManager.rt();
 
         if (!MovementFeatureManager.isEnabled("blink_move")
                 || player == null
@@ -25,21 +26,21 @@ final class BlinkMoveFeatureHandler {
                 || player.isRiding()
                 || mc == null
                 || mc.currentScreen != null) {
-            manager.wasBlinkTriggerDown = triggerDown;
+            rt.wasBlinkTriggerDown = triggerDown;
             return;
         }
 
-        if (!triggerDown || manager.wasBlinkTriggerDown || manager.blinkCooldownTicks > 0 || !player.onGround
+        if (!triggerDown || rt.wasBlinkTriggerDown || rt.blinkCooldownTicks > 0 || !player.onGround
                 || !MovementFeatureSupport.isMoving(player)) {
-            manager.wasBlinkTriggerDown = triggerDown;
+            rt.wasBlinkTriggerDown = triggerDown;
             return;
         }
 
         double maxDistance = MovementFeatureManager.getConfiguredValue("blink_move", 3.00F);
         Vec3d destination = MovementFeatureSupport.findBestBlinkDestination(player, maxDistance);
         if (destination == null) {
-            manager.wasBlinkTriggerDown = triggerDown;
-            manager.blinkCooldownTicks = 6;
+            rt.wasBlinkTriggerDown = triggerDown;
+            rt.blinkCooldownTicks = 6;
             return;
         }
 
@@ -62,9 +63,9 @@ final class BlinkMoveFeatureHandler {
         player.fallDistance = 0.0F;
         player.velocityChanged = true;
 
-        manager.blinkCooldownTicks = 16;
-        manager.longJumpChargeTicks = 0;
-        manager.wasLongJumpSneakDown = false;
-        manager.wasBlinkTriggerDown = triggerDown;
+        rt.blinkCooldownTicks = 16;
+        rt.longJumpChargeTicks = 0;
+        rt.wasLongJumpSneakDown = false;
+        rt.wasBlinkTriggerDown = triggerDown;
     }
 }

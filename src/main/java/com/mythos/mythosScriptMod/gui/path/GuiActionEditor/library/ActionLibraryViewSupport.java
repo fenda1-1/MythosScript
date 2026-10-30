@@ -63,32 +63,7 @@ public final class ActionLibraryViewSupport {
                 : MatchKind.NONE;
     }
 
-    public static String getMatchBadge(ActionLibraryNode node, String normalizedFilter) {
-        MatchKind kind = getMatchKind(node, normalizedFilter);
-        switch (kind) {
-            case LABEL:
-                return "名称";
-            case ACTION_TYPE:
-                return "类型";
-            case PINYIN:
-                return "拼音";
-            default:
-                return "";
-        }
-    }
 
-    public static int getMatchColor(MatchKind kind, boolean isGroup) {
-        switch (kind) {
-            case ACTION_TYPE:
-                return isGroup ? 0xFFF2D78F : 0xFFFFE4A8;
-            case PINYIN:
-                return isGroup ? 0xFFAEE8FF : 0xFFC7F1FF;
-            case LABEL:
-                return isGroup ? 0xFFE6EEF8 : 0xFFFFFFFF;
-            default:
-                return isGroup ? 0xFFE6EEF8 : 0xFFFFFFFF;
-        }
-    }
 
     private static boolean appendVisibleRows(ActionLibraryNode node, int depth, String filter,
             Set<String> expandedGroupIds, List<ActionLibraryVisibleRow> target) {

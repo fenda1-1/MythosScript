@@ -526,7 +526,7 @@ public final class ItemSpreadHandler {
             }
         }
         Set<Integer> sourceSlots = collectSourceInventorySlots(sources);
-        EntityPlayerSP player = Minecraft.getMinecraft().player;
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
         if (player == null) {
             return null;
         }

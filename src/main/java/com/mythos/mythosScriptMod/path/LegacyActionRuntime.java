@@ -7,6 +7,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mythos.mythosScriptMod.path.runtime.ScopedRuntimeVariables;
 import com.mythos.mythosScriptMod.utils.CapturedIdRuleManager;
+import com.mythos.mythosScriptMod.utils.JsonCopy;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.gui.GuiScreen;
@@ -781,7 +782,7 @@ public final class LegacyActionRuntime {
         if (element == null || element.isJsonNull()) {
             return JsonNull.INSTANCE;
         }
-        return new JsonParser().parse(element.toString());
+        return JsonCopy.deepCopy(element);
     }
 
     private static JsonElement toJsonElementFromString(String text) {
@@ -835,7 +836,7 @@ public final class LegacyActionRuntime {
         }
         if (normalized instanceof JsonElement) {
             JsonElement element = (JsonElement) normalized;
-            return new JsonParser().parse(element.toString());
+            return JsonCopy.deepCopy(element);
         }
         if (normalized instanceof Boolean) {
             return new com.google.gson.JsonPrimitive((Boolean) normalized);
@@ -1020,9 +1021,12 @@ public final class LegacyActionRuntime {
         if (screen == null) {
             return "";
         }
-        if (screen instanceof GuiChest && mc.player != null && mc.player.openContainer instanceof ContainerChest) {
+        // Bound-session player so a bot's gui_title reflects ITS open chest,
+        // not the mounted player's.  Falls back to mc.player when unbound.
+        EntityPlayerSP boundPlayer = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        if (screen instanceof GuiChest && boundPlayer != null && boundPlayer.openContainer instanceof ContainerChest) {
             try {
-                IInventory inv = ((ContainerChest) mc.player.openContainer).getLowerChestInventory();
+                IInventory inv = ((ContainerChest) boundPlayer.openContainer).getLowerChestInventory();
                 if (inv != null && inv.getDisplayName() != null) {
                     return inv.getDisplayName().getUnformattedText();
                 }

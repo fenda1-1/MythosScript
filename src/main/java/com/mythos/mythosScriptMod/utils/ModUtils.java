@@ -86,6 +86,26 @@ public class ModUtils {
     private static final Pattern CHAT_COMMAND_PLACEHOLDER_PATTERN = Pattern
             .compile("\\{\\s*([a-zA-Z0-9_\\.]+)\\s*\\}");
 
+    /**
+     * 多 bot 会话的聊天消息前缀：非人类/bot 会话执行时返回 §X[owner] §r，
+     * 让聊天框里每条脚本消息都能分辨是哪个 bot 发出的。颜色按 owner 名
+     * 稳定哈希到亮色池，保证同一 bot 始终同色。无 Nexus 或人类会话返回空串。
+     */
+    private static final String[] OWNER_CHAT_COLORS = {
+            "\u00a7b", "\u00a7e", "\u00a7c", "\u00a7d", "\u00a76", "\u00a7a", "\u00a79", "\u00a75"
+    };
+
+    public static String nexusChatPrefix() {
+        try {
+            String owner = com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner();
+            if (owner == null || owner.isEmpty()) return "";
+            int idx = Math.abs(owner.hashCode()) % OWNER_CHAT_COLORS.length;
+            return OWNER_CHAT_COLORS[idx] + "[" + owner + "] \u00a7r";
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
     public static void disconnectFromCurrentWorld() {
         if (disconnectScheduled) {
             return;
@@ -161,7 +181,21 @@ public class ModUtils {
         }
 
         public void schedule(Runnable action, int delayTicks, boolean normalizeDelayTo20Tps, String tag) {
-            tasks.add(new DelayTask(action, delayTicks, normalizeDelayTo20Tps, tag));
+            // Pin the task to the session that scheduled it: the mounted
+            // session's tasks tick on the client thread (Forge bus), a
+            // background bot's tasks only tick inside that bot's
+            // NexusTickBridge tickAll pass.  Without the owner tag every
+            // tick thread would drain the shared queue and each task would
+            // count down once per session instead of once per tick.
+            String owner;
+            try {
+                owner = com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner();
+            } catch (Throwable ignored) {
+                owner = "";
+            }
+            tasks.add(new DelayTask(action, delayTicks, normalizeDelayTo20Tps, tag, owner));
+            mythosScriptMod.LOGGER.info("[delaytask] scheduled owner={} delay={} thread={}",
+                    owner, delayTicks, Thread.currentThread().getName());
         }
 
         public void cancelTasks(java.util.function.Predicate<DelayTask> predicate) {
@@ -170,15 +204,33 @@ public class ModUtils {
 
         @SubscribeEvent
         public void onClientTick(TickEvent.ClientTickEvent event) {
-            if (event.phase == TickEvent.Phase.START) {
-                Iterator<DelayTask> iterator = tasks.iterator();
-                while (iterator.hasNext()) {
-                    DelayTask task = iterator.next();
-                    task.tick();
-                    if (task.isFinished()) {
+            if (event.phase == TickEvent.Phase.END) {
+                drainForCurrentOwner();
+            }
+        }
+
+        /** Tick + drain tasks owned by the current tick context. Safe to call
+         *  every tick-thread iteration — wall-clock tasks just see more
+         *  frequent samples. */
+        public void drainForCurrentOwner() {
+            String owner;
+            try {
+                owner = com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner();
+            } catch (Throwable ignored) {
+                owner = "";
+            }
+            Iterator<DelayTask> iterator = tasks.iterator();
+            while (iterator.hasNext()) {
+                DelayTask task = iterator.next();
+                if (!task.owner.equals(owner)) continue;
+                task.tick();
+                if (task.isFinished()) {
+                    try {
                         task.run();
-                        iterator.remove();
+                    } catch (Throwable t) {
+                        mythosScriptMod.LOGGER.warn("[delaytask] owner={} task failed: {}", owner, t);
                     }
+                    iterator.remove();
                 }
             }
         }
@@ -192,16 +244,50 @@ public class ModUtils {
             private double remainingBaselineTicks;
             private final boolean normalizeDelayTo20Tps;
             private final String tag;
+            private final String owner;
+            /** Wall-clock countdown for background-bot-owned tasks: Nexus
+             *  throttles background sessions below 100% tick rate, but tick()
+             *  only runs on full ticks — a "2 tick" delay at 20% rate was
+             *  really 10 ticks (~5x). Count elapsed ms instead so the delay
+             *  means the same 50ms/tick regardless of session tick rate.
+             *  Foreground (owner="") tasks keep pure tick counting — the real
+             *  bus fires exactly 20/s for them. */
+            private long lastTickNanos = -1L;
+            private double remainingNanos;
+            private final boolean wallClock;
 
             public DelayTask(Runnable action, int delayTicks, boolean normalizeDelayTo20Tps, String tag) {
+                this(action, delayTicks, normalizeDelayTo20Tps, tag, "");
+            }
+
+            public DelayTask(Runnable action, int delayTicks, boolean normalizeDelayTo20Tps, String tag, String owner) {
                 this.action = action;
                 this.normalizeDelayTo20Tps = normalizeDelayTo20Tps && delayTicks > 0;
                 this.remainingTicks = Math.max(0, delayTicks);
                 this.remainingBaselineTicks = Math.max(0, delayTicks);
                 this.tag = tag;
+                this.owner = owner == null ? "" : owner;
+                // Non-empty owner = scheduled by a background bot session —
+                // count wall-clock so throttled tick rates don't stretch it.
+                this.wallClock = !this.owner.isEmpty();
+                this.remainingNanos = this.wallClock
+                        ? this.remainingTicks * 50.0D * 1_000_000.0D
+                        : 0.0D;
             }
 
             public void tick() {
+                if (wallClock) {
+                    long now = System.nanoTime();
+                    if (lastTickNanos < 0) {
+                        lastTickNanos = now;
+                        return;
+                    }
+                    remainingNanos -= (now - lastTickNanos);
+                    lastTickNanos = now;
+                    remainingTicks = Math.max(0,
+                            (int) Math.ceil(remainingNanos / (50.0D * 1_000_000.0D)));
+                    return;
+                }
                 if (normalizeDelayTo20Tps) {
                     remainingBaselineTicks -= 1.0D / getCurrentTimerSpeedMultiplier();
                     remainingTicks = Math.max(0, (int) Math.ceil(Math.max(0.0D, remainingBaselineTicks)));
@@ -303,38 +389,6 @@ public class ModUtils {
         return Math.max(1.0F, SpeedHandler.getCurrentTimerSpeedMultiplier());
     }
 
-    /**
-     * 将3D世界坐标转换为2D屏幕坐标
-     * 
-     * @param pos 3D世界坐标
-     * @return 2D屏幕坐标 (x, y, z)，其中z表示是否在屏幕前方 (z<1)
-     */
-    public static Vec3d worldToScreenPos(Vec3d pos) {
-        EntityPlayerSP player = Minecraft.getMinecraft().getRenderViewEntity() instanceof EntityPlayerSP
-                ? (EntityPlayerSP) Minecraft.getMinecraft().getRenderViewEntity()
-                : Minecraft.getMinecraft().player;
-        if (player == null)
-            return null;
-
-        Vec3d cameraPos = player.getPositionEyes(Minecraft.getMinecraft().getRenderPartialTicks());
-
-        FloatBuffer screenCoords = BufferUtils.createFloatBuffer(4);
-        IntBuffer viewport = BufferUtils.createIntBuffer(16);
-        FloatBuffer modelView = BufferUtils.createFloatBuffer(16);
-        FloatBuffer projection = BufferUtils.createFloatBuffer(16);
-
-        GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, modelView);
-        GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, projection);
-        GL11.glGetInteger(GL11.GL_VIEWPORT, viewport);
-
-        boolean result = GLU.gluProject((float) (pos.x - cameraPos.x), (float) (pos.y - cameraPos.y),
-                (float) (pos.z - cameraPos.z), modelView, projection, viewport, screenCoords);
-
-        if (result) {
-            return new Vec3d(screenCoords.get(0), Display.getHeight() - screenCoords.get(1), screenCoords.get(2));
-        }
-        return null;
-    }
 
     /**
      * 设置玩家视角角度
@@ -402,6 +456,22 @@ public class ModUtils {
             return;
         }
 
+        // Navigation commands are handled by EmbeddedNavigationHandler. When it
+        // declines (throttled, player not bound, execute failed) we must NOT fall
+        // through to sendChatMessage: on a bound bot thread mc.player resolves to
+        // the mounted session, so a bot's "!goto" would land in the foreground
+        // human's chat. Drop the command instead — the sequence's own wait/retry
+        // will re-issue it on the next loop.
+        if (isNavigationCommand(resolvedCommand)) {
+            boolean handled = tryHandleInternalNavigation(resolvedCommand);
+            if (!handled) {
+                mythosScriptMod.LOGGER.info("[发送命令] 导航命令未分发（节流/未绑定），丢弃: {}", resolvedCommand);
+            } else if (ModConfig.isDebugModeEnabled && Minecraft.getMinecraft().player != null) {
+                Minecraft.getMinecraft().player
+                        .sendMessage(new TextComponentString("§d[DEBUG] §7内置导航接管命令: §f" + resolvedCommand));
+            }
+            return;
+        }
         if (tryHandleInternalNavigation(resolvedCommand)) {
             if (ModConfig.isDebugModeEnabled && Minecraft.getMinecraft().player != null) {
                 Minecraft.getMinecraft().player
@@ -412,10 +482,37 @@ public class ModUtils {
         if (ModConfig.isDebugModeEnabled && Minecraft.getMinecraft().player != null) {
             Minecraft.getMinecraft().player.sendMessage(new TextComponentString("§d[DEBUG] §7发送命令: §f" + resolvedCommand));
         }
-        if (Minecraft.getMinecraft().player != null && !Minecraft.getMinecraft().player.isSpectator()) {
-            Minecraft.getMinecraft().player.sendChatMessage(resolvedCommand);
-            mythosScriptMod.LOGGER.info("Sent command: " + resolvedCommand);
+        EntityPlayerSP sender = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        if (sender == null) {
+            sender = Minecraft.getMinecraft().player;
         }
+        if (sender != null && !sender.isSpectator()) {
+            // sendChatMessage routes through the baritone mixin which cancels
+            // slash-prefixed server commands ("/tp", "/fill", ...) as its own
+            // command syntax. The bot needs real server commands for the test
+            // harness, so send the CPacketChatMessage directly and let the
+            // server resolve the "/..." text.
+            if (resolvedCommand.startsWith("/") && sender.connection != null) {
+                sender.connection.sendPacket(new net.minecraft.network.play.client.CPacketChatMessage(resolvedCommand));
+                mythosScriptMod.LOGGER.info("Sent server command: " + resolvedCommand);
+            } else {
+                sender.sendChatMessage(resolvedCommand);
+                mythosScriptMod.LOGGER.info("Sent command: " + resolvedCommand);
+            }
+        }
+    }
+
+    private static boolean isNavigationCommand(String command) {
+        if (command == null) {
+            return false;
+        }
+        String lower = command.trim().toLowerCase();
+        return lower.equals("!stop")
+                || lower.equals("!pause")
+                || lower.equals("!resume")
+                || lower.equals("!follow entities")
+                || lower.startsWith("!goto ")
+                || lower.startsWith(".goto ");
     }
 
     private static String resolveChatCommandPlaceholders(String command) {
@@ -502,7 +599,7 @@ public class ModUtils {
      * @param preserveView 是否保留当前视角
      */
     public static void rightClickOnBlock(EntityPlayerSP player, BlockPos pos, boolean preserveView) {
-        if (player == null || player.world == null || Minecraft.getMinecraft().playerController == null || pos == null) {
+        if (player == null || player.world == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundController() == null || pos == null) {
             mythosScriptMod.LOGGER.warn("rightClickOnBlock 失败: 玩家、世界、控制器或坐标为空");
             return;
         }
@@ -568,9 +665,9 @@ public class ModUtils {
                         pos, validateRay.getBlockPos());
             }
 
-            Minecraft.getMinecraft().playerController.processRightClickBlock(
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().processRightClickBlock(
                     player,
-                    Minecraft.getMinecraft().world,
+                    (WorldClient) com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld(),
                     pos,
                     facing,
                     hitVec,
@@ -611,7 +708,7 @@ public class ModUtils {
         // 查找附近所有实体（不包括玩家自己）
         Entity nearest = null;
         double minDistSq = Double.MAX_VALUE;
-        for (Entity entity : Minecraft.getMinecraft().world.getEntitiesWithinAABB(
+        for (Entity entity : com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().getEntitiesWithinAABB(
                 Entity.class,
                 new AxisAlignedBB(
                         px - range, py - range, pz - range,
@@ -626,7 +723,7 @@ public class ModUtils {
         }
 
         if (nearest != null) {
-            Minecraft.getMinecraft().playerController.interactWithEntity(player, nearest, EnumHand.MAIN_HAND);
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().interactWithEntity(player, nearest, EnumHand.MAIN_HAND);
             mythosScriptMod.LOGGER.info("Right clicked entity {} at {} preserveView={}", nearest.getName(), pos,
                     preserveView);
         } else {
@@ -634,134 +731,8 @@ public class ModUtils {
         }
     }
 
-    /**
-     * 自动执行指定村民交易，自动补全输入物品并领取交易物品，支持NBT精确匹配
-     * 
-     * @param player     玩家实体
-     * @param tradeIndex 村民交易序号（从0开始）
-     * @param tradeCount 执行多少次该交易
-     */
-    public static void autoVillagerTradeFull(EntityPlayerSP player, int tradeIndex, int tradeCount) {
-        mythosScriptMod.LOGGER.info("当前GUI: " + Minecraft.getMinecraft().currentScreen.getClass().getName());
-        mythosScriptMod.LOGGER.info("当前容器: " + player.openContainer.getClass().getName());
-        if (!(Minecraft.getMinecraft().currentScreen instanceof GuiMerchant) || tradeCount <= 0)
-            return;
-        GuiMerchant gui = (GuiMerchant) Minecraft.getMinecraft().currentScreen;
-        MerchantRecipeList recipes = gui.getMerchant().getRecipes(player);
 
-        if (recipes == null || tradeIndex < 0 || tradeIndex >= recipes.size())
-            return;
-        MerchantRecipe recipe = recipes.get(tradeIndex);
-        if (recipe == null || recipe.isRecipeDisabled())
-            return;
 
-        // 反射设置GuiMerchant的currentRecipeIndex（适配开发版和混淆版）
-        try {
-            java.lang.reflect.Field field;
-            try {
-                // 开发环境名
-                field = GuiMerchant.class.getDeclaredField("currentRecipeIndex");
-            } catch (NoSuchFieldException e) {
-                // 混淆名
-                field = GuiMerchant.class.getDeclaredField("field_147041_z");
-            }
-            field.setAccessible(true);
-            field.setInt(gui, tradeIndex);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        for (int t = 0; t < tradeCount; t++) {
-            // 补全输入物品
-            boolean inputOk = fillMerchantInputsWithNBT(gui, recipe);
-            if (!inputOk) {
-                mythosScriptMod.LOGGER.warn("背包中缺少交易所需物品（含NBT），无法继续交易");
-                break;
-            }
-
-            int emptySlot = findFirstEmptyInventorySlot(gui);
-            if (emptySlot >= 0) {
-                Minecraft.getMinecraft().playerController.windowClick(gui.inventorySlots.windowId, 2, 0,
-                        ClickType.PICKUP, player);
-                Minecraft.getMinecraft().playerController.windowClick(gui.inventorySlots.windowId, emptySlot, 0,
-                        ClickType.PICKUP, player);
-            } else {
-                mythosScriptMod.LOGGER.warn("背包已满，无法领取交易物品！");
-                break;
-            }
-        }
-        mythosScriptMod.LOGGER.info("自动完成村民交易（含NBT精确匹配），交易序号: " + tradeIndex + "，次数: " + tradeCount);
-
-        // 交易完成后强制清理两个输入槽
-        clearMerchantInputSlot(gui, 0);
-        clearMerchantInputSlot(gui, 1);
-
-        // 额外执行一次清空操作（防止残留）
-        Minecraft.getMinecraft().playerController.windowClick(gui.inventorySlots.windowId, 0, 0, ClickType.QUICK_MOVE,
-                player);
-        Minecraft.getMinecraft().playerController.windowClick(gui.inventorySlots.windowId, 1, 0, ClickType.QUICK_MOVE,
-                player);
-    }
-
-    /**
-     * 补全村民交易输入物品（支持1或2输入物品，且匹配NBT标签）
-     * 
-     * @return 是否成功放入所需数量的输入物品
-     */
-    private static boolean fillMerchantInputsWithNBT(GuiMerchant gui, MerchantRecipe recipe) {
-        // 1. 先清空输入槽（slot 0, slot 1）
-        clearMerchantInputSlot(gui, 0);
-        clearMerchantInputSlot(gui, 1);
-
-        // 2. 放入输入1
-        boolean ok1 = moveItemToInputWithNBT(gui, recipe.getItemToBuy(), 0, recipe.getItemToBuy().getCount());
-        // 3. 放入输入2（如果有）
-        boolean ok2 = true;
-        if (!recipe.getSecondItemToBuy().isEmpty()) {
-            ok2 = moveItemToInputWithNBT(gui, recipe.getSecondItemToBuy(), 1,
-                    recipe.getSecondItemToBuy().getCount());
-        }
-        return ok1 && ok2;
-    }
-
-    /**
-     * 从背包移动指定数量物品（含精确NBT）到村民输入槽
-     * 
-     * @param gui         GuiMerchant
-     * @param targetStack 目标物品
-     * @param inputSlot   输入槽号（0或1）
-     * @param neededCount 需要的数量
-     * @return 是否足量成功
-     */
-    private static boolean moveItemToInputWithNBT(GuiMerchant gui, net.minecraft.item.ItemStack targetStack,
-            int inputSlot,
-            int neededCount) {
-        int moved = 0;
-        for (int i = 0; i <= 35; i++) {
-            Slot slot = gui.inventorySlots.getSlot(i);
-            if (slot != null && slot.getHasStack()) {
-                net.minecraft.item.ItemStack stack = slot.getStack();
-                if (itemStackNBTEquals(stack, targetStack)) {
-                    int toMove = Math.min(stack.getCount(), neededCount - moved);
-                    for (int j = 0; j < toMove; j++) {
-                        Minecraft.getMinecraft().playerController.windowClick(gui.inventorySlots.windowId, i, 0,
-                                ClickType.PICKUP,
-                                Minecraft.getMinecraft().player);
-                        Minecraft.getMinecraft().playerController.windowClick(gui.inventorySlots.windowId, inputSlot, 0,
-                                ClickType.PICKUP,
-                                Minecraft.getMinecraft().player);
-                        moved++;
-                        stack = slot.getStack();
-                        if (stack == null || stack.isEmpty())
-                            break;
-                    }
-                }
-                if (moved >= neededCount)
-                    break;
-            }
-        }
-        return moved >= neededCount;
-    }
 
     /**
      * 精确比较两个ItemStack，包括NBT
@@ -778,49 +749,7 @@ public class ModUtils {
         return nbtA.equals(nbtB);
     }
 
-    /**
-     * 查找玩家背包中的第一个空槽位
-     * 
-     * @param gui 当前GuiMerchant
-     * @return 槽位索引（GUI里的），没有空位返回-1
-     */
-    private static int findFirstEmptyInventorySlot(GuiMerchant gui) {
-        for (int i = 0; i <= 35; i++) {
-            Slot slot = gui.inventorySlots.getSlot(i);
-            if (slot != null && !slot.getHasStack()) {
-                return i;
-            }
-        }
-        return -1;
-    }
 
-    /**
-     * 清空村民交易输入槽
-     */
-    private static void clearMerchantInputSlot(GuiMerchant gui, int slotId) {
-        if (gui.inventorySlots == null)
-            return; // 添加空指针检查
-        Slot slot = gui.inventorySlots.getSlot(slotId);
-        if (slot != null && slot.getHasStack()) {
-            // 使用快速移动模式清空槽位（按住Shift点击）
-            Minecraft.getMinecraft().playerController.windowClick(
-                    gui.inventorySlots.windowId,
-                    slotId,
-                    0,
-                    ClickType.QUICK_MOVE, // 修改为快速移动
-                    Minecraft.getMinecraft().player);
-
-            // 二次清理确保槽位清空（针对无法快速移动的情况）
-            if (slot.getHasStack()) {
-                Minecraft.getMinecraft().playerController.windowClick(
-                        gui.inventorySlots.windowId,
-                        slotId,
-                        1, // 使用右键点击逐个移除
-                        ClickType.PICKUP,
-                        Minecraft.getMinecraft().player);
-            }
-        }
-    }
 
     /**
      * 自动点击箱子或大箱子GUI的指定格子 (应用初始延迟)
@@ -867,22 +796,27 @@ public class ModUtils {
     }
 
     public static void clickChestSlotNow(int chestSlotIndex, int button, String clickTypeName) {
-        Minecraft mc = Minecraft.getMinecraft();
-        EntityPlayerSP player = mc.player;
-        if (player == null || mc.playerController == null) {
+        // Session-bound: a background bot's chest GUI lives in its savedScreen,
+        // and clicks must go through its own controller.
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        net.minecraft.client.multiplayer.PlayerControllerMP controller =
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundController();
+        net.minecraft.client.gui.GuiScreen screen =
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen();
+        if (player == null || controller == null) {
             return;
         }
-        if (!(mc.currentScreen instanceof GuiChest)) {
+        if (!(screen instanceof GuiChest)) {
             return;
         }
 
-        GuiChest gui = (GuiChest) mc.currentScreen;
+        GuiChest gui = (GuiChest) screen;
         if (chestSlotIndex < 0 || chestSlotIndex >= gui.inventorySlots.inventorySlots.size()) {
             return;
         }
 
         ClickType clickType = resolveClickType(clickTypeName);
-        mc.playerController.windowClick(gui.inventorySlots.windowId, chestSlotIndex, button, clickType, player);
+        controller.windowClick(gui.inventorySlots.windowId, chestSlotIndex, button, clickType, player);
         mythosScriptMod.LOGGER.info("自动点击箱子格子: {} button={} type={}", chestSlotIndex, button,
                 normalizeClickTypeName(clickTypeName));
     }
@@ -1066,9 +1000,12 @@ public class ModUtils {
      * @param clickTypeName ClickType 名称（如 PICKUP/QUICK_MOVE/SWAP）
      */
     public static void performWindowClick(String windowIdSpec, int slot, int button, String clickTypeName) {
-        Minecraft mc = Minecraft.getMinecraft();
-        EntityPlayerSP player = mc.player;
-        if (player == null || player.openContainer == null || mc.playerController == null) {
+        // Session-bound resolution — a background bot's windowClick must hit
+        // its own container/controller, not the mounted session's.
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        net.minecraft.client.multiplayer.PlayerControllerMP controller =
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundController();
+        if (player == null || player.openContainer == null || controller == null) {
             mythosScriptMod.LOGGER.warn("windowClick 失败: 玩家或容器不可用");
             return;
         }
@@ -1089,7 +1026,7 @@ public class ModUtils {
         }
 
         ClickType clickType = resolveClickType(clickTypeName);
-        mc.playerController.windowClick(actualWindowId, slot, button, clickType, player);
+        controller.windowClick(actualWindowId, slot, button, clickType, player);
     }
 
     public static String normalizeClickTypeName(String clickTypeName) {
@@ -1184,16 +1121,32 @@ public class ModUtils {
      * @param shiftQuickMove true=使用 Shift 一键拾取(QUICK_MOVE)，false=逐格普通拾取(PICKUP)
      */
     public static void takeAllItemsFromChest(boolean shiftQuickMove) {
-        if (ModConfig.isDebugModeEnabled && Minecraft.getMinecraft().player != null) {
-            Minecraft.getMinecraft().player.sendMessage(new TextComponentString(
+        EntityPlayerSP dbgPlayer = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        mythosScriptMod.LOGGER.info("[takeall] enter thread={} player={} boundScreen={}",
+                Thread.currentThread().getName(),
+                dbgPlayer == null ? "null" : dbgPlayer.getName(),
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen());
+        if (ModConfig.isDebugModeEnabled && dbgPlayer != null) {
+            dbgPlayer.sendMessage(new TextComponentString(
                     "§d[调试] §7执行一键取物 (" + (shiftQuickMove ? "Shift一键拾取" : "逐格拾取") + ")。"));
         }
 
         DelayScheduler.instance.schedule(() -> {
-            if (Minecraft.getMinecraft().currentScreen instanceof GuiChest
-                    && Minecraft.getMinecraft().player.openContainer != null) {
-                GuiChest gui = (GuiChest) Minecraft.getMinecraft().currentScreen;
-                Container container = Minecraft.getMinecraft().player.openContainer;
+            // On a background bot's tick thread the chest GUI was swallowed
+            // into the session's savedScreen (never displayed) — resolve the
+            // screen / player / controller through the bound session, not the
+            // shared Minecraft singleton, or the clicks hit whatever session
+            // happens to be mounted.
+            net.minecraft.client.gui.GuiScreen screen =
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen();
+            EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+            net.minecraft.client.multiplayer.PlayerControllerMP controller =
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundController();
+            if (screen instanceof GuiChest
+                    && player != null && player.openContainer != null
+                    && controller != null) {
+                GuiChest gui = (GuiChest) screen;
+                Container container = player.openContainer;
                 int windowId = container.windowId;
 
                 int chestSlots = container.inventorySlots.size() - 36;
@@ -1224,19 +1177,32 @@ public class ModUtils {
                     int delay = initialDelay + (batchIndex * interval);
 
                     DelayScheduler.instance.schedule(() -> {
-                        if (Minecraft.getMinecraft().currentScreen == gui
-                                && Minecraft.getMinecraft().player.openContainer.windowId == windowId) {
-                            Minecraft.getMinecraft().playerController.windowClick(
+                        net.minecraft.client.gui.GuiScreen scr2 =
+                                com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen();
+                        EntityPlayerSP pl2 = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+                        net.minecraft.client.multiplayer.PlayerControllerMP ctrl2 =
+                                com.mythos.mythosScriptMod.mcp.NexusSessions.boundController();
+                        if (scr2 == gui
+                                && pl2 != null && pl2.openContainer != null
+                                && pl2.openContainer.windowId == windowId
+                                && ctrl2 != null) {
+                            ctrl2.windowClick(
                                     windowId,
                                     slotIndex,
                                     0,
                                     clickType,
-                                    Minecraft.getMinecraft().player);
+                                    pl2);
                         }
                     }, delay);
                 }
             } else {
-                mythosScriptMod.LOGGER.warn("箱子GUI未正常打开或容器为空");
+                mythosScriptMod.LOGGER.warn(
+                        "箱子GUI未正常打开或容器为空: screen={} player={} openContainer={} windowId={} controller={}",
+                        screen == null ? "null" : screen.getClass().getSimpleName(),
+                        player == null ? "null" : player.getName(),
+                        player == null ? "null" : (player.openContainer == null ? "null" : player.openContainer.getClass().getSimpleName()),
+                        player == null || player.openContainer == null ? -1 : player.openContainer.windowId,
+                        controller == null ? "null" : "ok");
             }
         }, 1);
     }
@@ -1248,36 +1214,6 @@ public class ModUtils {
         takeAllItemsFromChest(true);
     }
 
-    private static void processChestSlotsSafely(GuiChest gui, List<Integer> slots) {
-        Minecraft.getMinecraft().addScheduledTask(() -> {
-            // 将槽位分成四列并行处理
-            for (int batchIndex = 0; batchIndex < slots.size(); batchIndex += 3) {
-                final int currentBatch = batchIndex;
-                // 每列间隔3tick
-                new DelayAction(batchIndex, () -> {
-                    // 并行处理当前列的4个槽位
-                    for (int i = 0; i < 4; i++) {
-                        int globalIndex = currentBatch + i;
-                        if (globalIndex >= slots.size())
-                            return;
-
-                        int slotIndex = slots.get(globalIndex);
-                        if (slotIndex >= 0 && slotIndex < gui.inventorySlots.inventorySlots.size()
-                                && gui.inventorySlots.getSlot(slotIndex) != null) {
-                            Minecraft.getMinecraft().playerController.windowClick(
-                                    gui.inventorySlots.windowId,
-                                    slotIndex,
-                                    0,
-                                    ClickType.QUICK_MOVE,
-                                    Minecraft.getMinecraft().player);
-                            mythosScriptMod.LOGGER.info("并行转移槽位 {} (批次 {} 进度 {}/4)", slotIndex, currentBatch / 4 + 1,
-                                    i + 1);
-                        }
-                    }
-                }).accept(Minecraft.getMinecraft().player);
-            }
-        });
-    }
 
     public static String normalizeSimulatedKeyState(String state) {
         String normalized = state == null ? "" : state.trim().toLowerCase(Locale.ROOT);
@@ -1588,8 +1524,8 @@ public class ModUtils {
      */
     public static boolean moveInventoryItemToHotbar(String itemName, AutoUseItemRule.MatchMode matchMode,
             int targetHotbarSlot, int count, boolean skipIfTargetOccupied) {
-        EntityPlayerSP player = Minecraft.getMinecraft().player;
-        if (player == null || player.openContainer == null || Minecraft.getMinecraft().playerController == null) {
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        if (player == null || player.openContainer == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundController() == null) {
             mythosScriptMod.LOGGER.warn("移动背包物品到快捷栏失败: 玩家或容器不可用");
             return false;
         }
@@ -1636,7 +1572,7 @@ public class ModUtils {
 
         int safeCount = Math.max(0, count);
         if (safeCount <= 0) {
-            Minecraft.getMinecraft().playerController.windowClick(
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(
                     activeContainer.windowId, sourceContainerSlot, hotbarIndex, ClickType.SWAP, player);
             return true;
         }
@@ -1664,7 +1600,7 @@ public class ModUtils {
 
         int transferCount = Math.min(safeCount, sourceStack.getCount());
         if (transferCount >= sourceStack.getCount()) {
-            Minecraft.getMinecraft().playerController.windowClick(
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(
                     activeContainer.windowId, sourceContainerSlot, hotbarIndex, ClickType.SWAP, player);
             return true;
         }
@@ -1679,23 +1615,23 @@ public class ModUtils {
         if (!movePartialStack(activeContainer, player, sourceContainerSlot, temporaryContainerSlot, transferCount)) {
             return false;
         }
-        Minecraft.getMinecraft().playerController.windowClick(
+        com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(
                 activeContainer.windowId, temporaryContainerSlot, hotbarIndex, ClickType.SWAP, player);
         return true;
     }
 
     private static boolean movePartialStack(Container container, EntityPlayerSP player, int sourceContainerSlot,
             int targetContainerSlot, int count) {
-        if (container == null || player == null || count <= 0 || Minecraft.getMinecraft().playerController == null) {
+        if (container == null || player == null || count <= 0 || com.mythos.mythosScriptMod.mcp.NexusSessions.boundController() == null) {
             return false;
         }
-        Minecraft.getMinecraft().playerController.windowClick(
+        com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(
                 container.windowId, sourceContainerSlot, 0, ClickType.PICKUP, player);
         for (int i = 0; i < count; i++) {
-            Minecraft.getMinecraft().playerController.windowClick(
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(
                     container.windowId, targetContainerSlot, 1, ClickType.PICKUP, player);
         }
-        Minecraft.getMinecraft().playerController.windowClick(
+        com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(
                 container.windowId, sourceContainerSlot, 0, ClickType.PICKUP, player);
         return player.inventory.getItemStack().isEmpty();
     }
@@ -1713,7 +1649,7 @@ public class ModUtils {
     }
 
     public static boolean switchToHotbarSlot(int targetHotbarSlot) {
-        EntityPlayerSP player = Minecraft.getMinecraft().player;
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
         if (player == null || player.connection == null) {
             return false;
         }
@@ -1761,12 +1697,9 @@ public class ModUtils {
         DelayScheduler.instance.schedule(action, safeDelayTicks);
     }
 
-    public static boolean useHeldItemNow() {
-        return triggerHeldItemUse(Minecraft.getMinecraft().player);
-    }
 
     public static void useHeldItem(int delayTicks) {
-        useHeldItem(Minecraft.getMinecraft().player, delayTicks);
+        useHeldItem(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer(), delayTicks);
     }
 
     public static void useHeldItem(EntityPlayerSP player, int delayTicks) {
@@ -1774,14 +1707,15 @@ public class ModUtils {
     }
 
     private static boolean triggerHeldItemUse(EntityPlayerSP player) {
-        Minecraft mc = Minecraft.getMinecraft();
+        net.minecraft.client.multiplayer.PlayerControllerMP controller =
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundController();
         if (player == null || player.connection == null) {
             return false;
         }
 
         boolean triggered = false;
-        if (mc.playerController != null && player.world != null) {
-            EnumActionResult result = mc.playerController.processRightClick(player, player.world, EnumHand.MAIN_HAND);
+        if (controller != null && player.world != null) {
+            EnumActionResult result = controller.processRightClick(player, player.world, EnumHand.MAIN_HAND);
             triggered = result != EnumActionResult.FAIL;
         }
 
@@ -1821,8 +1755,8 @@ public class ModUtils {
 
     public static void useItemFromInventory(String itemName, int tempHotbarSlot, int switchDelayTicks,
             int useDelayTicks, int switchBackDelayTicks) {
-        EntityPlayerSP player = Minecraft.getMinecraft().player;
-        if (player == null || player.connection == null || Minecraft.getMinecraft().playerController == null) {
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        if (player == null || player.connection == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundController() == null) {
             mythosScriptMod.LOGGER.error("静默使用物品失败: 玩家或容器为空。");
             return;
         }
@@ -1874,7 +1808,7 @@ public class ModUtils {
                 return;
             }
 
-            Minecraft.getMinecraft().playerController.windowClick(
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(
                     activeContainer.windowId,
                     sourceContainerSlot,
                     safeTempHotbarSlot,
@@ -1901,7 +1835,7 @@ public class ModUtils {
                         player.connection.sendPacket(new CPacketHeldItemChange(originalHotbarSlot));
                     }
 
-                    if (alreadyInHotbar || Minecraft.getMinecraft().playerController == null) {
+                    if (alreadyInHotbar || com.mythos.mythosScriptMod.mcp.NexusSessions.boundController() == null) {
                         return;
                     }
 
@@ -1914,7 +1848,7 @@ public class ModUtils {
                         return;
                     }
 
-                    Minecraft.getMinecraft().playerController.windowClick(
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(
                             activeContainer.windowId,
                             restoreSourceContainerSlot,
                             safeTempHotbarSlot,
@@ -2004,13 +1938,62 @@ public class ModUtils {
         return finalHexData;
     }
 
+    /**
+     * Connection of the session this code runs for. Minecraft#getConnection() is the
+     * primary (human) connection and is NOT rerouted per Nexus session, so sending
+     * through it makes every bot's packets leave on the human connection.
+     */
+    private static NetHandlerPlayClient sessionConnection() {
+        NetHandlerPlayClient explicit = EXPLICIT_CONNECTION.get();
+        if (explicit != null) return explicit;
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc == null) return null;
+        if (mc.player != null && mc.player.connection != null) return mc.player.connection;
+        return mc.getConnection();
+    }
+
+    /** Set while a sequence action runs with an explicit player, so the helpers below
+     *  send on that player's connection instead of guessing from the thread. */
+    private static final ThreadLocal<NetHandlerPlayClient> EXPLICIT_CONNECTION = new ThreadLocal<>();
+
+    private static NetHandlerPlayClient connectionOf(net.minecraft.client.entity.EntityPlayerSP player) {
+        if (player != null && player.connection != null) return player.connection;
+        return sessionConnection();
+    }
+
+    private static void withConnection(NetHandlerPlayClient connection, Runnable body) {
+        NetHandlerPlayClient previous = EXPLICIT_CONNECTION.get();
+        EXPLICIT_CONNECTION.set(connection);
+        try {
+            body.run();
+        } finally {
+            if (previous == null) EXPLICIT_CONNECTION.remove(); else EXPLICIT_CONNECTION.set(previous);
+        }
+    }
+
+    public static void sendFmlPacket(net.minecraft.client.entity.EntityPlayerSP player, String channel, String hexData) {
+        withConnection(connectionOf(player), () -> sendFmlPacket(channel, hexData));
+    }
+
+    public static void sendStandardPacketById(net.minecraft.client.entity.EntityPlayerSP player, int packetId, String hexData) {
+        withConnection(connectionOf(player), () -> sendStandardPacketById(packetId, hexData));
+    }
+
+    public static void mockReceiveFmlPacket(net.minecraft.client.entity.EntityPlayerSP player, String channel, String hexData) {
+        withConnection(connectionOf(player), () -> mockReceiveFmlPacket(channel, hexData));
+    }
+
+    public static void mockReceiveStandardPacketById(net.minecraft.client.entity.EntityPlayerSP player, int packetId, String hexData) {
+        withConnection(connectionOf(player), () -> mockReceiveStandardPacketById(packetId, hexData));
+    }
+
     public static void sendFmlPacket(String channel, String hexData) {
         if (!PerformanceMonitor.isFeatureEnabled("packet_send_fml")) {
             return;
         }
 
         PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("packet_send_fml");
-        if (Minecraft.getMinecraft().player == null || Minecraft.getMinecraft().getConnection() == null) {
+        if (Minecraft.getMinecraft().player == null || sessionConnection() == null) {
             mythosScriptMod.LOGGER.error("[发送数据包] 失败: 玩家或网络连接为空。");
             timer.stop();
             return;
@@ -2023,7 +2006,7 @@ public class ModUtils {
             // 创建并发送数据包
             PacketBuffer buffer = new PacketBuffer(Unpooled.wrappedBuffer(data));
             FMLProxyPacket packet = new FMLProxyPacket(buffer, channel);
-            Minecraft.getMinecraft().getConnection().sendPacket(packet);
+            sessionConnection().sendPacket(packet);
 
             if (ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE)) {
                 mythosScriptMod.LOGGER.info("[路径序列] 发送数据包 -> 频道: {}, HEX: {}", channel, finalHexData);
@@ -2053,7 +2036,7 @@ public class ModUtils {
         }
 
         PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("packet_send_standard");
-        NetHandlerPlayClient netHandler = Minecraft.getMinecraft().getConnection();
+        NetHandlerPlayClient netHandler = sessionConnection();
         if (netHandler == null) {
             mythosScriptMod.LOGGER.error("[发送数据包] 失败: NetHandlerPlayClient 为空。");
             timer.stop();
@@ -2106,7 +2089,7 @@ public class ModUtils {
     }
 
     public static void mockReceiveFmlPacket(String channel, String hexData) {
-        if (Minecraft.getMinecraft().player == null || Minecraft.getMinecraft().getConnection() == null) {
+        if (Minecraft.getMinecraft().player == null || sessionConnection() == null) {
             mythosScriptMod.LOGGER.error("[模拟接收数据包] 失败: 玩家或网络连接为空。 channel={}", channel);
             return;
         }
@@ -2129,7 +2112,7 @@ public class ModUtils {
 
             PacketBuffer buffer = new PacketBuffer(Unpooled.wrappedBuffer(data));
             FMLProxyPacket packet = new FMLProxyPacket(buffer, channel);
-            NetHandlerPlayClient clientHandler = Minecraft.getMinecraft().getConnection();
+            NetHandlerPlayClient clientHandler = sessionConnection();
             if (clientHandler == null) {
                 throw new IllegalStateException("NetHandlerPlayClient 为空");
             }
@@ -2151,7 +2134,7 @@ public class ModUtils {
     }
 
     public static void mockReceiveStandardPacketById(int packetId, String hexData) {
-        if (Minecraft.getMinecraft().player == null || Minecraft.getMinecraft().getConnection() == null) {
+        if (Minecraft.getMinecraft().player == null || sessionConnection() == null) {
             mythosScriptMod.LOGGER.error("[模拟接收数据包] 失败: 玩家或网络连接为空。 packetId={}", packetId);
             return;
         }
@@ -2175,7 +2158,7 @@ public class ModUtils {
             packet.readPacketData(buffer);
 
             // 直接在客户端主线程本地处理，避免注入 Netty pipeline 导致连接异常断开
-            NetHandlerPlayClient clientHandler = Minecraft.getMinecraft().getConnection();
+            NetHandlerPlayClient clientHandler = sessionConnection();
             if (clientHandler == null) {
                 throw new IllegalStateException("NetHandlerPlayClient 为空");
             }
@@ -2232,40 +2215,6 @@ public class ModUtils {
         return sb.toString();
     }
 
-    private static void fireInboundPacket(Packet<?> packet) throws Exception {
-        NetHandlerPlayClient connection = Minecraft.getMinecraft().getConnection();
-        if (connection == null) {
-            throw new IllegalStateException("NetHandlerPlayClient 为空");
-        }
-        NetworkManager networkManager = connection.getNetworkManager();
-        if (networkManager == null) {
-            throw new IllegalStateException("NetworkManager 为空");
-        }
-
-        Field channelField;
-        try {
-            channelField = NetworkManager.class.getDeclaredField("channel");
-        } catch (NoSuchFieldException ex) {
-            channelField = null;
-            for (Field f : NetworkManager.class.getDeclaredFields()) {
-                if (Channel.class.isAssignableFrom(f.getType())) {
-                    channelField = f;
-                    break;
-                }
-            }
-            if (channelField == null) {
-                throw new IllegalStateException("无法在 NetworkManager 中找到 Netty channel 字段");
-            }
-        }
-
-        channelField.setAccessible(true);
-        Channel channel = (Channel) channelField.get(networkManager);
-        if (channel == null || channel.pipeline() == null) {
-            throw new IllegalStateException("Netty channel 或 pipeline 为空");
-        }
-
-        channel.pipeline().fireChannelRead(packet);
-    }
 
     /**
      * 是否为 NPC（假玩家）：EntityPlayer、非本地玩家，且 UUID 为随机 v4。
@@ -2276,8 +2225,8 @@ public class ModUtils {
         if (!(entity instanceof EntityPlayer)) {
             return false;
         }
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc != null && entity == mc.player) {
+        EntityPlayerSP self = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        if (entity == self) {
             return false;
         }
         java.util.UUID uuid = entity.getUniqueID();

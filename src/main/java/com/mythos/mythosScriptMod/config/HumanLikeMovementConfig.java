@@ -18,7 +18,33 @@ public class HumanLikeMovementConfig {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    public static HumanLikeMovementConfig INSTANCE = new HumanLikeMovementConfig();
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用一个 INSTANCE 时
+    // 后台 bot 读到的是当前挂载会话的配置。统一经 instance() 取当前线程所属会话的那份。
+    private static final java.util.concurrent.ConcurrentHashMap<String, HumanLikeMovementConfig> INSTANCES =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static HumanLikeMovementConfig instance() {
+        String owner = ProfileManager.currentConfigOwner();
+        HumanLikeMovementConfig config = INSTANCES.get(owner);
+        return config != null ? config : loadOwnerInstance(owner);
+    }
+
+    // 不能用 computeIfAbsent：load() 里会反复调用 instance()，ConcurrentHashMap 不允许递归更新。
+    private static HumanLikeMovementConfig loadOwnerInstance(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            HumanLikeMovementConfig existing = INSTANCES.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            INSTANCES.put(owner, new HumanLikeMovementConfig());
+            ProfileManager.withConfigOwner(owner, (Runnable) HumanLikeMovementConfig::load);
+            return INSTANCES.get(owner);
+        }
+    }
+
+    private static void setInstance(HumanLikeMovementConfig config) {
+        INSTANCES.put(ProfileManager.currentConfigOwner(), config != null ? config : new HumanLikeMovementConfig());
+    }
 
     /**
      * 总开关。
@@ -166,24 +192,24 @@ public class HumanLikeMovementConfig {
     public int stuckRecoveryMaxTicks = 9;
 
     private static Path getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("human_like_movement.json");
+        return ProfileManager.currentConfigFile("human_like_movement.json");
     }
 
     public static void load() {
         Path configFile = getConfigFile();
         if (Files.exists(configFile)) {
             try (BufferedReader reader = Files.newBufferedReader(configFile, StandardCharsets.UTF_8)) {
-                INSTANCE = GSON.fromJson(reader, HumanLikeMovementConfig.class);
-                if (INSTANCE == null) {
-                    INSTANCE = new HumanLikeMovementConfig();
+                setInstance(GSON.fromJson(reader, HumanLikeMovementConfig.class));
+                if (instance() == null) {
+                    setInstance(new HumanLikeMovementConfig());
                 }
-                INSTANCE.normalize();
+                instance().normalize();
             } catch (Exception e) {
                 mythosScriptMod.LOGGER.error("无法加载模拟真人移动配置", e);
-                INSTANCE = new HumanLikeMovementConfig();
+                setInstance(new HumanLikeMovementConfig());
             }
         } else {
-            INSTANCE = new HumanLikeMovementConfig();
+            setInstance(new HumanLikeMovementConfig());
             save();
         }
     }
@@ -192,9 +218,9 @@ public class HumanLikeMovementConfig {
         Path configFile = getConfigFile();
         try {
             Files.createDirectories(configFile.getParent());
-            INSTANCE.normalize();
+            instance().normalize();
             try (BufferedWriter writer = Files.newBufferedWriter(configFile, StandardCharsets.UTF_8)) {
-                GSON.toJson(INSTANCE, writer);
+                GSON.toJson(instance(), writer);
             }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("无法保存模拟真人移动配置", e);

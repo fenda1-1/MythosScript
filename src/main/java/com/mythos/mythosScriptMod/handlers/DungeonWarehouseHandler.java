@@ -26,6 +26,37 @@ import java.util.List;
 
 public class DungeonWarehouseHandler {
 
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        public Settings settings = new Settings();
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) DungeonWarehouseHandler::loadConfig);
+            return config;
+        }
+    }
+
+
     public static final DungeonWarehouseHandler INSTANCE = new DungeonWarehouseHandler();
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -35,23 +66,22 @@ public class DungeonWarehouseHandler {
         public boolean shiftClickEnabled = true;
         public boolean ctrlClickEnabled = true;
     }
-    public static Settings settings = new Settings();
 
     private DungeonWarehouseHandler() {}
 
     private static Path getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("dungeon_warehouse_config.json");
+        return ProfileManager.currentConfigFile("dungeon_warehouse_config.json");
     }
 
     public static void loadConfig() {
         Path configFile = getConfigFile();
         if (Files.exists(configFile)) {
             try (BufferedReader reader = Files.newBufferedReader(configFile, StandardCharsets.UTF_8)) {
-                settings = GSON.fromJson(reader, Settings.class);
-                if (settings == null) settings = new Settings();
+                cfg().settings = GSON.fromJson(reader, Settings.class);
+                if (cfg().settings == null) cfg().settings = new Settings();
             } catch (Exception e) {
                 mythosScriptMod.LOGGER.error("加载副本仓库配置失败", e);
-                settings = new Settings();
+                cfg().settings = new Settings();
             }
         }
     }
@@ -61,7 +91,7 @@ public class DungeonWarehouseHandler {
         try {
             Files.createDirectories(configFile.getParent());
             try (BufferedWriter writer = Files.newBufferedWriter(configFile, StandardCharsets.UTF_8)) {
-                GSON.toJson(settings, writer);
+                GSON.toJson(cfg().settings, writer);
             }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("保存副本仓库配置失败", e);
@@ -78,22 +108,22 @@ public class DungeonWarehouseHandler {
     }
 
     public static void handleClick(Slot slot, boolean isShiftDown, boolean isCtrlDown, int ctrlAmount) {
-        if (isShiftDown && settings.shiftClickEnabled) {
+        if (isShiftDown && cfg().settings.shiftClickEnabled) {
             handleShiftClick(slot);
-        } else if (isCtrlDown && settings.ctrlClickEnabled) {
+        } else if (isCtrlDown && cfg().settings.ctrlClickEnabled) {
             handleCtrlClick(slot, ctrlAmount);
         }
     }
 
     private static void handleShiftClick(Slot slot) {
-        if (mc.player == null || mc.player.openContainer == null || slot == null || !slot.getHasStack()) return;
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer == null || slot == null || !slot.getHasStack()) return;
 
         if (slot.slotNumber >= 54 && slot.slotNumber <= 89) {
             ItemStack clickedStack = slot.getStack();
-            mc.player.sendMessage(new TextComponentString("§a[副本仓库] §f开始存入所有 " + clickedStack.getDisplayName()));
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§a[副本仓库] §f开始存入所有 " + clickedStack.getDisplayName()));
 
             List<Integer> slotsToClick = new ArrayList<>();
-            ContainerChest container = (ContainerChest) mc.player.openContainer;
+            ContainerChest container = (ContainerChest) com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer;
             
             // [新增] 捕获窗口ID
             final int windowId = container.windowId;
@@ -111,40 +141,40 @@ public class DungeonWarehouseHandler {
                 final int slotIndex = slotsToClick.get(i);
                 ModUtils.DelayScheduler.instance.schedule(() -> {
                     // [核心修复] 添加安全检查
-                    if (mc.player == null || !(mc.currentScreen instanceof GuiChest) || 
-                        mc.player.openContainer == null || mc.player.openContainer.windowId != windowId) {
+                    if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || !(com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen() instanceof GuiChest) || 
+                        com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer.windowId != windowId) {
                         return;
                     }
-                    mc.playerController.windowClick(windowId, slotIndex, 0, ClickType.QUICK_MOVE, mc.player);
-                }, i * (settings.clickIntervalMs / 50));
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(windowId, slotIndex, 0, ClickType.QUICK_MOVE, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer());
+                }, i * (cfg().settings.clickIntervalMs / 50));
             }
         }
     }
 
     private static void handleCtrlClick(Slot slot, int amount) {
-        if (mc.player == null || mc.player.openContainer == null || slot == null || !slot.getHasStack() || amount <= 0) return;
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer == null || slot == null || !slot.getHasStack() || amount <= 0) return;
 
         // [新增] 捕获窗口ID
-        final int windowId = mc.player.openContainer.windowId;
+        final int windowId = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer.windowId;
 
         if (slot.slotNumber >= 0 && slot.slotNumber <= 53) {
-            mc.player.sendMessage(new TextComponentString("§a[副本仓库] §f开始取出 " + amount + " 次: " + slot.getStack().getDisplayName()));
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§a[副本仓库] §f开始取出 " + amount + " 次: " + slot.getStack().getDisplayName()));
             for (int i = 0; i < amount; i++) {
                 ModUtils.DelayScheduler.instance.schedule(() -> {
                     // [核心修复] 添加安全检查
-                    if (mc.player == null || !(mc.currentScreen instanceof GuiChest) || 
-                        mc.player.openContainer == null || mc.player.openContainer.windowId != windowId) {
+                    if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || !(com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen() instanceof GuiChest) || 
+                        com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer.windowId != windowId) {
                         return;
                     }
-                    mc.playerController.windowClick(windowId, slot.slotNumber, 0, ClickType.PICKUP, mc.player);
-                }, i * (settings.clickIntervalMs / 50));
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(windowId, slot.slotNumber, 0, ClickType.PICKUP, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer());
+                }, i * (cfg().settings.clickIntervalMs / 50));
             }
         } else if (slot.slotNumber >= 54 && slot.slotNumber <= 89) {
             ItemStack clickedStack = slot.getStack();
-            mc.player.sendMessage(new TextComponentString("§a[副本仓库] §f开始存入 " + amount + " 组: " + clickedStack.getDisplayName()));
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§a[副本仓库] §f开始存入 " + amount + " 组: " + clickedStack.getDisplayName()));
 
             List<Integer> slotsToClick = new ArrayList<>();
-            ContainerChest container = (ContainerChest) mc.player.openContainer;
+            ContainerChest container = (ContainerChest) com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer;
 
             for (int i = 54; i <= 89; i++) {
                 Slot currentSlot = container.getSlot(i);
@@ -162,12 +192,12 @@ public class DungeonWarehouseHandler {
                 final int slotIndex = slotsToClick.get(i);
                 ModUtils.DelayScheduler.instance.schedule(() -> {
                     // [核心修复] 添加安全检查
-                    if (mc.player == null || !(mc.currentScreen instanceof GuiChest) || 
-                        mc.player.openContainer == null || mc.player.openContainer.windowId != windowId) {
+                    if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || !(com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen() instanceof GuiChest) || 
+                        com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer.windowId != windowId) {
                         return;
                     }
-                    mc.playerController.windowClick(windowId, slotIndex, 0, ClickType.QUICK_MOVE, mc.player);
-                }, i * (settings.clickIntervalMs / 50));
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(windowId, slotIndex, 0, ClickType.QUICK_MOVE, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer());
+                }, i * (cfg().settings.clickIntervalMs / 50));
             }
         }
     }

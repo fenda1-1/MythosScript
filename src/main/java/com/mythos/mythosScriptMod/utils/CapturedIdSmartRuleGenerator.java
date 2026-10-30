@@ -65,9 +65,6 @@ public final class CapturedIdSmartRuleGenerator {
             this.message = message == null ? "" : message;
         }
 
-        public List<String> getNormalizedSamples() {
-            return normalizedSamples;
-        }
 
         public List<Proposal> getProposals() {
             return proposals;

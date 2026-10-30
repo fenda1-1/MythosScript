@@ -74,10 +74,10 @@ public final class ModernAutoFollowWorkbenchTab implements ModernSettingsTab {
     };
 
     private final WorkbenchState state = new WorkbenchState(
-            new ArrayList<>(AutoFollowHandler.rules), AutoFollowHandler.getCategoriesSnapshot(),
-            AutoFollowHandler.antiStuckEnabled, AutoFollowHandler.avoidVinesProactively,
-            AutoFollowHandler.vineAvoidanceDistance, AutoFollowHandler.timeoutReloadEnabled,
-            AutoFollowHandler.timeoutReloadSeconds);
+            new ArrayList<>(AutoFollowHandler.cfg().rules), AutoFollowHandler.getCategoriesSnapshot(),
+            AutoFollowHandler.cfg().antiStuckEnabled, AutoFollowHandler.cfg().avoidVinesProactively,
+            AutoFollowHandler.cfg().vineAvoidanceDistance, AutoFollowHandler.cfg().timeoutReloadEnabled,
+            AutoFollowHandler.cfg().timeoutReloadSeconds);
 
     private final Set<String> collapsedGroups = new HashSet<>();
     private final List<RuleHit> ruleHits = new ArrayList<>();
@@ -595,20 +595,20 @@ public final class ModernAutoFollowWorkbenchTab implements ModernSettingsTab {
         AutoFollowRule desiredActive = state.chooseActive(previousActiveName);
         state.keepOnlyEnabled(desiredActive);
 
-        AutoFollowHandler.antiStuckEnabled = state.antiStuckEnabled();
-        AutoFollowHandler.avoidVinesProactively = state.avoidVinesProactively();
-        AutoFollowHandler.vineAvoidanceDistance = state.vineAvoidanceDistance();
-        AutoFollowHandler.timeoutReloadEnabled = state.timeoutReloadEnabled();
-        AutoFollowHandler.timeoutReloadSeconds = state.timeoutReloadSeconds();
+        AutoFollowHandler.cfg().antiStuckEnabled = state.antiStuckEnabled();
+        AutoFollowHandler.cfg().avoidVinesProactively = state.avoidVinesProactively();
+        AutoFollowHandler.cfg().vineAvoidanceDistance = state.vineAvoidanceDistance();
+        AutoFollowHandler.cfg().timeoutReloadEnabled = state.timeoutReloadEnabled();
+        AutoFollowHandler.cfg().timeoutReloadSeconds = state.timeoutReloadSeconds();
 
-        AutoFollowHandler.rules.clear();
-        AutoFollowHandler.rules.addAll(copyRules(state.rules()));
+        AutoFollowHandler.cfg().rules.clear();
+        AutoFollowHandler.cfg().rules.addAll(copyRules(state.rules()));
         for (String category : AutoFollowHandler.getCategoriesSnapshot()) {
             if (!state.categories().contains(category)) AutoFollowHandler.deleteCategory(category);
         }
         AutoFollowHandler.replaceCategoryOrder(state.categories());
 
-        AutoFollowRule handlerActive = findByName(AutoFollowHandler.rules,
+        AutoFollowRule handlerActive = findByName(AutoFollowHandler.cfg().rules,
                 desiredActive == null ? "" : desiredActive.name);
         if (handlerActive == null) {
             AutoFollowHandler.setActiveRule(null);
@@ -890,100 +890,10 @@ public final class ModernAutoFollowWorkbenchTab implements ModernSettingsTab {
         return String.format(java.util.Locale.ROOT, "%.1f", finite(value) ? value : 0.0D);
     }
 
-    private void captureReturnPoint(EditorDraft draft, ModernFormSettingsTab<?> tab) {
-        Entity entity = renderEntity();
-        if (entity == null) {
-            status = "gui.modern.autofollow.u167";
-            return;
-        }
-        draft.returnPointX = formatDouble(entity.posX);
-        draft.returnPointY = formatDouble(Math.floor(entity.posY));
-        draft.returnPointZ = formatDouble(entity.posZ);
-        if (tab != null) {
-            tab.refreshValues();
-        }
-        status = "gui.modern.autofollow.u170";
-    }
 
-    private Entity renderEntity() {
-        try {
-            return Minecraft.getMinecraft().getRenderViewEntity();
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
 
-    private void addReturnPoint(AutoFollowRule rule, EditorDraft draft) {
-        if (!syncEditorDraft()) {
-            return;
-        }
-        try {
-            double x = parseFinite(draft.returnPointX, "gui.modern.autofollow.u171");
-            double y = parseFinite(draft.returnPointY, "gui.modern.autofollow.u172");
-            double z = parseFinite(draft.returnPointZ, "gui.modern.autofollow.u173");
-            AutoFollowHandler.Point point = new AutoFollowHandler.Point(x, y, z);
 
-            rule.updateBounds();
-            if (isBoundsValidationReady(rule) && !rule.isPointWithinBounds(point)) {
-                status = "gui.modern.autofollow.u174";
-                return;
-            }
 
-            List<AutoFollowHandler.Point> points = copyReturnPoints(rule.returnPoints);
-            for (int i = 0; i < points.size(); i++) {
-                AutoFollowHandler.Point existing = points.get(i);
-                if (samePoint(existing, point)) {
-                    selectedReturnPointIndex = i;
-                    status = "gui.modern.autofollow.u175";
-                    rebuildEditor();
-                    return;
-                }
-                if (existing != null && !existing.hasY()
-                        && Math.abs(existing.x - point.x) < 0.01
-                        && Math.abs(existing.z - point.z) < 0.01) {
-                    points.set(i, point);
-                    selectedReturnPointIndex = i;
-                    rule.returnPoints = points;
-                    draft.returnPointsText = formatReturnPoints(points);
-                    status = "gui.modern.autofollow.u176";
-                    rebuildEditor();
-                    return;
-                }
-            }
-
-            points.add(point);
-            rule.returnPoints = points;
-            rule.point3 = AutoFollowRule.copyPoint(point);
-            draft.returnPointsText = formatReturnPoints(points);
-            selectedReturnPointIndex = points.size() - 1;
-            status = t("gui.modern.autofollow.fmt.added_point", formatDouble(x), formatDouble(y), formatDouble(z));
-            rebuildEditor();
-        } catch (IllegalArgumentException exception) {
-            status = exception.getMessage();
-        }
-    }
-
-    private void removeSelectedReturnPoint(AutoFollowRule rule, EditorDraft draft) {
-        if (!syncEditorDraft()) {
-            return;
-        }
-        if (!hasSelectedReturnPoint(rule)) {
-            status = "gui.modern.autofollow.u177";
-            return;
-        }
-        List<AutoFollowHandler.Point> points = copyReturnPoints(rule.returnPoints);
-        points.remove(selectedReturnPointIndex);
-        rule.returnPoints = points;
-        draft.returnPointsText = formatReturnPoints(points);
-        selectedReturnPointIndex = points.isEmpty() ? -1 : Math.min(selectedReturnPointIndex, points.size() - 1);
-        status = "gui.modern.autofollow.u178";
-        rebuildEditor();
-    }
-
-    private boolean hasSelectedReturnPoint(AutoFollowRule rule) {
-        return rule != null && rule.returnPoints != null && selectedReturnPointIndex >= 0
-                && selectedReturnPointIndex < rule.returnPoints.size();
-    }
 
     private String applyDraftFields(AutoFollowRule rule, EditorDraft draft) {
         try {
@@ -1183,24 +1093,7 @@ public final class ModernAutoFollowWorkbenchTab implements ModernSettingsTab {
                 primary ? ModernUiRenderer.SHELL : ModernUiRenderer.TEXT, Math.max(1, row.width - 12));
     }
 
-    private String rangeSummary(AutoFollowRule rule) {
-        if (rule == null || rule.point1 == null || rule.point2 == null) {
-            return t("gui.modern.autofollow.u193");
-        }
-        return "X " + formatDouble(Math.min(rule.point1.x, rule.point2.x)) + " .. "
-                + formatDouble(Math.max(rule.point1.x, rule.point2.x)) + " · Z "
-                + formatDouble(Math.min(rule.point1.z, rule.point2.z)) + " .. "
-                + formatDouble(Math.max(rule.point1.z, rule.point2.z));
-    }
 
-    private String returnPointsSummary(AutoFollowRule rule) {
-        int count = rule == null || rule.returnPoints == null ? 0 : rule.returnPoints.size();
-        if (count == 0) {
-            return t("gui.modern.autofollow.u194");
-        }
-        AutoFollowHandler.Point first = rule.returnPoints.get(0);
-        return t("gui.modern.autofollow.fmt.points_first", String.valueOf(count), pointText(first));
-    }
 
     private String stateSummary(AutoFollowRule rule) {
         return t("gui.modern.autofollow.fmt.state",
@@ -1217,22 +1110,6 @@ public final class ModernAutoFollowWorkbenchTab implements ModernSettingsTab {
         return t("gui.modern.autofollow.fmt.chase", safe(draft.monsterStopDistance));
     }
 
-    private String scoredSummary() {
-        List<AutoFollowHandler.ScoredMonsterInfo> scores = AutoFollowHandler.getLastScoredMonstersSnapshot();
-        if (scores.isEmpty()) {
-            return t("gui.modern.autofollow.u199");
-        }
-        StringBuilder details = new StringBuilder();
-        int count = Math.min(3, scores.size());
-        for (int i = 0; i < count; i++) {
-            if (i > 0) {
-                details.append(" | ");
-            }
-            AutoFollowHandler.ScoredMonsterInfo info = scores.get(i);
-            details.append(safe(info.name)).append(" ").append(formatDouble(info.totalScore));
-        }
-        return t("gui.modern.autofollow.fmt.candidates", String.valueOf(scores.size()), details.toString());
-    }
 
     private String entityTypeSummary(AutoFollowRule rule) {
         if (rule == null || rule.entityTypes == null || rule.entityTypes.isEmpty()) {
@@ -1247,17 +1124,6 @@ public final class ModernAutoFollowWorkbenchTab implements ModernSettingsTab {
         return labels.isEmpty() ? t("gui.modern.autofollow.u200") : join(labels);
     }
 
-    private List<ModernFormSettingsTab.ChoiceOption<Integer>> returnPointOptions(AutoFollowRule rule) {
-        List<ModernFormSettingsTab.ChoiceOption<Integer>> options = new ArrayList<>();
-        if (rule == null || rule.returnPoints == null || rule.returnPoints.isEmpty()) {
-            options.add(ModernFormSettingsTab.option(-1, "gui.modern.autofollow.u201"));
-            return options;
-        }
-        for (int i = 0; i < rule.returnPoints.size(); i++) {
-            options.add(ModernFormSettingsTab.option(i, (i + 1) + ". " + pointText(rule.returnPoints.get(i))));
-        }
-        return options;
-    }
 
     private static boolean hasEntityType(AutoFollowRule rule, String token) {
         return rule != null && rule.entityTypes != null && rule.entityTypes.contains(token);
@@ -1390,14 +1256,6 @@ public final class ModernAutoFollowWorkbenchTab implements ModernSettingsTab {
         return joinWithSeparator(values, "; ");
     }
 
-    private static String pointText(AutoFollowHandler.Point point) {
-        if (point == null) {
-            return t("gui.modern.autofollow.u204");
-        }
-        return point.hasY()
-                ? "(" + formatDouble(point.x) + ", " + formatDouble(point.y) + ", " + formatDouble(point.z) + ")"
-                : t("gui.modern.autofollow.fmt.legacy_y", formatDouble(point.x), formatDouble(point.z));
-    }
 
     private static String joinWithSeparator(List<String> values, String separator) {
         StringBuilder result = new StringBuilder();
@@ -1501,12 +1359,6 @@ public final class ModernAutoFollowWorkbenchTab implements ModernSettingsTab {
         return Math.abs(value) < 0.01;
     }
 
-    private static boolean samePoint(AutoFollowHandler.Point left, AutoFollowHandler.Point right) {
-        return left != null && right != null && left.hasY() == right.hasY()
-                && Math.abs(left.x - right.x) < 0.01
-                && Math.abs(left.z - right.z) < 0.01
-                && (!left.hasY() || Math.abs(left.y - right.y) < 0.01);
-    }
 
     private static int normalizeReturnPointSelection(AutoFollowRule rule, int selected) {
         int count = rule == null || rule.returnPoints == null ? 0 : rule.returnPoints.size();
@@ -1885,13 +1737,7 @@ public final class ModernAutoFollowWorkbenchTab implements ModernSettingsTab {
             antiStuckEnabled = value;
         }
 
-        private void setAvoidVinesProactively(boolean value) {
-            avoidVinesProactively = value;
-        }
 
-        private void setVineAvoidanceDistance(double value) {
-            vineAvoidanceDistance = value;
-        }
 
         private void setTimeoutReloadEnabled(boolean value) {
             timeoutReloadEnabled = value;

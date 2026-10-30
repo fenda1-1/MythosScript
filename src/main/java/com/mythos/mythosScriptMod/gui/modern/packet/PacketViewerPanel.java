@@ -80,6 +80,7 @@ final class PacketViewerPanel extends PacketPanelBase {
     private final List<ModernMainLayout.Rect> footerActions = new ArrayList<>();
     private final ModernMainLayout.Rect[] optionBounds = new ModernMainLayout.Rect[3];
     private final ModernMainLayout.Rect[] directionBounds = new ModernMainLayout.Rect[2];
+    private final java.util.Map<Integer, ModernMainLayout.Rect> sendToEditorButtons = new java.util.HashMap<>();
 
     PacketViewerPanel(PacketWorkbenchTab owner) { this(owner, null, "", false, "C2S", false, null); }
     PacketViewerPanel(PacketWorkbenchTab owner, List<PacketCaptureHandler.CapturedPacketData> packets, String title, boolean readOnly) {
@@ -308,6 +309,16 @@ final class PacketViewerPanel extends PacketPanelBase {
                 text(renderer, "HEX " + inline(packet.getHexData(), previewMax), textX, rowY + 4 + step * 2, ModernUiRenderer.SUBTLE_TEXT, textWidth);
                 text(renderer, tr("gui.modern.pktview.fmt.decode", inline(packet.getDecodedData(), previewMax)), textX, rowY + 4 + step * 3, ModernUiRenderer.SUBTLE_TEXT, textWidth);
                 if (!hideHint) text(renderer, "gui.modern.pktview.u016", textX, rowY + 4 + step * 4, ModernUiRenderer.MUTED_TEXT, textWidth);
+                int sendW = Math.min(92, Math.max(56, renderer.getStringWidth(tr("gui.modern.pktview.u043")) + 12));
+                ModernMainLayout.Rect sendBtn = new ModernMainLayout.Rect(cardX + cardWidth - sendW - 4,
+                        rowY + cardHeight - 19, sendW, 15);
+                sendToEditorButtons.put(Integer.valueOf(i), sendBtn);
+                boolean sendHover = sendBtn.contains(mouseX, mouseY);
+                ModernUiRenderer.drawSubtlePanel(sendBtn.x, sendBtn.y, sendBtn.width, sendBtn.height, 3,
+                        sendHover ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SURFACE,
+                        sendHover ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
+                text(renderer, "gui.modern.pktview.u056", sendBtn.x + 6, sendBtn.y + 4,
+                        sendHover ? ModernUiRenderer.TEXT : ModernUiRenderer.ACCENT, sendW - 8);
             }
         }
         if (visible.isEmpty()) text(renderer, "gui.modern.pktview.u017", rightBounds.x + 12,
@@ -409,7 +420,12 @@ final class PacketViewerPanel extends PacketPanelBase {
             int index = packetHitIndex(x, y);
             if (index >= 0) {
                 if (button == 1) {
-                    copyPacketRow(index, packetHitOffsetY(y));
+                    openContextMenu(x, y, packetMenuItems(index));
+                    return true;
+                }
+                ModernMainLayout.Rect sendBtn = sendToEditorButtons.get(Integer.valueOf(index));
+                if (sendBtn != null && sendBtn.contains(x, y)) {
+                    sendPacketToEditor(index);
                     return true;
                 }
                 if (System.currentTimeMillis() - lastClickAt < 350L && lastSelected == index) {
@@ -564,17 +580,34 @@ final class PacketViewerPanel extends PacketPanelBase {
         }
     }
 
-    private void copyPacketRow(int index, int rowOffset) {
+
+    private List<PacketContextMenu.Item> packetMenuItems(int index) {
+        if (index < 0 || index >= visible.size()) return new ArrayList<PacketContextMenu.Item>();
+        final PacketCaptureHandler.CapturedPacketData packet = visible.get(index);
+        List<PacketContextMenu.Item> items = new ArrayList<PacketContextMenu.Item>();
+        items.add(new PacketContextMenu.Item(tr("gui.modern.pktview.u050"), () -> copyText(
+                packet.packetId == null ? "" : String.format("0x%02X", packet.packetId))));
+        items.add(new PacketContextMenu.Item(tr("gui.modern.pktview.u051"), () -> copyText(packet.getHexData())));
+        items.add(new PacketContextMenu.Item(tr("gui.modern.pktview.u052"), () -> copyText(packet.getDecodedData())));
+        items.add(new PacketContextMenu.Item(tr("gui.modern.pktview.u053"), () -> copyText(safe(packet.packetClassName))));
+        items.add(new PacketContextMenu.Item(tr("gui.modern.pktview.u054"), () -> copyText(safe(packet.channel))));
+        items.add(new PacketContextMenu.Item(tr("gui.modern.pktview.u055"), () -> sendPacketToEditor(index)));
+        return items;
+    }
+
+    private void copyText(String value) {
+        PacketClipboard.copyOrExport(owner.minecraft(), value == null ? "" : value);
+        owner.status("gui.modern.pktview.u034");
+    }
+
+    private void sendPacketToEditor(int index) {
         if (index < 0 || index >= visible.size()) return;
         PacketCaptureHandler.CapturedPacketData packet = visible.get(index);
-        String value;
-        int line = Math.max(0, rowOffset - 4) / Math.max(1, packetLineStep());
-        if (line <= 0) value = safe(packet.packetClassName);
-        else if (line == 1) value = packet.isFmlPacket ? safe(packet.channel) : packet.packetId == null ? "" : String.format("0x%02X (%d)", packet.packetId, packet.packetId);
-        else if (line == 2) value = packet.getHexData();
-        else value = packet.getDecodedData();
-        PacketClipboard.copyOrExport(owner.minecraft(), value);
-        owner.status("gui.modern.pktview.u034");
+        PacketToEditorBridge.SendResult result = PacketToEditorBridge.sendToActionEditor(packet,
+                mode == Mode.RECEIVED ? "S2C" : "C2S");
+        owner.status(result == PacketToEditorBridge.SendResult.APPENDED
+                ? "gui.modern.pktview.u057"
+                : "gui.modern.pktview.u058");
     }
 
     private void selectNearestTimelinePacket() {
@@ -613,7 +646,7 @@ final class PacketViewerPanel extends PacketPanelBase {
 
     private int packetCardHeight() {
         int lines = hideHint ? 4 : 5;
-        return Math.max(52, lines * packetLineStep() + 8);
+        return Math.max(52, lines * packetLineStep() + 8) + 18;
     }
 
     private int packetLineStep() {
@@ -624,10 +657,6 @@ final class PacketViewerPanel extends PacketPanelBase {
         }
     }
 
-    private TextScale nextTextScale(TextScale value) {
-        TextScale[] values = TextScale.values();
-        return values[(value.ordinal() + 1) % values.length];
-    }
 
     private int packetHitIndex(int x, int y) {
         if (rightBounds == null || y < packetListTop()) return -1;
@@ -647,12 +676,6 @@ final class PacketViewerPanel extends PacketPanelBase {
         return index >= 0 && index < visible.size() ? index : -1;
     }
 
-    private int packetHitOffsetY(int y) {
-        if (rightBounds == null) return 0;
-        int rowStep = Math.max(1, packetRowHeight > 0 ? packetRowHeight : packetCardHeight());
-        int offset = (y - packetListTop()) % rowStep;
-        return offset < 0 ? offset + rowStep : offset;
-    }
 
     private int timelineVisibleRows() {
         return leftBounds == null ? 1 : Math.max(1, (leftBounds.height - (timelineListTop() - leftBounds.y) - 6) / 23);

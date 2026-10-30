@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -70,67 +71,86 @@ public final class ResourceLockManager {
         }
     }
 
-    private static final Map<Resource, LockOwner> LOCKS = new EnumMap<>(Resource.class);
+    // Locks are scoped per owner (bot username, "" for the human/standalone).
+    // Two sequences on the SAME bot must serialise on MOVE/LOOK/etc, but a
+    // lock held by one bot must never block another bot — that was the B1
+    // defect (one global map let bot1's MOVE lock stall every other bot).
+    private static final Map<String, Map<Resource, LockOwner>> LOCKS_BY_SCOPE = new HashMap<>();
 
     private ResourceLockManager() {
     }
 
-    public static synchronized String acquireOrSync(String ownerId, String sequenceName, boolean background,
-            EnumSet<Resource> desiredResources, String detail) {
+    private static Map<Resource, LockOwner> scopeMap(String scope) {
+        return LOCKS_BY_SCOPE.computeIfAbsent(safe(scope), k -> new EnumMap<>(Resource.class));
+    }
+
+    public static synchronized String acquireOrSync(String scope, String ownerId, String sequenceName,
+            boolean background, EnumSet<Resource> desiredResources, String detail) {
+        Map<Resource, LockOwner> locks = scopeMap(scope);
         String normalizedOwner = safe(ownerId);
         EnumSet<Resource> desired = desiredResources == null
                 ? EnumSet.noneOf(Resource.class)
                 : EnumSet.copyOf(desiredResources);
 
-        releaseNotDesired(normalizedOwner, desired);
+        releaseNotDesired(locks, normalizedOwner, desired);
 
         for (Resource resource : desired) {
-            LockOwner existing = LOCKS.get(resource);
+            LockOwner existing = locks.get(resource);
             if (existing != null && !normalizedOwner.equals(existing.ownerId)) {
                 return resource.name().toLowerCase(Locale.ROOT);
             }
         }
 
         for (Resource resource : desired) {
-            LOCKS.put(resource, new LockOwner(normalizedOwner, safe(sequenceName), background, safe(detail)));
+            locks.put(resource, new LockOwner(normalizedOwner, safe(sequenceName), background, safe(detail)));
         }
         return "";
     }
 
-    public static synchronized void releaseAll(String ownerId) {
+    public static synchronized void releaseAll(String scope, String ownerId) {
+        Map<Resource, LockOwner> locks = LOCKS_BY_SCOPE.get(safe(scope));
+        if (locks == null) {
+            return;
+        }
         String normalizedOwner = safe(ownerId);
         List<Resource> remove = new ArrayList<>();
-        for (Map.Entry<Resource, LockOwner> entry : LOCKS.entrySet()) {
+        for (Map.Entry<Resource, LockOwner> entry : locks.entrySet()) {
             if (entry.getValue() != null && normalizedOwner.equals(entry.getValue().ownerId)) {
                 remove.add(entry.getKey());
             }
         }
         for (Resource resource : remove) {
-            LOCKS.remove(resource);
+            locks.remove(resource);
+        }
+        if (locks.isEmpty()) {
+            LOCKS_BY_SCOPE.remove(safe(scope));
         }
     }
 
     public static synchronized List<LockSnapshot> getSnapshots() {
-        if (LOCKS.isEmpty()) {
+        if (LOCKS_BY_SCOPE.isEmpty()) {
             return Collections.emptyList();
         }
         List<LockSnapshot> snapshots = new ArrayList<>();
-        for (Map.Entry<Resource, LockOwner> entry : LOCKS.entrySet()) {
-            LockOwner owner = entry.getValue();
-            if (owner == null) {
-                continue;
+        for (Map<Resource, LockOwner> locks : LOCKS_BY_SCOPE.values()) {
+            for (Map.Entry<Resource, LockOwner> entry : locks.entrySet()) {
+                LockOwner owner = entry.getValue();
+                if (owner == null) {
+                    continue;
+                }
+                snapshots.add(new LockSnapshot(entry.getKey(), owner.ownerId, owner.sequenceName, owner.background,
+                        owner.detail));
             }
-            snapshots.add(new LockSnapshot(entry.getKey(), owner.ownerId, owner.sequenceName, owner.background,
-                    owner.detail));
         }
         return snapshots;
     }
 
-    public static synchronized boolean isHeldByBackground(Resource resource) {
+    public static synchronized boolean isHeldByBackground(String scope, Resource resource) {
         if (resource == null) {
             return false;
         }
-        LockOwner owner = LOCKS.get(resource);
+        Map<Resource, LockOwner> locks = LOCKS_BY_SCOPE.get(safe(scope));
+        LockOwner owner = locks == null ? null : locks.get(resource);
         return owner != null && owner.background;
     }
 
@@ -146,9 +166,9 @@ public final class ResourceLockManager {
         }
     }
 
-    private static void releaseNotDesired(String ownerId, EnumSet<Resource> desired) {
+    private static void releaseNotDesired(Map<Resource, LockOwner> locks, String ownerId, EnumSet<Resource> desired) {
         List<Resource> remove = new ArrayList<>();
-        for (Map.Entry<Resource, LockOwner> entry : LOCKS.entrySet()) {
+        for (Map.Entry<Resource, LockOwner> entry : locks.entrySet()) {
             if (entry.getValue() != null
                     && ownerId.equals(entry.getValue().ownerId)
                     && !desired.contains(entry.getKey())) {
@@ -156,7 +176,7 @@ public final class ResourceLockManager {
             }
         }
         for (Resource resource : remove) {
-            LOCKS.remove(resource);
+            locks.remove(resource);
         }
     }
 

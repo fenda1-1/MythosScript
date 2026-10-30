@@ -149,74 +149,74 @@ public final class ModernFlySettingsTab {
         return new ModernFormSettingsTab.Condition() {
             @Override
             public boolean matches() {
-                return mode.equalsIgnoreCase(FlyHandler.flightMode);
+                return mode.equalsIgnoreCase(FlyHandler.cfg().flightMode);
             }
         };
     }
 
     /** Defensive snapshot of every persisted fly configuration value. */
     private static final class State {
-        private final boolean enabled = FlyHandler.enabled;
-        private final String flightMode = FlyHandler.flightMode;
-        private final boolean autoTakeoff = FlyHandler.autoTakeoff;
-        private final boolean stopMotionOnDisable = FlyHandler.stopMotionOnDisable;
-        private final boolean enableNoCollision = FlyHandler.enableNoCollision;
-        private final boolean enableAntiKnockback = FlyHandler.enableAntiKnockback;
-        private final boolean enableAntiKick = FlyHandler.enableAntiKick;
-        private final float horizontalSpeed = FlyHandler.horizontalSpeed;
-        private final float verticalSpeed = FlyHandler.verticalSpeed;
-        private final float glideFallSpeed = FlyHandler.glideFallSpeed;
-        private final float sprintMultiplier = FlyHandler.sprintMultiplier;
-        private final float pulseBoost = FlyHandler.pulseBoost;
-        private final int pulseIntervalTicks = FlyHandler.pulseIntervalTicks;
-        private final int antiKickIntervalTicks = FlyHandler.antiKickIntervalTicks;
-        private final float antiKickDistance = FlyHandler.antiKickDistance;
+        private final boolean enabled = FlyHandler.enabled();
+        private final String flightMode = FlyHandler.cfg().flightMode;
+        private final boolean autoTakeoff = FlyHandler.cfg().autoTakeoff;
+        private final boolean stopMotionOnDisable = FlyHandler.cfg().stopMotionOnDisable;
+        private final boolean enableNoCollision = FlyHandler.cfg().enableNoCollision;
+        private final boolean enableAntiKnockback = FlyHandler.cfg().enableAntiKnockback;
+        private final boolean enableAntiKick = FlyHandler.cfg().enableAntiKick;
+        private final float horizontalSpeed = FlyHandler.cfg().horizontalSpeed;
+        private final float verticalSpeed = FlyHandler.cfg().verticalSpeed;
+        private final float glideFallSpeed = FlyHandler.cfg().glideFallSpeed;
+        private final float sprintMultiplier = FlyHandler.cfg().sprintMultiplier;
+        private final float pulseBoost = FlyHandler.cfg().pulseBoost;
+        private final int pulseIntervalTicks = FlyHandler.cfg().pulseIntervalTicks;
+        private final int antiKickIntervalTicks = FlyHandler.cfg().antiKickIntervalTicks;
+        private final float antiKickDistance = FlyHandler.cfg().antiKickDistance;
 
         private void apply() {
-            FlyHandler.flightMode = flightMode;
-            FlyHandler.autoTakeoff = autoTakeoff;
-            FlyHandler.stopMotionOnDisable = stopMotionOnDisable;
-            FlyHandler.enableNoCollision = enableNoCollision;
-            FlyHandler.enableAntiKnockback = enableAntiKnockback;
-            FlyHandler.enableAntiKick = enableAntiKick;
-            FlyHandler.horizontalSpeed = horizontalSpeed;
-            FlyHandler.verticalSpeed = verticalSpeed;
-            FlyHandler.glideFallSpeed = glideFallSpeed;
-            FlyHandler.sprintMultiplier = sprintMultiplier;
-            FlyHandler.pulseBoost = pulseBoost;
-            FlyHandler.pulseIntervalTicks = pulseIntervalTicks;
-            FlyHandler.antiKickIntervalTicks = antiKickIntervalTicks;
-            FlyHandler.antiKickDistance = antiKickDistance;
+            FlyHandler.cfg().flightMode = flightMode;
+            FlyHandler.cfg().autoTakeoff = autoTakeoff;
+            FlyHandler.cfg().stopMotionOnDisable = stopMotionOnDisable;
+            FlyHandler.cfg().enableNoCollision = enableNoCollision;
+            FlyHandler.cfg().enableAntiKnockback = enableAntiKnockback;
+            FlyHandler.cfg().enableAntiKick = enableAntiKick;
+            FlyHandler.cfg().horizontalSpeed = horizontalSpeed;
+            FlyHandler.cfg().verticalSpeed = verticalSpeed;
+            FlyHandler.cfg().glideFallSpeed = glideFallSpeed;
+            FlyHandler.cfg().sprintMultiplier = sprintMultiplier;
+            FlyHandler.cfg().pulseBoost = pulseBoost;
+            FlyHandler.cfg().pulseIntervalTicks = pulseIntervalTicks;
+            FlyHandler.cfg().antiKickIntervalTicks = antiKickIntervalTicks;
+            FlyHandler.cfg().antiKickDistance = antiKickDistance;
             // Apply the enabled flag last so disabling honors the restored
             // stop-motion preference and enabling sees the restored mode.
             FlyHandler.INSTANCE.setEnabledForSettingsPreview(enabled);
         }
 
         private static void applyDefaults() {
-            FlyHandler.flightMode = FlyHandler.MODE_MOTION;
-            FlyHandler.autoTakeoff = true;
-            FlyHandler.stopMotionOnDisable = true;
-            FlyHandler.enableNoCollision = true;
-            FlyHandler.enableAntiKnockback = true;
-            FlyHandler.enableAntiKick = true;
-            FlyHandler.horizontalSpeed = 0.85F;
-            FlyHandler.verticalSpeed = 0.42F;
-            FlyHandler.glideFallSpeed = 0.04F;
-            FlyHandler.sprintMultiplier = 1.25F;
-            FlyHandler.pulseBoost = 0.28F;
-            FlyHandler.pulseIntervalTicks = 4;
-            FlyHandler.antiKickIntervalTicks = 16;
-            FlyHandler.antiKickDistance = 0.04F;
+            FlyHandler.cfg().flightMode = FlyHandler.MODE_MOTION;
+            FlyHandler.cfg().autoTakeoff = true;
+            FlyHandler.cfg().stopMotionOnDisable = true;
+            FlyHandler.cfg().enableNoCollision = true;
+            FlyHandler.cfg().enableAntiKnockback = true;
+            FlyHandler.cfg().enableAntiKick = true;
+            FlyHandler.cfg().horizontalSpeed = 0.85F;
+            FlyHandler.cfg().verticalSpeed = 0.42F;
+            FlyHandler.cfg().glideFallSpeed = 0.04F;
+            FlyHandler.cfg().sprintMultiplier = 1.25F;
+            FlyHandler.cfg().pulseBoost = 0.28F;
+            FlyHandler.cfg().pulseIntervalTicks = 4;
+            FlyHandler.cfg().antiKickIntervalTicks = 16;
+            FlyHandler.cfg().antiKickDistance = 0.04F;
         }
 
         private static boolean getBoolean(String name) {
             switch (name) {
-                case "enabled": return FlyHandler.enabled;
-                case "autoTakeoff": return FlyHandler.autoTakeoff;
-                case "stopMotionOnDisable": return FlyHandler.stopMotionOnDisable;
-                case "enableNoCollision": return FlyHandler.enableNoCollision;
-                case "enableAntiKnockback": return FlyHandler.enableAntiKnockback;
-                case "enableAntiKick": return FlyHandler.enableAntiKick;
+                case "enabled": return FlyHandler.enabled();
+                case "autoTakeoff": return FlyHandler.cfg().autoTakeoff;
+                case "stopMotionOnDisable": return FlyHandler.cfg().stopMotionOnDisable;
+                case "enableNoCollision": return FlyHandler.cfg().enableNoCollision;
+                case "enableAntiKnockback": return FlyHandler.cfg().enableAntiKnockback;
+                case "enableAntiKick": return FlyHandler.cfg().enableAntiKick;
                 default: return false;
             }
         }
@@ -224,56 +224,56 @@ public final class ModernFlySettingsTab {
         private static void setBoolean(String name, boolean value) {
             switch (name) {
                 case "enabled": FlyHandler.INSTANCE.setEnabledForSettingsPreview(value); break;
-                case "autoTakeoff": FlyHandler.autoTakeoff = value; break;
-                case "stopMotionOnDisable": FlyHandler.stopMotionOnDisable = value; break;
-                case "enableNoCollision": FlyHandler.enableNoCollision = value; break;
-                case "enableAntiKnockback": FlyHandler.enableAntiKnockback = value; break;
-                case "enableAntiKick": FlyHandler.enableAntiKick = value; break;
+                case "autoTakeoff": FlyHandler.cfg().autoTakeoff = value; break;
+                case "stopMotionOnDisable": FlyHandler.cfg().stopMotionOnDisable = value; break;
+                case "enableNoCollision": FlyHandler.cfg().enableNoCollision = value; break;
+                case "enableAntiKnockback": FlyHandler.cfg().enableAntiKnockback = value; break;
+                case "enableAntiKick": FlyHandler.cfg().enableAntiKick = value; break;
                 default: break;
             }
         }
 
         private static int getInt(String name) {
-            if ("pulseIntervalTicks".equals(name)) return FlyHandler.pulseIntervalTicks;
-            if ("antiKickIntervalTicks".equals(name)) return FlyHandler.antiKickIntervalTicks;
+            if ("pulseIntervalTicks".equals(name)) return FlyHandler.cfg().pulseIntervalTicks;
+            if ("antiKickIntervalTicks".equals(name)) return FlyHandler.cfg().antiKickIntervalTicks;
             return 0;
         }
 
         private static void setInt(String name, int value) {
-            if ("pulseIntervalTicks".equals(name)) FlyHandler.pulseIntervalTicks = value;
-            if ("antiKickIntervalTicks".equals(name)) FlyHandler.antiKickIntervalTicks = value;
+            if ("pulseIntervalTicks".equals(name)) FlyHandler.cfg().pulseIntervalTicks = value;
+            if ("antiKickIntervalTicks".equals(name)) FlyHandler.cfg().antiKickIntervalTicks = value;
         }
 
         private static float getFloat(String name) {
             switch (name) {
-                case "horizontalSpeed": return FlyHandler.horizontalSpeed;
-                case "verticalSpeed": return FlyHandler.verticalSpeed;
-                case "glideFallSpeed": return FlyHandler.glideFallSpeed;
-                case "sprintMultiplier": return FlyHandler.sprintMultiplier;
-                case "pulseBoost": return FlyHandler.pulseBoost;
-                case "antiKickDistance": return FlyHandler.antiKickDistance;
+                case "horizontalSpeed": return FlyHandler.cfg().horizontalSpeed;
+                case "verticalSpeed": return FlyHandler.cfg().verticalSpeed;
+                case "glideFallSpeed": return FlyHandler.cfg().glideFallSpeed;
+                case "sprintMultiplier": return FlyHandler.cfg().sprintMultiplier;
+                case "pulseBoost": return FlyHandler.cfg().pulseBoost;
+                case "antiKickDistance": return FlyHandler.cfg().antiKickDistance;
                 default: return 0.0F;
             }
         }
 
         private static void setFloat(String name, float value) {
             switch (name) {
-                case "horizontalSpeed": FlyHandler.horizontalSpeed = value; break;
-                case "verticalSpeed": FlyHandler.verticalSpeed = value; break;
-                case "glideFallSpeed": FlyHandler.glideFallSpeed = value; break;
-                case "sprintMultiplier": FlyHandler.sprintMultiplier = value; break;
-                case "pulseBoost": FlyHandler.pulseBoost = value; break;
-                case "antiKickDistance": FlyHandler.antiKickDistance = value; break;
+                case "horizontalSpeed": FlyHandler.cfg().horizontalSpeed = value; break;
+                case "verticalSpeed": FlyHandler.cfg().verticalSpeed = value; break;
+                case "glideFallSpeed": FlyHandler.cfg().glideFallSpeed = value; break;
+                case "sprintMultiplier": FlyHandler.cfg().sprintMultiplier = value; break;
+                case "pulseBoost": FlyHandler.cfg().pulseBoost = value; break;
+                case "antiKickDistance": FlyHandler.cfg().antiKickDistance = value; break;
                 default: break;
             }
         }
 
         private static String getString(String name) {
-            return "flightMode".equals(name) ? FlyHandler.flightMode : "";
+            return "flightMode".equals(name) ? FlyHandler.cfg().flightMode : "";
         }
 
         private static void setString(String name, String value) {
-            if ("flightMode".equals(name)) FlyHandler.flightMode = value;
+            if ("flightMode".equals(name)) FlyHandler.cfg().flightMode = value;
         }
     }
 }

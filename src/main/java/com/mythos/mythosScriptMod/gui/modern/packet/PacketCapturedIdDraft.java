@@ -41,10 +41,6 @@ public final class PacketCapturedIdDraft {
         if (index < 0 || index >= proposals.size()) return null;
         return CapturedIdSmartRuleGenerator.buildRuleModel(proposals.get(index), name, displayName, category, channel, direction);
     }
-    public boolean importProposal(int index, String name, String displayName) {
-        CapturedIdRuleManager.RuleEditModel model = proposal(index, name, displayName);
-        return model != null && CapturedIdRuleManager.addRule(model);
-    }
     static String normalize(String value) {
         String compact = value == null ? "" : value.replaceAll("[^0-9A-Fa-f]", "").toUpperCase();
         if (compact.isEmpty()) return "";

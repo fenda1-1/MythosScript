@@ -84,13 +84,7 @@ public final class ExpressionLanguageSupport {
             this.kind = kind == null ? TokenKind.UNKNOWN : kind;
         }
 
-        public int getStart() {
-            return start;
-        }
 
-        public int getEnd() {
-            return end;
-        }
 
         public String getText() {
             return text;
@@ -143,9 +137,6 @@ public final class ExpressionLanguageSupport {
             this.kind = kind == null ? CompletionKind.DYNAMIC : kind;
         }
 
-        public String getInsertText() {
-            return insertText;
-        }
 
         public String getLabel() {
             return label;

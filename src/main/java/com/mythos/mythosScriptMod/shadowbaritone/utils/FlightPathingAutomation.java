@@ -28,7 +28,7 @@ public final class FlightPathingAutomation {
             activeGoal = goal;
             arrivalHandled = false;
         }
-        if (FlightPathingConfig.autoEnableFly && !FlyHandler.enabled) {
+        if (FlightPathingConfig.cfg().autoEnableFly && !FlyHandler.enabled()) {
             FlyHandler.INSTANCE.setEnabled(true);
         }
     }
@@ -47,10 +47,10 @@ public final class FlightPathingAutomation {
         Goal arrivalGoal = goal != null ? goal : activeGoal;
         boolean arrived = (arrivalGoal != null && arrivalGoal.isInGoal(playerFeet)) || terminalSafeLanding;
         boolean aerialGoalArrival = arrivalGoal instanceof GoalFlightExact || arrivalGoal instanceof GoalFlightXZ;
-        if (arrived && !arrivalHandled && FlightPathingConfig.autoDisableFlyOnArrival
+        if (arrived && !arrivalHandled && FlightPathingConfig.cfg().autoDisableFlyOnArrival
                 && (aerialGoalArrival || FlightDirectPath.isSafeLanding(baritone, playerFeet))) {
             arrivalHandled = true;
-            if (FlyHandler.enabled) {
+            if (FlyHandler.enabled()) {
                 FlyHandler.INSTANCE.setEnabled(false);
             }
         }

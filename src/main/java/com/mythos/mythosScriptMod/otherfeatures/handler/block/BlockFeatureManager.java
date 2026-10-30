@@ -38,43 +38,87 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class BlockFeatureManager {
+
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        // 每个功能的数值和状态 HUD 开关是配置，按会话分开存；FeatureState 本身是共享的注册表项。
+        private final Map<String, Float> FEATURE_VALUES = new java.util.concurrent.ConcurrentHashMap<>();
+        private final Map<String, Boolean> FEATURE_STATUS_HUD = new java.util.concurrent.ConcurrentHashMap<>();
+        private final EnumFacing[] PLACE_SEARCH_ORDER = {
+                EnumFacing.DOWN, EnumFacing.NORTH, EnumFacing.SOUTH, EnumFacing.WEST, EnumFacing.EAST, EnumFacing.UP
+        };
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) BlockFeatureManager::loadConfig);
+            return config;
+        }
+    }
+
 
     public static final BlockFeatureManager INSTANCE = new BlockFeatureManager();
 
     private static final String CONFIG_FILE_NAME = "other_features_block.json";
     private static final Map<String, FeatureState> FEATURES = new LinkedHashMap<>();
 
-    private static final EnumFacing[] PLACE_SEARCH_ORDER = {
-            EnumFacing.DOWN, EnumFacing.NORTH, EnumFacing.SOUTH, EnumFacing.WEST, EnumFacing.EAST, EnumFacing.UP
-    };
 
     private static Field rightClickDelayTimerField;
     private static Field blockHitDelayField;
 
-    private int autoToolCooldownTicks = 0;
-    private int placeAssistCooldownTicks = 0;
-    private int blockSwapLockTicks = 0;
-    private int lastAutoToolHotbarSlot = -1;
-    private int lockedHotbarSlot = -1;
-    private BlockPos lastAssistPlacePos = null;
-    
-    // auto_light 运行时状态
-    private int autoLightCooldownTicks = 0;
-    private BlockPos lastTorchPlacePos = null;
-    
-    // block_refill 运行时状态
-    private int blockRefillCooldownTicks = 0;
-    private int lastRefillSlot = -1;
-    
-    // ghost_hand_block 运行时状态
-    private int ghostHandCooldownTicks = 0;
-    private BlockPos lastGhostInteractPos = null;
-    
-    // surround 运行时状态
-    private int surroundCooldownTicks = 0;
-    private List<BlockPos> surroundPositions = new ArrayList<>();
+    private static final ConcurrentHashMap<String, RuntimeState> STATES = new ConcurrentHashMap<>();
+
+    private static RuntimeState rt() {
+        return STATES.computeIfAbsent(
+                com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner(),
+                k -> new RuntimeState());
+    }
+
+    private static String featureOwner() {
+        return com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner();
+    }
+
+    private static final class RuntimeState {
+        private int autoToolCooldownTicks = 0;
+        private int placeAssistCooldownTicks = 0;
+        private int blockSwapLockTicks = 0;
+        private int lastAutoToolHotbarSlot = -1;
+        private int lockedHotbarSlot = -1;
+        private BlockPos lastAssistPlacePos = null;
+
+        private int autoLightCooldownTicks = 0;
+        private BlockPos lastTorchPlacePos = null;
+
+        private int blockRefillCooldownTicks = 0;
+        private int lastRefillSlot = -1;
+
+        private int ghostHandCooldownTicks = 0;
+        private BlockPos lastGhostInteractPos = null;
+
+        private int surroundCooldownTicks = 0;
+        private List<BlockPos> surroundPositions = new ArrayList<>();
+    }
 
     static {
         register(new FeatureState("auto_tool", "自动切工具",
@@ -121,9 +165,7 @@ public class BlockFeatureManager {
         public final float maxValue;
         public final boolean behaviorImplemented;
 
-        private boolean enabled;
-        private float value;
-        private boolean statusHudEnabled;
+        private final ConcurrentHashMap<String, Boolean> enabledByOwner = new ConcurrentHashMap<>();
 
         private FeatureState(String id, String name, String description, String valueLabel,
                 float defaultValue, float minValue, float maxValue, boolean behaviorImplemented) {
@@ -135,9 +177,6 @@ public class BlockFeatureManager {
             this.minValue = minValue;
             this.maxValue = maxValue;
             this.behaviorImplemented = behaviorImplemented;
-            this.enabled = false;
-            this.value = defaultValue;
-            this.statusHudEnabled = true;
         }
 
         public boolean supportsValue() {
@@ -145,37 +184,45 @@ public class BlockFeatureManager {
         }
 
         public boolean isEnabled() {
-            return enabled;
+            return enabledByOwner.getOrDefault(featureOwner(), Boolean.FALSE);
         }
 
         public float getValue() {
-            return value;
+            return cfg().FEATURE_VALUES.getOrDefault(id, defaultValue);
         }
 
         public boolean isStatusHudEnabled() {
-            return statusHudEnabled;
+            return cfg().FEATURE_STATUS_HUD.getOrDefault(id, Boolean.TRUE);
         }
 
         private void setEnabledInternal(boolean enabled) {
-            this.enabled = enabled;
+            enabledByOwner.put(featureOwner(), enabled);
+        }
+
+        private void setEnabledForOwner(String owner, boolean enabled) {
+            enabledByOwner.put(owner == null ? "" : owner, enabled);
+        }
+
+        private java.util.Map<String, Boolean> snapshotEnabledByOwner() {
+            return new java.util.LinkedHashMap<>(enabledByOwner);
         }
 
         private void setValueInternal(float value) {
             if (!supportsValue()) {
-                this.value = defaultValue;
+                cfg().FEATURE_VALUES.put(id, defaultValue);
                 return;
             }
-            this.value = MathHelper.clamp(value, minValue, maxValue);
+            cfg().FEATURE_VALUES.put(id, MathHelper.clamp(value, minValue, maxValue));
         }
 
         private void setStatusHudEnabledInternal(boolean statusHudEnabled) {
-            this.statusHudEnabled = statusHudEnabled;
+            cfg().FEATURE_STATUS_HUD.put(id, statusHudEnabled);
         }
 
         private void resetToDefaultInternal() {
-            this.enabled = false;
-            this.value = defaultValue;
-            this.statusHudEnabled = true;
+            enabledByOwner.put(featureOwner(), false);
+            cfg().FEATURE_VALUES.put(id, defaultValue);
+            cfg().FEATURE_STATUS_HUD.put(id, true);
         }
     }
 
@@ -206,7 +253,7 @@ public class BlockFeatureManager {
     }
 
     private static File getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve(CONFIG_FILE_NAME).toFile();
+        return ProfileManager.currentConfigFile(CONFIG_FILE_NAME).toFile();
     }
 
     public static List<FeatureState> getFeatures() {
@@ -369,14 +416,45 @@ public class BlockFeatureManager {
                 }
                 JsonObject item = featuresObject.getAsJsonObject(entry.getKey());
                 FeatureState state = entry.getValue();
-                if (item.has("enabled")) {
-                    state.setEnabledInternal(item.get("enabled").getAsBoolean());
-                }
                 if (item.has("statusHudEnabled")) {
                     state.setStatusHudEnabledInternal(item.get("statusHudEnabled").getAsBoolean());
                 }
                 if (item.has("value")) {
                     state.setValueInternal(item.get("value").getAsFloat());
+                }
+            }
+
+            File runtimeFile = getRuntimeConfigFile();
+            if (runtimeFile.exists()) {
+                try (FileReader rr = new FileReader(runtimeFile)) {
+                    JsonObject rroot = new JsonParser().parse(rr).getAsJsonObject();
+                    if (rroot.has("features") && rroot.get("features").isJsonObject()) {
+                        JsonObject rfeatures = rroot.getAsJsonObject("features");
+                        for (Map.Entry<String, FeatureState> entry : FEATURES.entrySet()) {
+                            if (!rfeatures.has(entry.getKey()) || !rfeatures.get(entry.getKey()).isJsonObject()) {
+                                continue;
+                            }
+                            JsonObject item = rfeatures.getAsJsonObject(entry.getKey());
+                            if (item.has("enabledByOwner") && item.get("enabledByOwner").isJsonObject()) {
+                                JsonObject owners = item.getAsJsonObject("enabledByOwner");
+                                for (Map.Entry<String, com.google.gson.JsonElement> oe : owners.entrySet()) {
+                                    if (oe.getValue().isJsonPrimitive()) {
+                                        entry.getValue().setEnabledForOwner(oe.getKey(), oe.getValue().getAsBoolean());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                for (Map.Entry<String, FeatureState> entry : FEATURES.entrySet()) {
+                    if (!featuresObject.has(entry.getKey()) || !featuresObject.get(entry.getKey()).isJsonObject()) {
+                        continue;
+                    }
+                    JsonObject item = featuresObject.getAsJsonObject(entry.getKey());
+                    if (item.has("enabled")) {
+                        entry.getValue().setEnabledForOwner(featureOwner(), item.get("enabled").getAsBoolean());
+                    }
                 }
             }
         } catch (Exception e) {
@@ -395,7 +473,6 @@ public class BlockFeatureManager {
             JsonObject featuresObject = new JsonObject();
             for (FeatureState state : FEATURES.values()) {
                 JsonObject item = new JsonObject();
-                item.addProperty("enabled", state.isEnabled());
                 item.addProperty("statusHudEnabled", state.isStatusHudEnabled());
                 if (state.supportsValue()) {
                     item.addProperty("value", state.getValue());
@@ -407,9 +484,33 @@ public class BlockFeatureManager {
             try (FileWriter writer = new FileWriter(configFile)) {
                 writer.write(root.toString());
             }
+
+            File runtimeFile = getRuntimeConfigFile();
+            if (!runtimeFile.getParentFile().exists()) {
+                runtimeFile.getParentFile().mkdirs();
+            }
+            JsonObject rroot = new JsonObject();
+            JsonObject rfeatures = new JsonObject();
+            for (FeatureState state : FEATURES.values()) {
+                JsonObject owners = new JsonObject();
+                for (java.util.Map.Entry<String, Boolean> e : state.snapshotEnabledByOwner().entrySet()) {
+                    owners.addProperty(e.getKey() == null ? "" : e.getKey(), e.getValue());
+                }
+                JsonObject item = new JsonObject();
+                item.add("enabledByOwner", owners);
+                rfeatures.add(state.id, item);
+            }
+            rroot.add("features", rfeatures);
+            try (FileWriter rw = new FileWriter(runtimeFile)) {
+                rw.write(rroot.toString());
+            }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("保存方块功能配置失败", e);
         }
+    }
+
+    private static File getRuntimeConfigFile() {
+        return ProfileManager.getCurrentRuntimeProfileDir().resolve(CONFIG_FILE_NAME).toFile();
     }
 
     public void onClientDisconnect() {
@@ -448,66 +549,70 @@ public class BlockFeatureManager {
     }
 
     private void tickRuntimeState() {
-        if (autoToolCooldownTicks > 0) {
-            autoToolCooldownTicks--;
+        RuntimeState rt = rt();
+        if (rt.autoToolCooldownTicks > 0) {
+            rt.autoToolCooldownTicks--;
         }
-        if (placeAssistCooldownTicks > 0) {
-            placeAssistCooldownTicks--;
+        if (rt.placeAssistCooldownTicks > 0) {
+            rt.placeAssistCooldownTicks--;
         }
-        if (blockSwapLockTicks > 0) {
-            blockSwapLockTicks--;
+        if (rt.blockSwapLockTicks > 0) {
+            rt.blockSwapLockTicks--;
         } else {
-            lockedHotbarSlot = -1;
+            rt.lockedHotbarSlot = -1;
         }
-        if (autoLightCooldownTicks > 0) {
-            autoLightCooldownTicks--;
+        if (rt.autoLightCooldownTicks > 0) {
+            rt.autoLightCooldownTicks--;
         }
-        if (blockRefillCooldownTicks > 0) {
-            blockRefillCooldownTicks--;
+        if (rt.blockRefillCooldownTicks > 0) {
+            rt.blockRefillCooldownTicks--;
         }
-        if (ghostHandCooldownTicks > 0) {
-            ghostHandCooldownTicks--;
+        if (rt.ghostHandCooldownTicks > 0) {
+            rt.ghostHandCooldownTicks--;
         }
-        if (surroundCooldownTicks > 0) {
-            surroundCooldownTicks--;
+        if (rt.surroundCooldownTicks > 0) {
+            rt.surroundCooldownTicks--;
         }
     }
 
     private void resetRuntimeState() {
-        autoToolCooldownTicks = 0;
-        placeAssistCooldownTicks = 0;
-        blockSwapLockTicks = 0;
-        lastAutoToolHotbarSlot = -1;
-        lockedHotbarSlot = -1;
-        lastAssistPlacePos = null;
-        autoLightCooldownTicks = 0;
-        lastTorchPlacePos = null;
-        blockRefillCooldownTicks = 0;
-        lastRefillSlot = -1;
-        ghostHandCooldownTicks = 0;
-        lastGhostInteractPos = null;
-        surroundCooldownTicks = 0;
-        surroundPositions.clear();
+        RuntimeState rt = rt();
+        rt.autoToolCooldownTicks = 0;
+        rt.placeAssistCooldownTicks = 0;
+        rt.blockSwapLockTicks = 0;
+        rt.lastAutoToolHotbarSlot = -1;
+        rt.lockedHotbarSlot = -1;
+        rt.lastAssistPlacePos = null;
+        rt.autoLightCooldownTicks = 0;
+        rt.lastTorchPlacePos = null;
+        rt.blockRefillCooldownTicks = 0;
+        rt.lastRefillSlot = -1;
+        rt.ghostHandCooldownTicks = 0;
+        rt.lastGhostInteractPos = null;
+        rt.surroundCooldownTicks = 0;
+        rt.surroundPositions.clear();
     }
 
     private void refreshBlockSwapLock(Minecraft mc, EntityPlayerSP player) {
+        RuntimeState rt = rt();
         if (!isEnabled("block_swap_lock")) {
-            blockSwapLockTicks = 0;
-            lockedHotbarSlot = -1;
+            rt.blockSwapLockTicks = 0;
+            rt.lockedHotbarSlot = -1;
             return;
         }
         if (mc.currentScreen != null) {
             return;
         }
         if (Mouse.isButtonDown(1) && isHoldingPlaceableBlock(player)) {
-            lockedHotbarSlot = player.inventory.currentItem;
-            blockSwapLockTicks = 8;
+            rt.lockedHotbarSlot = player.inventory.currentItem;
+            rt.blockSwapLockTicks = 8;
         }
     }
 
     private void applyAutoTool(Minecraft mc, EntityPlayerSP player) {
+        RuntimeState rt = rt();
         if (!isEnabled("auto_tool")
-                || autoToolCooldownTicks > 0
+                || rt.autoToolCooldownTicks > 0
                 || mc.currentScreen != null
                 || mc.world == null
                 || mc.playerController == null
@@ -516,7 +621,7 @@ public class BlockFeatureManager {
             return;
         }
 
-        if (blockSwapLockTicks > 0 && lockedHotbarSlot >= 0) {
+        if (rt.blockSwapLockTicks > 0 && rt.lockedHotbarSlot >= 0) {
             return;
         }
 
@@ -543,8 +648,8 @@ public class BlockFeatureManager {
         }
 
         if (ModUtils.switchToHotbarSlot(bestSlot + 1)) {
-            autoToolCooldownTicks = 2;
-            lastAutoToolHotbarSlot = bestSlot;
+            rt.autoToolCooldownTicks = 2;
+            rt.lastAutoToolHotbarSlot = bestSlot;
         }
     }
 
@@ -618,8 +723,9 @@ public class BlockFeatureManager {
     }
 
     private void applyPlaceAssist(Minecraft mc, EntityPlayerSP player) {
+        RuntimeState rt = rt();
         if (!isEnabled("place_assist")
-                || placeAssistCooldownTicks > 0
+                || rt.placeAssistCooldownTicks > 0
                 || mc.currentScreen != null
                 || mc.playerController == null
                 || !Mouse.isButtonDown(1)
@@ -646,11 +752,11 @@ public class BlockFeatureManager {
                 target.supportFace, target.hitVec, EnumHand.MAIN_HAND);
         if (result == EnumActionResult.SUCCESS) {
             player.swingArm(EnumHand.MAIN_HAND);
-            placeAssistCooldownTicks = 2;
-            lastAssistPlacePos = target.placePos;
+            rt.placeAssistCooldownTicks = 2;
+            rt.lastAssistPlacePos = target.placePos;
             if (isEnabled("block_swap_lock")) {
-                lockedHotbarSlot = player.inventory.currentItem;
-                blockSwapLockTicks = 10;
+                rt.lockedHotbarSlot = player.inventory.currentItem;
+                rt.blockSwapLockTicks = 10;
             }
             if (isEnabled("fast_place")) {
                 int targetDelay = MathHelper.clamp(Math.round(getConfiguredValue("fast_place", 1.0F)), 0, 4);
@@ -725,7 +831,7 @@ public class BlockFeatureManager {
         }
 
         Vec3d eyePos = player.getPositionEyes(1.0F);
-        for (EnumFacing facing : PLACE_SEARCH_ORDER) {
+        for (EnumFacing facing : cfg().PLACE_SEARCH_ORDER) {
             BlockPos supportPos = placePos.offset(facing);
             if (!canPlaceAgainst(player.world, supportPos)) {
                 continue;
@@ -859,33 +965,34 @@ public class BlockFeatureManager {
     }
 
     private String getRuntimeHudLine() {
+        RuntimeState rt = rt();
         List<String> parts = new ArrayList<>();
-        if (isEnabled("auto_tool") && shouldDisplayFeatureStatusHud("auto_tool") && lastAutoToolHotbarSlot >= 0
-                && autoToolCooldownTicks > 0) {
-            parts.add("§e切到槽 " + (lastAutoToolHotbarSlot + 1));
+        if (isEnabled("auto_tool") && shouldDisplayFeatureStatusHud("auto_tool") && rt.lastAutoToolHotbarSlot >= 0
+                && rt.autoToolCooldownTicks > 0) {
+            parts.add("§e切到槽 " + (rt.lastAutoToolHotbarSlot + 1));
         }
-        if (isEnabled("place_assist") && shouldDisplayFeatureStatusHud("place_assist") && placeAssistCooldownTicks > 0
-                && lastAssistPlacePos != null) {
+        if (isEnabled("place_assist") && shouldDisplayFeatureStatusHud("place_assist") && rt.placeAssistCooldownTicks > 0
+                && rt.lastAssistPlacePos != null) {
             parts.add("§b辅助放置");
         }
-        if (isEnabled("block_swap_lock") && shouldDisplayFeatureStatusHud("block_swap_lock") && blockSwapLockTicks > 0
-                && lockedHotbarSlot >= 0) {
-            parts.add("§a建筑锁 " + (lockedHotbarSlot + 1));
+        if (isEnabled("block_swap_lock") && shouldDisplayFeatureStatusHud("block_swap_lock") && rt.blockSwapLockTicks > 0
+                && rt.lockedHotbarSlot >= 0) {
+            parts.add("§a建筑锁 " + (rt.lockedHotbarSlot + 1));
         }
-        if (isEnabled("auto_light") && shouldDisplayFeatureStatusHud("auto_light") && autoLightCooldownTicks > 0
-                && lastTorchPlacePos != null) {
+        if (isEnabled("auto_light") && shouldDisplayFeatureStatusHud("auto_light") && rt.autoLightCooldownTicks > 0
+                && rt.lastTorchPlacePos != null) {
             parts.add("§6补光");
         }
-        if (isEnabled("block_refill") && shouldDisplayFeatureStatusHud("block_refill") && blockRefillCooldownTicks > 0
-                && lastRefillSlot >= 0) {
-            parts.add("§d补栏 " + (lastRefillSlot + 1));
+        if (isEnabled("block_refill") && shouldDisplayFeatureStatusHud("block_refill") && rt.blockRefillCooldownTicks > 0
+                && rt.lastRefillSlot >= 0) {
+            parts.add("§d补栏 " + (rt.lastRefillSlot + 1));
         }
-        if (isEnabled("ghost_hand_block") && shouldDisplayFeatureStatusHud("ghost_hand_block") && ghostHandCooldownTicks > 0
-                && lastGhostInteractPos != null) {
+        if (isEnabled("ghost_hand_block") && shouldDisplayFeatureStatusHud("ghost_hand_block") && rt.ghostHandCooldownTicks > 0
+                && rt.lastGhostInteractPos != null) {
             parts.add("§c穿墙交互");
         }
-        if (isEnabled("surround") && shouldDisplayFeatureStatusHud("surround") && !surroundPositions.isEmpty()) {
-            parts.add("§9围身 " + surroundPositions.size());
+        if (isEnabled("surround") && shouldDisplayFeatureStatusHud("surround") && !rt.surroundPositions.isEmpty()) {
+            parts.add("§9围身 " + rt.surroundPositions.size());
         }
         if (parts.isEmpty()) {
             return "";
@@ -906,13 +1013,14 @@ public class BlockFeatureManager {
             return "待机";
         }
 
+        RuntimeState rt = rt();
         switch (featureId) {
         case "auto_tool":
             if (!isEnabled(featureId)) {
                 return "未启用";
             }
-            return lastAutoToolHotbarSlot >= 0 && autoToolCooldownTicks > 0
-                    ? "最近切换到热栏 " + (lastAutoToolHotbarSlot + 1)
+            return rt.lastAutoToolHotbarSlot >= 0 && rt.autoToolCooldownTicks > 0
+                    ? "最近切换到热栏 " + (rt.lastAutoToolHotbarSlot + 1)
                     : "挖方块时自动切换到更合适的工具";
         case "fast_place":
             return isEnabled(featureId)
@@ -922,8 +1030,8 @@ public class BlockFeatureManager {
             if (!isEnabled(featureId)) {
                 return "未启用";
             }
-            if (placeAssistCooldownTicks > 0 && lastAssistPlacePos != null) {
-                return "刚辅助放置到 " + formatBlockPos(lastAssistPlacePos);
+            if (rt.placeAssistCooldownTicks > 0 && rt.lastAssistPlacePos != null) {
+                return "刚辅助放置到 " + formatBlockPos(rt.lastAssistPlacePos);
             }
             return "待机，点空气或边缘失败时尝试补合法支撑面";
         case "fast_break":
@@ -934,40 +1042,40 @@ public class BlockFeatureManager {
             if (!isEnabled(featureId)) {
                 return "未启用";
             }
-            if (blockSwapLockTicks > 0 && lockedHotbarSlot >= 0) {
-                return "当前锁定热栏 " + (lockedHotbarSlot + 1) + "，剩余 " + blockSwapLockTicks + " tick";
+            if (rt.blockSwapLockTicks > 0 && rt.lockedHotbarSlot >= 0) {
+                return "当前锁定热栏 " + (rt.lockedHotbarSlot + 1) + "，剩余 " + rt.blockSwapLockTicks + " tick";
             }
             return "待机，放置建筑方块时会短暂保持当前热栏";
         case "auto_light":
             if (!isEnabled(featureId)) {
                 return "未启用";
             }
-            if (autoLightCooldownTicks > 0 && lastTorchPlacePos != null) {
-                return "刚在 " + formatBlockPos(lastTorchPlacePos) + " 放置火把";
+            if (rt.autoLightCooldownTicks > 0 && rt.lastTorchPlacePos != null) {
+                return "刚在 " + formatBlockPos(rt.lastTorchPlacePos) + " 放置火把";
             }
             return "待机，光照低于 " + formatInt(getConfiguredValue(featureId, 7.0F)) + " 时自动放火把";
         case "block_refill":
             if (!isEnabled(featureId)) {
                 return "未启用";
             }
-            if (blockRefillCooldownTicks > 0 && lastRefillSlot >= 0) {
-                return "刚补充热栏 " + (lastRefillSlot + 1);
+            if (rt.blockRefillCooldownTicks > 0 && rt.lastRefillSlot >= 0) {
+                return "刚补充热栏 " + (rt.lastRefillSlot + 1);
             }
             return "待机，方块少于 " + formatInt(getConfiguredValue(featureId, 16.0F)) + " 时自动补充";
         case "ghost_hand_block":
             if (!isEnabled(featureId)) {
                 return "未启用";
             }
-            if (ghostHandCooldownTicks > 0 && lastGhostInteractPos != null) {
-                return "刚与 " + formatBlockPos(lastGhostInteractPos) + " 交互";
+            if (rt.ghostHandCooldownTicks > 0 && rt.lastGhostInteractPos != null) {
+                return "刚与 " + formatBlockPos(rt.lastGhostInteractPos) + " 交互";
             }
             return "待机，可在 " + getConfiguredValue(featureId, 6.0F) + " 格距离内穿墙交互";
         case "surround":
             if (!isEnabled(featureId)) {
                 return "未启用";
             }
-            if (!surroundPositions.isEmpty()) {
-                return "已放置 " + surroundPositions.size() + " 个保护方块";
+            if (!rt.surroundPositions.isEmpty()) {
+                return "已放置 " + rt.surroundPositions.size() + " 个保护方块";
             }
             return "待机，自动在脚边放置保护方块";
         default:
@@ -989,8 +1097,9 @@ public class BlockFeatureManager {
 
     // ==================== 自动补光功能 ====================
     private void applyAutoLight(Minecraft mc, EntityPlayerSP player) {
+        RuntimeState rt = rt();
         if (!isEnabled("auto_light")
-                || autoLightCooldownTicks > 0
+                || rt.autoLightCooldownTicks > 0
                 || mc.currentScreen != null
                 || mc.world == null
                 || player.capabilities.isCreativeMode) {
@@ -1014,7 +1123,7 @@ public class BlockFeatureManager {
 
         // 寻找合适的放置位置
         BlockPos placePos = findTorchPlacePosition(mc.world, playerPos);
-        if (placePos == null || placePos.equals(lastTorchPlacePos)) {
+        if (placePos == null || placePos.equals(rt.lastTorchPlacePos)) {
             return;
         }
 
@@ -1026,8 +1135,8 @@ public class BlockFeatureManager {
                 EnumActionResult result = mc.playerController.processRightClickBlock(
                         player, mc.world, target.supportPos, target.supportFace, target.hitVec, EnumHand.MAIN_HAND);
                 if (result == EnumActionResult.SUCCESS) {
-                    lastTorchPlacePos = placePos;
-                    autoLightCooldownTicks = 20;
+                    rt.lastTorchPlacePos = placePos;
+                    rt.autoLightCooldownTicks = 20;
                 }
             }
             ModUtils.switchToHotbarSlot(originalSlot + 1);
@@ -1068,8 +1177,9 @@ public class BlockFeatureManager {
 
     // ==================== 方块自动补栏功能 ====================
     private void applyBlockRefill(Minecraft mc, EntityPlayerSP player) {
+        RuntimeState rt = rt();
         if (!isEnabled("block_refill")
-                || blockRefillCooldownTicks > 0
+                || rt.blockRefillCooldownTicks > 0
                 || mc.currentScreen != null
                 || player.capabilities.isCreativeMode
                 || mc.playerController == null) {
@@ -1130,8 +1240,8 @@ public class BlockFeatureManager {
                         hotbarSlot,
                         ClickType.SWAP,
                         player);
-                lastRefillSlot = hotbarSlot;
-                blockRefillCooldownTicks = 10;
+                rt.lastRefillSlot = hotbarSlot;
+                rt.blockRefillCooldownTicks = 10;
                 return;
             } catch (Exception e) {
                 mythosScriptMod.LOGGER.error("方块补栏失败", e);
@@ -1160,8 +1270,9 @@ public class BlockFeatureManager {
 
     // ==================== 穿墙方块交互功能 ====================
     private void applyGhostHandBlock(Minecraft mc, EntityPlayerSP player) {
+        RuntimeState rt = rt();
         if (!isEnabled("ghost_hand_block")
-                || ghostHandCooldownTicks > 0
+                || rt.ghostHandCooldownTicks > 0
                 || mc.currentScreen != null
                 || mc.playerController == null) {
             return;
@@ -1182,8 +1293,8 @@ public class BlockFeatureManager {
             if (Mouse.isButtonDown(0)) {
                 if (mc.playerController.onPlayerDamageBlock(pos, hit.sideHit)) {
                     player.swingArm(EnumHand.MAIN_HAND);
-                    ghostHandCooldownTicks = 2;
-                    lastGhostInteractPos = pos;
+                    rt.ghostHandCooldownTicks = 2;
+                    rt.lastGhostInteractPos = pos;
                 }
             }
             
@@ -1193,8 +1304,8 @@ public class BlockFeatureManager {
                         player, mc.world, pos, hit.sideHit, hit.hitVec, EnumHand.MAIN_HAND);
                 if (result == EnumActionResult.SUCCESS) {
                     player.swingArm(EnumHand.MAIN_HAND);
-                    ghostHandCooldownTicks = 2;
-                    lastGhostInteractPos = pos;
+                    rt.ghostHandCooldownTicks = 2;
+                    rt.lastGhostInteractPos = pos;
                 }
             }
         }
@@ -1202,8 +1313,9 @@ public class BlockFeatureManager {
 
     // ==================== 自动围身功能 ====================
     private void applySurround(Minecraft mc, EntityPlayerSP player) {
+        RuntimeState rt = rt();
         if (!isEnabled("surround")
-                || surroundCooldownTicks > 0
+                || rt.surroundCooldownTicks > 0
                 || mc.currentScreen != null
                 || mc.playerController == null
                 || player.capabilities.isCreativeMode) {
@@ -1240,8 +1352,8 @@ public class BlockFeatureManager {
                             player, mc.world, target.supportPos, target.supportFace, target.hitVec, EnumHand.MAIN_HAND);
                     if (result == EnumActionResult.SUCCESS) {
                         player.swingArm(EnumHand.MAIN_HAND);
-                        surroundPositions.add(pos);
-                        surroundCooldownTicks = 5;
+                        rt.surroundPositions.add(pos);
+                        rt.surroundCooldownTicks = 5;
                         break; // 一次只放一个方块
                     }
                 }

@@ -50,6 +50,7 @@ import com.mythos.mythosScriptMod.gui.modern.core.ModernMouseCapture;
 import com.mythos.mythosScriptMod.gui.modern.core.ModernScreenContext;
 import com.mythos.mythosScriptMod.gui.modern.core.ModernTabDescriptor;
 import com.mythos.mythosScriptMod.gui.modern.core.ModernTabRegistry;
+import com.mythos.mythosScriptMod.gui.modern.plugin.PluginLoader;
 import com.mythos.mythosScriptMod.gui.modern.packet.PacketWorkbenchTab;
 import com.mythos.mythosScriptMod.gui.modern.path.ModernPathWorkbenchTab;
 import com.mythos.mythosScriptMod.path.PathSequenceEventListener;
@@ -80,7 +81,6 @@ import net.minecraft.util.text.TextFormatting;
 public class GuiModernMainScreen extends GuiScreen
         implements ModernTooltipSupport.OwnsTooltipAnchors, GuiElementInspector.McpElementProvider {
 
-    private static final int TAB_STRIP_HEIGHT = ModernTabStripLayout.HORIZONTAL_STRIP_HEIGHT;
     private static final int RESIZE_ZONE = 5;
     private static final int WINDOW_MARGIN = 6;
     private static final int COMMAND_PALETTE_ROW_HEIGHT = 42;
@@ -117,9 +117,6 @@ public class GuiModernMainScreen extends GuiScreen
         ModernMouseCapture.captureBeforeMenu(minecraft);
     }
 
-    public static ModernMouseCapture.Capture getLastMouseBeforeMenu() {
-        return ModernMouseCapture.getLastBeforeMenu();
-    }
 
     private enum TargetType {
         CATEGORY,
@@ -135,6 +132,7 @@ public class GuiModernMainScreen extends GuiScreen
         STOP_BACKGROUND,
         PATHS,
         COMMAND_PALETTE,
+        PLUGIN_CENTER,
         TOOLS,
         TOOL_PIN,
         CLEAR_SEARCH,
@@ -158,6 +156,7 @@ public class GuiModernMainScreen extends GuiScreen
     private static final TargetType[] COLLAPSED_HEADER_ACTION_TYPES = {
             TargetType.HEADER_SEARCH,
             TargetType.COMMAND_PALETTE,
+            TargetType.PLUGIN_CENTER,
             TargetType.GLOBAL_SETTINGS,
             TargetType.STOP_FOREGROUND,
             TargetType.STOP_BACKGROUND,
@@ -166,7 +165,7 @@ public class GuiModernMainScreen extends GuiScreen
             TargetType.DETACH,
             TargetType.CLOSE
     };
-    private static final int[] COLLAPSED_HEADER_ACTION_ICONS = { 8, 7, 6, 0, 1, 2, 3, 4, 5 };
+    private static final int[] COLLAPSED_HEADER_ACTION_ICONS = { 8, 7, 9, 6, 0, 1, 2, 3, 4, 5 };
 
     private enum CloseConfirmKind {
         TAB,
@@ -486,6 +485,13 @@ public class GuiModernMainScreen extends GuiScreen
     /** Keeps one draft instance per concrete command while users switch tabs. */
     private final Map<String, ModernSettingsTab> settingsTabDraftCache = new HashMap<>();
     private final ModernTabRegistry tabRegistry = ModernTabCatalog.createRegistry();
+
+    /**
+     * Plugin generation the registry above was last synced with. The screen is a
+     * long-lived singleton, so a plugin loaded while the game is running would
+     * otherwise only appear after a client restart.
+     */
+    private int pluginTabGeneration;
     private final ModernContextMenu modernContextMenu = new ModernContextMenu();
     private final List<CommandPaletteEntry> commandPaletteEntries = new ArrayList<>();
     private final List<ModernMainLayout.Rect> commandPaletteRowBounds = new ArrayList<>();
@@ -670,9 +676,6 @@ public class GuiModernMainScreen extends GuiScreen
         this.initiallyOpenSettingsCommand = initiallyOpenSettingsCommand == null ? "" : initiallyOpenSettingsCommand;
     }
 
-    public static void openAutoEatSettings(Minecraft minecraft) {
-        openSettingsTab(minecraft, "autoeat");
-    }
 
     public static GuiModernMainScreen getPersistentScreen() {
         if (persistentScreen == null) {
@@ -692,6 +695,17 @@ public class GuiModernMainScreen extends GuiScreen
         if (minecraft.currentScreen != screen) {
             minecraft.displayGuiScreen(screen);
         }
+    }
+
+    /** The currently-open path workbench tab, or null when it has not been opened. */
+    public ModernPathWorkbenchTab pathWorkbenchTab() {
+        ModernSettingsTab tab = settingsTabs.get(tabKeyForCommand("path_manager"));
+        return tab instanceof ModernPathWorkbenchTab ? (ModernPathWorkbenchTab) tab : null;
+    }
+
+    /** Switches the persistent screen to the packet workbench viewer. */
+    public void showPacketViewer() {
+        openPacketChildTab("packet_viewer");
     }
 
     public static void toggleMenu(Minecraft minecraft) {
@@ -759,7 +773,23 @@ public class GuiModernMainScreen extends GuiScreen
      * Opens a settings route from MCP without requiring the caller to know
      * which dashboard card or tab-strip coordinate currently contains it.
      */
+    /**
+     * Re-registers plugin tabs when a plugin was loaded or unloaded since the last sync.
+     *
+     * <p>The registry is asked before every registration, so this only adds routes that
+     * are still missing and never disturbs an already-open tab.</p>
+     */
+    private void syncPluginTabs() {
+        int generation = PluginLoader.generation();
+        if (generation == pluginTabGeneration) {
+            return;
+        }
+        pluginTabGeneration = generation;
+        ModernTabCatalog.registerPluginTabs(tabRegistry);
+    }
+
     public boolean openSettingsTabFromMcp(String command) {
+        syncPluginTabs();
         String normalized = resolveMcpRouteCommand(normalizeMcpRoute(command));
         if (!isMcpOpenableCommand(normalized)) {
             return false;
@@ -1070,6 +1100,10 @@ public class GuiModernMainScreen extends GuiScreen
             path = "screen/GuiModernMainScreen/header/command_palette";
             text = tr("gui.modern.main.palette.title", "打开命令面板");
             break;
+        case PLUGIN_CENTER:
+            path = "screen/GuiModernMainScreen/header/plugin_center";
+            text = tr("gui.modern.plugin.title", "插件中心");
+            break;
         case TOOLS:
             path = "screen/GuiModernMainScreen/header/tools";
             text = tr("gui.modern.main.u008", "工具");
@@ -1376,9 +1410,6 @@ public class GuiModernMainScreen extends GuiScreen
         resetDashboardPosition();
     }
 
-    public boolean isCommandPaletteOpen() {
-        return this.commandPaletteOpen;
-    }
 
     public boolean isTextInputFocused() {
         if (this.inlineTextInputOpen) {
@@ -1440,6 +1471,7 @@ public class GuiModernMainScreen extends GuiScreen
 
     @Override
     public void initGui() {
+        syncPluginTabs();
         closed = false;
         headerAlertVersion = "";
         headerVersionHoverProgress = 0.0F;
@@ -1813,9 +1845,11 @@ public class GuiModernMainScreen extends GuiScreen
         String versionText = (versionMismatch ? TextFormatting.BOLD.toString() : "")
                 + I18n.format("gui.changelog.header_versions", currentVersion, latestVersion);
         int brandWidth = Math.max(85, (int) Math.ceil(fontRenderer.getStringWidth(versionText) * 1.12F) + 10);
-        int commandButtonX = Math.min(labelX + 25 + brandWidth + 6, searchRight - commandButtonSize - 35);
+        int commandButtonX = Math.min(labelX + 25 + brandWidth + 6,
+                searchRight - (commandButtonSize * 2 + 5) - 35);
         commandButtonX = Math.max(labelX + 54, commandButtonX);
-        int searchX = commandButtonX + commandButtonSize + 5;
+        int pluginButtonX = commandButtonX + commandButtonSize + 5;
+        int searchX = pluginButtonX + commandButtonSize + 5;
         int labelWidth = Math.max(24, commandButtonX - (labelX + 25) - 6);
         ModernUiRenderer.drawIcon(ModernUiRenderer.Icon.BRAND, labelX,
                 header.y + (header.height - 17) / 2, 17, ModernUiRenderer.ACCENT);
@@ -1859,6 +1893,22 @@ public class GuiModernMainScreen extends GuiScreen
                         + tr("gui.modern.main.palette.desc", "搜索并执行功能、路径和快捷动作。") + "\n"
                         + commandPaletteShortcut);
 
+        ModernMainLayout.Rect pluginBounds = new ModernMainLayout.Rect(pluginButtonX,
+                header.y + (header.height - commandButtonSize) / 2, commandButtonSize, commandButtonSize);
+        boolean pluginHovered = pluginBounds.contains(mouseX, mouseY);
+        boolean pluginActive = isPluginCenterActive();
+        ModernUiRenderer.drawSubtlePanel(pluginBounds.x, pluginBounds.y, pluginBounds.width,
+                pluginBounds.height, 5,
+                pluginHovered || pluginActive ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SHELL_RAISED,
+                pluginActive ? ModernUiRenderer.ACCENT_DIM
+                        : pluginHovered ? 0xFF637783 : ModernUiRenderer.BORDER_SUBTLE);
+        ModernUiRenderer.drawIcon(ModernUiRenderer.Icon.BLOCKS, pluginBounds.x + 4, pluginBounds.y + 4,
+                commandButtonSize - 8,
+                pluginHovered || pluginActive ? ModernUiRenderer.TEXT : ModernUiRenderer.SUBTLE_TEXT);
+        hitTargets.add(new HitTarget(TargetType.PLUGIN_CENTER, pluginBounds, ""));
+        ModernTooltipSupport.registerTooltipAnchor(this, pluginBounds.x, pluginBounds.y,
+                pluginBounds.width, pluginBounds.height, headerTooltip(TargetType.PLUGIN_CENTER));
+
         int searchWidth = Math.max(1, searchRight - searchX);
         searchBounds = new ModernMainLayout.Rect(searchX, header.y + (header.height - 22) / 2, searchWidth, 22);
         boolean searchHovered = searchBounds.contains(mouseX, mouseY);
@@ -1898,6 +1948,12 @@ public class GuiModernMainScreen extends GuiScreen
         }
     }
 
+    /** True while the plugin centre tab is the visible tab, so the header icon lights up. */
+    private boolean isPluginCenterActive() {
+        TabKey key = tabKeyForCommand("plugin_center");
+        return key != null && key.equals(activeTab);
+    }
+
     private void drawCollapsedHeader(ModernMainLayout.Layout layout, int mouseX, int mouseY) {
         ModernMainLayout.Rect header = layout.header;
         List<ToolEntry> pinnedToolEntries = getPinnedToolEntries();
@@ -1928,6 +1984,8 @@ public class GuiModernMainScreen extends GuiScreen
                     && searchField != null && (searchField.isFocused() || !searchField.getText().isEmpty());
             if (type == TargetType.COMMAND_PALETTE) {
                 active = commandPaletteOpen;
+            } else if (type == TargetType.PLUGIN_CENTER) {
+                active = isPluginCenterActive();
             } else if (type == TargetType.TOOLS) {
                 active = toolsOpen;
             }
@@ -2008,6 +2066,8 @@ public class GuiModernMainScreen extends GuiScreen
             ModernUiRenderer.drawCommandIcon(iconX + 1, iconY + 1, iconColor);
         } else if (icon == 8) {
             ModernUiRenderer.drawSearchIcon(iconX + 1, iconY + 1, iconColor);
+        } else if (icon == 9) {
+            ModernUiRenderer.drawIcon(ModernUiRenderer.Icon.BLOCKS, iconX, iconY, 13, iconColor);
         } else {
             ModernUiRenderer.drawCloseIcon(iconX + 2, iconY + 2, iconColor);
         }
@@ -2039,6 +2099,9 @@ public class GuiModernMainScreen extends GuiScreen
                 return tr("gui.modern.main.palette.title", "打开命令面板") + "\n"
                         + tr("gui.modern.main.palette.desc", "搜索并执行功能、路径和快捷动作。") + "\n"
                         + formatKeybindLabel(KeybindManager.keybinds.get(BindableAction.OPEN_COMMAND_PALETTE));
+            case PLUGIN_CENTER:
+                return tr("gui.modern.plugin.title", "插件中心") + "\n"
+                        + tr("gui.modern.plugin.entry.desc", "查看 mods 目录中已安装的插件。");
             default:
                 return "";
         }
@@ -3702,7 +3765,6 @@ public class GuiModernMainScreen extends GuiScreen
 
         MainUiLayoutManager.DashboardViewMeta view = getDashboardView();
         boolean showIcons = view == null || view.showIcons;
-        boolean sequenceCard = isPathSequenceCommand(card.command);
         String infoMode = view == null ? MainUiLayoutManager.DASHBOARD_INFO_ICON : view.infoMode;
         boolean showInfo = MainUiLayoutManager.DASHBOARD_INFO_ICON.equals(infoMode)
                 && bounds.width >= 80;
@@ -4570,46 +4632,9 @@ public class GuiModernMainScreen extends GuiScreen
                 this.commandPaletteMaxScrollOffset);
     }
 
-    private int getCommandPaletteScrollbarThumbHeight(int visibleRows) {
-        return Math.min(this.commandPaletteListBounds.height,
-                Math.max(18, (int) (visibleRows / (float) Math.max(1, this.commandPaletteEntries.size())
-                        * this.commandPaletteListBounds.height)));
-    }
 
-    private void updateCommandPaletteScrollFromMouse(int mouseY) {
-        if (this.commandPaletteListBounds == null || this.commandPaletteMaxScrollOffset <= 0) {
-            return;
-        }
-        int thumbHeight = getCommandPaletteScrollbarThumbHeight(getCommandPaletteVisibleRows());
-        int trackHeight = Math.max(1, this.commandPaletteListBounds.height - thumbHeight);
-        float percent = (mouseY - this.commandPaletteListBounds.y - thumbHeight / 2.0F) / trackHeight;
-        percent = Math.max(0.0F, Math.min(1.0F, percent));
-        this.commandPaletteScrollOffset = Math.round(percent * this.commandPaletteMaxScrollOffset);
-        this.commandPaletteSelectedIndex = clamp(this.commandPaletteScrollOffset, 0,
-                Math.max(0, this.commandPaletteEntries.size() - 1));
-    }
 
-    private void updateTabScrollFromMouse(int mouseX) {
-        if (tabScrollbarBounds == null || tabScrollbarThumbBounds == null || maxTabScrollOffset <= 0) {
-            return;
-        }
-        int travel = Math.max(1, tabScrollbarBounds.width - tabScrollbarThumbBounds.width);
-        int target = clamp(mouseX - tabScrollbarThumbBounds.width / 2, tabScrollbarBounds.x,
-                tabScrollbarBounds.x + travel);
-        tabScrollOffset = Math.round((target - tabScrollbarBounds.x) * maxTabScrollOffset / (float) travel);
-    }
 
-    private void updateNavigationScrollFromMouse(int mouseY) {
-        if (navigationScrollbarBounds == null || navigationScrollbarThumbBounds == null
-                || maxNavigationScrollOffset <= 0) {
-            return;
-        }
-        int travel = Math.max(1, navigationScrollbarBounds.height - navigationScrollbarThumbBounds.height);
-        int target = clamp(mouseY - navigationScrollbarThumbBounds.height / 2, navigationScrollbarBounds.y,
-                navigationScrollbarBounds.y + travel);
-        navigationScrollOffset = Math.round(
-                (target - navigationScrollbarBounds.y) * maxNavigationScrollOffset / (float) travel);
-    }
 
     private void drawResizeAffordance(int mouseX, int mouseY) {
         if (lastLayout == null) {
@@ -5393,6 +5418,11 @@ public class GuiModernMainScreen extends GuiScreen
             case COMMAND_PALETTE:
                 if (mouseButton == 0) {
                     toggleCommandPalette();
+                }
+                return;
+            case PLUGIN_CENTER:
+                if (mouseButton == 0) {
+                    openSettingsTabForCommand("plugin_center");
                 }
                 return;
             case TOOLS:
@@ -6189,11 +6219,8 @@ public class GuiModernMainScreen extends GuiScreen
 
     @Override
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
-        if (keyCode == mythosScriptMod.getGuiToggleKeyCode() && !isTextInputFocused()
-                && !KeybindManager.isRecording()) {
-            closeScreen();
-            return;
-        }
+        // Toggle key is handled by GlobalKeybindListener — do NOT close here
+        // or the same key press fires twice (screen closes, listener reopens).
         if (this.commandPaletteOpen && handleCommandPaletteKeyTyped(typedChar, keyCode)) {
             return;
         }
@@ -6883,14 +6910,6 @@ public class GuiModernMainScreen extends GuiScreen
         closeScreenNow();
     }
 
-    private boolean hasDirtySettingsTab() {
-        for (ModernSettingsTab tab : settingsTabs.values()) {
-            if (tab != null && tab.isDirty()) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     private void openCloseConfirmation(TabKey key, boolean cascade) {
         openCloseConfirmation(key, cascade, CloseConfirmKind.TAB);
@@ -7136,14 +7155,6 @@ public class GuiModernMainScreen extends GuiScreen
         layoutScreenHeight = this.height;
     }
 
-    /**
-     * Returns a defensive copy of the current modern window bounds so nested
-     * workbenches can render as an in-place overlay over the same shell.
-     */
-    public java.awt.Rectangle getWindowBounds() {
-        ensureWindowBounds();
-        return new java.awt.Rectangle(windowX, windowY, windowWidth, windowHeight);
-    }
 
     private boolean beginResize(int mouseX, int mouseY) {
         ResizeHandle handle = findResizeHandle(mouseX, mouseY);
@@ -8021,18 +8032,24 @@ public class GuiModernMainScreen extends GuiScreen
         return false;
     }
 
+    /** Owner key of the session currently on screen (mounted bot, "" for human). */
+    private static String viewOwner() {
+        String m = com.mythos.mythosScriptMod.mcp.NexusSessions.mountedBotUsername();
+        return m == null ? "" : m;
+    }
+
     private boolean isPathSequenceRunning(String command) {
         return isPathSequenceRunningBackground(command) || isPathSequenceRunningForeground(command);
     }
 
     private boolean isPathSequenceRunningForeground(String command) {
         String name = getPathSequenceCommandName(command);
-        return !name.isEmpty() && PathSequenceEventListener.isSequenceRunningInForeground(name);
+        return !name.isEmpty() && PathSequenceEventListener.isSequenceRunningInForegroundForOwner(viewOwner(), name);
     }
 
     private boolean isPathSequenceRunningBackground(String command) {
         String name = getPathSequenceCommandName(command);
-        return !name.isEmpty() && PathSequenceEventListener.isSequenceRunningInBackground(name);
+        return !name.isEmpty() && PathSequenceEventListener.isSequenceRunningInBackgroundForOwner(viewOwner(), name);
     }
 
     private String getPathSequenceCommandName(String command) {
@@ -8237,6 +8254,7 @@ public class GuiModernMainScreen extends GuiScreen
     }
 
     private List<CommandPaletteEntry> buildCommandPaletteEntries() {
+        syncPluginTabs();
         Map<String, CommandPaletteEntry> entries = new LinkedHashMap<>();
         Set<BindableAction> representedActions = new HashSet<>();
 

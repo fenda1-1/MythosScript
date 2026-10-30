@@ -64,10 +64,14 @@ public class PathRecordingManager {
     private static boolean isRecording = false;
     private static boolean isPaused = false;
     private static double influenceRadius = 10.0D;
-    private static int packetRecordWindowSeconds = RecordingPacketSupport.DEFAULT_WINDOW_SECONDS;
+    private static int packetRecordCount = RecordingPacketSupport.DEFAULT_PACKET_COUNT;
     private static long packetCaptureStartedAt;
     private static boolean packetCaptureWasEnabled;
     private static boolean packetCaptureOwnedByRecording;
+    /** 录制开始时挂载的会话；中途切换挂载也要把开关还给它，而不是还给新会话。 */
+    private static String packetCaptureOwner = "";
+    /** When true, startRecording() force-enables packet capture for the session. */
+    public static boolean recordPacketCapture = false;
     private static long revision;
     private static final List<RecordedStep> recordedSteps = new ArrayList<>();
     private static final Set<Integer> recordedCombatEntityIds = new HashSet<>();
@@ -81,12 +85,15 @@ public class PathRecordingManager {
             return;
         isRecording = true;
         isPaused = false;
-        packetCaptureWasEnabled = PacketCaptureHandler.isCapturing;
+        packetCaptureOwner = PacketCaptureHandler.foregroundOwner();
+        packetCaptureWasEnabled = PacketCaptureHandler.isCapturing(packetCaptureOwner);
         packetCaptureOwnedByRecording = !packetCaptureWasEnabled;
         packetCaptureStartedAt = System.currentTimeMillis();
         // InputTimelineManager and the packet browser use this same switch.
         // Recording owns it only when the user had not already enabled capture.
-        PacketCaptureHandler.isCapturing = true;
+        if (recordPacketCapture) {
+            PacketCaptureHandler.setCapturing(packetCaptureOwner, true);
+        }
         recordedSteps.clear();
         recordedCombatEntityIds.clear();
         eventListener.resetScreenObservation();
@@ -130,7 +137,7 @@ public class PathRecordingManager {
 
     private static void restorePacketCaptureState() {
         if (packetCaptureOwnedByRecording) {
-            PacketCaptureHandler.isCapturing = packetCaptureWasEnabled;
+            PacketCaptureHandler.setCapturing(packetCaptureOwner, packetCaptureWasEnabled);
         }
         packetCaptureOwnedByRecording = false;
         packetCaptureWasEnabled = false;
@@ -169,24 +176,12 @@ public class PathRecordingManager {
         return influenceRadius;
     }
 
-    public static synchronized void setPacketRecordWindowSeconds(int seconds) {
-        packetRecordWindowSeconds = RecordingPacketSupport.clampWindowSeconds(seconds);
+    public static synchronized void setPacketRecordCount(int count) {
+        packetRecordCount = RecordingPacketSupport.clampPacketCount(count);
     }
 
-    public static int getPacketRecordWindowSeconds() {
-        return packetRecordWindowSeconds;
-    }
-
-    /** @deprecated use {@link #setPacketRecordWindowSeconds(int)}. */
-    @Deprecated
-    public static synchronized void setPacketRecordRange(int range) {
-        setPacketRecordWindowSeconds(range);
-    }
-
-    /** @deprecated use {@link #getPacketRecordWindowSeconds()}. */
-    @Deprecated
-    public static int getPacketRecordRange() {
-        return getPacketRecordWindowSeconds();
+    public static int getPacketRecordCount() {
+        return packetRecordCount;
     }
 
     public static long getRevision() {
@@ -217,7 +212,8 @@ public class PathRecordingManager {
         JsonObject inputParams = params == null ? new JsonObject() : params;
         inputParams.addProperty(RecordingPacketSupport.INPUT_TIMESTAMP_KEY,
                 inputTimestamp > 0L ? inputTimestamp : System.currentTimeMillis());
-        inputParams.addProperty(RecordingPacketSupport.WINDOW_SECONDS_KEY, packetRecordWindowSeconds);
+        inputParams.addProperty(RecordingPacketSupport.COUNT_KEY, packetRecordCount);
+        inputParams.remove(RecordingPacketSupport.WINDOW_SECONDS_KEY);
         inputParams.remove(RecordingPacketSupport.RANGE_KEY);
         recordAction(playerPos, yaw, pitch, type, inputParams);
     }
@@ -231,15 +227,16 @@ public class PathRecordingManager {
     }
 
     /**
-     * Updates the packet arrays attached to input actions. During recording it
-     * waits briefly for the post-input side of the range; finishing recording
-     * forces the final snapshot even when the server sent fewer packets.
+     * Updates the packet arrays attached to input actions. Only the packets
+     * captured at or after the input timestamp are kept — a server cannot
+     * respond before the action is sent. During recording each refresh waits
+     * until the requested count has arrived after the input; finishing forces
+     * the final snapshot with whatever exists.
      */
     public static synchronized void refreshPacketAssociations(boolean force) {
         if (recordedSteps.isEmpty()) {
             return;
         }
-        long now = System.currentTimeMillis();
         boolean changed = false;
         for (RecordedStep step : recordedSteps) {
             if (step == null) continue;
@@ -254,18 +251,14 @@ public class PathRecordingManager {
                 } catch (Exception ignored) {
                     continue;
                 }
-                boolean legacyCountRange = !params.has(RecordingPacketSupport.WINDOW_SECONDS_KEY)
-                        && params.has(RecordingPacketSupport.RANGE_KEY);
-                int windowSeconds = params.has(RecordingPacketSupport.WINDOW_SECONDS_KEY)
-                        ? safePacketWindow(params.get(RecordingPacketSupport.WINDOW_SECONDS_KEY).getAsInt())
-                        : packetRecordWindowSeconds;
-                if (!force && !packetAssociationReady(inputTimestamp, windowSeconds, now)) {
+                int count = params.has(RecordingPacketSupport.COUNT_KEY)
+                        ? safePacketCount(params.get(RecordingPacketSupport.COUNT_KEY).getAsInt())
+                        : packetRecordCount;
+                if (!force && RecordingPacketSupport.countAfter(inputTimestamp, packetCaptureStartedAt) < count) {
                     continue;
                 }
-                List<RecordingPacketSupport.PacketEntry> entries = legacyCountRange
-                        ? RecordingPacketSupport.snapshotAroundCount(inputTimestamp,
-                                safePacketRange(params.get(RecordingPacketSupport.RANGE_KEY).getAsInt()), packetCaptureStartedAt)
-                        : RecordingPacketSupport.snapshotAround(inputTimestamp, windowSeconds, packetCaptureStartedAt);
+                List<RecordingPacketSupport.PacketEntry> entries =
+                        RecordingPacketSupport.snapshotAfter(inputTimestamp, count, packetCaptureStartedAt);
                 JsonArray packets = RecordingPacketSupport.toJson(entries);
                 String previous = params.has(RecordingPacketSupport.PACKETS_KEY)
                         ? params.get(RecordingPacketSupport.PACKETS_KEY).toString() : "";
@@ -280,18 +273,8 @@ public class PathRecordingManager {
         }
     }
 
-    private static boolean packetAssociationReady(long inputTimestamp, int windowSeconds, long now) {
-        if (windowSeconds <= 0) return true;
-        long waitMillis = windowSeconds * 1000L;
-        return now >= inputTimestamp && now - inputTimestamp >= waitMillis;
-    }
-
-    private static int safePacketWindow(int value) {
-        return RecordingPacketSupport.clampWindowSeconds(value);
-    }
-
-    private static int safePacketRange(int value) {
-        return RecordingPacketSupport.clampRange(value);
+    private static int safePacketCount(int value) {
+        return RecordingPacketSupport.clampPacketCount(value);
     }
 
     public static synchronized void recordAction(String type, JsonObject params) {

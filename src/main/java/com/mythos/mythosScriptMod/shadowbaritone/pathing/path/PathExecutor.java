@@ -88,6 +88,26 @@ public class PathExecutor implements IPathExecutor, Helper {
     private double blinkLift;
     private int blinkStuckTicks;
     private double blinkHoldY = Double.NaN;
+    /** Hops that ran without advancing pathPosition - the only stall signal that
+     *  survives a canopy pocket, where one half-block leg keeps `moved` true. */
+    private int blinkNoProgressHops;
+    private int blinkSkipStreak;
+    /** Hops spent with the next node on a different level than the player -
+     *  either the plan is not followable from here (climb blocked by a
+     *  ceiling, drop blocked by a floor) and it has to be replanned. */
+    private int blinkOffPathHops;
+
+    /** Best (smallest) squared distance reached to the next node on this node. */
+    private double blinkNodeBestDist = -1.0D;
+
+    /** Hops spent since {@link #blinkNodeBestDist} last improved. */
+    private int blinkNoImproveHops;
+
+    /** Single-node skips since the path last made real headway. */
+    private int blinkReplanStreak;
+    private double blinkProgressX;
+    private double blinkProgressY;
+    private double blinkProgressZ;
     private HashSet<BlockPos> toBreak = new HashSet<>();
     private HashSet<BlockPos> toPlace = new HashSet<>();
     private HashSet<BlockPos> toWalkInto = new HashSet<>();
@@ -128,6 +148,7 @@ public class PathExecutor implements IPathExecutor, Helper {
      *         not sneaking out over lava), false otherwise
      */
     public boolean onTick() {
+        BlinkDebugLog.INSTANCE.onTick();
         if (Baritone.settings().allowBlinkPathing.value) {
             return blinkAlongPath();
         }
@@ -261,6 +282,18 @@ public class PathExecutor implements IPathExecutor, Helper {
                 if (!behavior.baritone.bsi.worldContainsLoadedChunk(next.getDest().x, next.getDest().z)) {
                     logDebug("Pausing since destination is at edge of loaded chunks");
                     clearKeys();
+                    // This early return skips ticksOnCurrent++ below, so the
+                    // movement timeout never fires — a session bot whose path
+                    // sits at a permanently-unloaded chunk edge pauses forever.
+                    // Count the pause ticks too so the timeout can cancel.
+                    ticksOnCurrent++;
+                    // Same small-cap escape as the backtrack pause below: the
+                    // watchdog resets navActive long before cost+timeout would
+                    // fire, so cap the chunk-edge wait too.
+                    if (ticksOnCurrent > Math.max(20, Baritone.settings().movementTimeoutTicks.value / 5)) {
+                        logDebug("Paused at edge of loaded chunks for too long. Cancelling.");
+                        cancel();
+                    }
                     return true;
                 }
             }
@@ -299,6 +332,19 @@ public class PathExecutor implements IPathExecutor, Helper {
             if (shouldPause()) {
                 logDebug("Pausing since current best path is a backtrack");
                 clearKeys();
+                // Same infinite-pause hazard as the chunk-edge branch: returning
+                // before ticksOnCurrent++ means a calc that keeps offering a
+                // "better" backtracking path pauses the executor forever.
+                ticksOnCurrent++;
+                // Fixed small cap instead of cost+timeout: a backtrack pause
+                // waiting on a calc that keeps finding "better" paths can
+                // freeze a session bot for 70+ ticks before the hunt watchdog
+                // fires. Cap the wait so the executor abandons the paused
+                // path and lets the next goal dispatch take over.
+                if (ticksOnCurrent > Math.max(20, Baritone.settings().movementTimeoutTicks.value / 5)) {
+                    logDebug("Paused for a better path for too long. Cancelling.");
+                    cancel();
+                }
                 return true;
             }
             MovementStatus movementStatus = movement.update();
@@ -1098,26 +1144,43 @@ public class PathExecutor implements IPathExecutor, Helper {
         if (--blinkTicksUntilStep > 0) {
             return true;
         }
-        blinkTicksUntilStep = Math.max(1, BlinkPathingConfig.tickInterval);
+        blinkTicksUntilStep = Math.max(1, BlinkPathingConfig.cfg().tickInterval);
 
         // Fast-forward past nodes already behind the player, so a fresh path
         // (replan/splice) never snaps the player back to its first node.
+        // Distance alone is not enough: hovering on top of node N at y=N.y+2
+        // is geometrically closer to node N+1's surfaceY than to node N's, but
+        // the player has not actually entered N+1's XZ cell — crediting N+1
+        // would push pathPosition to len while feet are still one cell back.
         while (pathPosition + 1 < positions.size()
+                && playerInsideCellXZ(player, positions.get(pathPosition + 1))
                 && distSqToNode(player, positions.get(pathPosition + 1))
                         <= distSqToNode(player, positions.get(pathPosition))) {
             pathPosition++;
         }
         if (pathPosition + 1 >= positions.size()) {
+            // Guard against finishing while feet are still in the previous
+            // cell: a stall escape or hover can leave the player wedged on
+            // the boundary and distSqToNode thinks the last node is reached.
+            // Report failure so PathingBehavior replans from where we are.
+            BetterBlockPos last = positions.get(positions.size() - 1);
+            if (!playerWithinGoalCellXZ(player, last)) {
+                failed = true;
+            }
             pathPosition = path.length();
             return true;
         }
+        // Baseline for the stall detector further down: every node credited in
+        // this hop moves pathPosition past this value, and that - not "some leg
+        // moved" - is what tells real progress from shuffling inside a pocket.
+        int progressBaselinePosition = pathPosition;
 
         // Escape wedged-inside-a-block first (server pullbacks and corner
         // clips can embed the feet box in a wall face): probe straight up in
         // small steps up to the per-packet limit — a 5-block wall needs ~6 —
         // then probe every horizontal direction for the nearest free spot.
         if (player.world != null && player.world.collidesWithAnyBlock(player.getEntityBoundingBox())) {
-            double liftCap = Math.min(BlinkPathingConfig.maxVerticalStep, 9.0D);
+            double liftCap = Math.min(BlinkPathingConfig.cfg().maxVerticalStep, 9.0D);
             for (double lift = 0.25D; lift <= liftCap + 1.0E-4D; lift += 0.25D) {
                 if (!player.world.collidesWithAnyBlock(player.getEntityBoundingBox().offset(0, lift, 0))) {
                     blinkTeleport(player, player.posX, player.posY + lift, player.posZ);
@@ -1154,6 +1217,8 @@ public class PathExecutor implements IPathExecutor, Helper {
         // fence corner or wall edge.
         List<Vec3d> route = blinkRoute(positions, pathPosition,
                 new Vec3d(player.posX, player.posY, player.posZ), player);
+        BlinkDebugLog.INSTANCE.beginHop(player, pathPosition, positions);
+        BlinkDebugLog.INSTANCE.route(route, -1, null);
         if (ParkourDebugLog.enabled()) {
             StringBuilder sb = new StringBuilder("blink pos=")
                     .append(String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", player.posX, player.posY, player.posZ))
@@ -1168,7 +1233,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         }
 
         // Budget this hop's travel along the route and find where it ends.
-        double travel = Math.max(0.1D, BlinkPathingConfig.stepDistance);
+        double travel = Math.max(0.1D, BlinkPathingConfig.cfg().stepDistance);
         double remaining = travel;
         int prefixEnd = 0;
         Vec3d cursor = route.get(0);
@@ -1194,28 +1259,31 @@ public class PathExecutor implements IPathExecutor, Helper {
         // Collision margin is clearance above the GROUND under the route, not
         // an extra lift stacked on the route's own height. Standing on a 2-block
         // path already uses most of that gap, so the hover collapses toward 0.
-        double margin = BlinkPathingConfig.collisionMargin;
+        double margin = BlinkPathingConfig.cfg().collisionMargin;
         if (margin > 0.0D) {
             double groundY = groundUnder(player, cursor.x, cursor.z, cursor.y);
             double wanted = groundY < -1000 ? margin : Math.max(0.0D, groundY + margin - cursor.y);
             double fitted = safeRouteLift(player, hopRoute, wanted);
             blinkLift = fitted < blinkLift ? fitted : Math.min(fitted, blinkLift + 0.5D);
+            BlinkDebugLog.INSTANCE.margin(groundY, wanted, fitted, blinkLift);
         } else {
             blinkLift = 0.0D;
         }
-        if (blinkLift != 0.0D) {
-            for (int i = 1; i < route.size(); i++) {
-                route.set(i, route.get(i).addVector(0.0D, blinkLift, 0.0D));
-            }
-        }
+        // Lift applies to the sweep check, not the route coordinates: teleport
+        // lands on the real surface Y but the collision probe runs at
+        // posY+blinkLift so thin floors/walls don't clip the box. Raising the
+        // route itself makes distSqToNode report >0.75 and the next tick's
+        // blinkSurfaceY pulls the player back — the alternating ±1 oscillation.
+        // ponytail: blinkLift is only fed into freeSweepDistance below; route
+        // stays at real surface Y so node credit and distSqToNode stay exact.
 
         // Walk the route leg by leg. Every leg is single-axis, and each leg
         // only takes min(travel, leg length, sweep room): a short leg turns
         // the corner and keeps going, a blocked leg stops at the last
         // collision-free point — so the hop auto-adapts from 0.1 up to
         // stepDistance without ever overrunning into a wall.
-        double vCap = Math.min(BlinkPathingConfig.maxVerticalStep, 9.0D);
-        double hCap = Math.min(BlinkPathingConfig.maxHorizontalStep, 9.0D);
+        double vCap = Math.min(BlinkPathingConfig.cfg().maxVerticalStep, 9.0D);
+        double hCap = Math.min(BlinkPathingConfig.cfg().maxHorizontalStep, 9.0D);
         boolean moved = false;
         int ri = 0;
         while (travel > 1.0E-4D && ri + 1 < route.size()) {
@@ -1247,8 +1315,10 @@ public class PathExecutor implements IPathExecutor, Helper {
             double hop = Math.min(Math.min(travel, leg), cap);
             Vec3d legFrom = new Vec3d(player.posX, player.posY, player.posZ);
             double movedDist = blinkTeleportAxis(player, lx * (hop / leg), ly * (hop / leg),
-                    lz * (hop / leg));
+                    lz * (hop / leg), blinkLift);
             Vec3d legTo = new Vec3d(player.posX, player.posY, player.posZ);
+            BlinkDebugLog.INSTANCE.leg(ri, legFrom, target, lx, ly, lz, hop, movedDist,
+                    player.posX, player.posY, player.posZ);
             // Credit nodes swept through mid-hop. A dipping route (down under
             // an overhang and back up the far side) can pass several node
             // cells inside one hop and still end near where it started; the
@@ -1258,6 +1328,7 @@ public class PathExecutor implements IPathExecutor, Helper {
                     && distSqNodeToSeg(player, positions.get(pathPosition + 1),
                             legFrom, legTo) < 1.3D) {
                 pathPosition++;
+                BlinkDebugLog.INSTANCE.credit(pathPosition, positions.get(pathPosition), -1);
             }
             if (movedDist > 1.0E-4D) {
                 moved = true;
@@ -1280,12 +1351,108 @@ public class PathExecutor implements IPathExecutor, Helper {
         // keeps moving instead of freezing against the block.
         if (!moved) {
             blinkStuckTicks++;
-            if (blinkStuckTicks >= 5 && pathPosition + 1 < positions.size()) {
-                pathPosition++;
+            if (blinkStuckTicks >= 3) {
+                // Every leg and the escape nudge were blocked: this plan cannot
+                // be followed from where the player actually is. Advancing
+                // pathPosition would only walk the plan forward on paper while
+                // the body stays put (measured: 112 ticks of that), so let
+                // PathingBehavior plan again from the real position.
                 blinkStuckTicks = 0;
+                BlinkDebugLog.INSTANCE.stallEscape(pathPosition, blinkStuckTicks);
+                failed = true;
             }
         } else {
             blinkStuckTicks = 0;
+        }
+        // Legs can keep "moving" while the path makes no headway: inside a
+        // pocket under a canopy one half-block leg succeeds every tick, `moved`
+        // stays true and the escape above never fires, so the player vibrates on
+        // the spot until the script's wait timeout gives up (measured: 283 ticks,
+        // pathPosition frozen, zero node credits). Count hops that gained no
+        // node instead, and leave the pocket even if that means abandoning a plan
+        // the planner should never have produced.
+        // Vertical off-path: the next node sits a block or more away from the
+        // player's feet, so no hop from here can reach it - the climb is blocked
+        // by a ceiling (measured: 144 ticks at y=76, solid at y=78) or the drop
+        // is blocked by a floor (measured: 754 ticks hovering 3 cells above the
+        // node while blinkHoldY pinned y). In both forms some horizontal leg
+        // still succeeds, so `moved` stays true and the leg-level escape never
+        // fires. Only a replan from where the player actually is can fix it.
+        if (pathPosition + 1 < positions.size()) {
+            BetterBlockPos nextNode = positions.get(pathPosition + 1);
+            double nextSurface = MovementFly.blinkSurfaceY(player.world, nextNode.x,
+                    nextNode.y, nextNode.z);
+            if (Math.abs(nextSurface - player.posY) > 1.0D) {
+                if (++blinkOffPathHops >= 4) {
+                    blinkOffPathHops = 0;
+                    failed = true;
+                }
+            } else {
+                blinkOffPathHops = 0;
+            }
+        }
+        // Horizontal crawl: legs keep succeeding while the next node never gets
+        // closer (vibrating between two cells). `moved` stays true and no node is
+        // ever credited, which no leg-level rule can see. Track the best distance
+        // reached and replan when it stops improving (measured: 283 ticks of this
+        // with pathPosition frozen and zero credits).
+        if (pathPosition + 1 < positions.size()) {
+            double nextDist = distSqToNode(player, positions.get(pathPosition + 1));
+            if (blinkNodeBestDist < 0.0D || nextDist < blinkNodeBestDist - 0.25D) {
+                blinkNodeBestDist = nextDist;
+                blinkNoImproveHops = 0;
+                // Real headway: the strike counter only survives while nothing
+                // is gained, otherwise the three-skip limit would never bind.
+                blinkSkipStreak = 0;
+            } else if (++blinkNoImproveHops >= 10) {
+                blinkNoImproveHops = 0;
+                blinkNodeBestDist = -1.0D;
+                // Same one-node policy: get off the spot without abandoning a
+                // plan the body can still follow. Only three skips in a row with
+                // no headway mean the plan is unusable from here.
+                if (blinkSkipStreak < 3 && pathPosition + 1 < positions.size()) {
+                    blinkSkipStreak++;
+                    pathPosition++;
+                    BlinkDebugLog.INSTANCE.stallEscape(pathPosition, blinkStuckTicks);
+                } else {
+                    failed = true;
+                }
+            }
+        }
+        if (pathPosition == progressBaselinePosition) {
+            double pdx = player.posX - blinkProgressX;
+            double pdy = player.posY - blinkProgressY;
+            double pdz = player.posZ - blinkProgressZ;
+            if (pdx * pdx + pdy * pdy + pdz * pdz > 4.0D) {
+                // Still travelling, just not through a node cell yet.
+                blinkProgressX = player.posX;
+                blinkProgressY = player.posY;
+                blinkProgressZ = player.posZ;
+                blinkNoProgressHops = 0;
+            } else if (++blinkNoProgressHops >= 8) {
+                blinkNoProgressHops = 0;
+                // Advance exactly one node. Skipping several at once walks the
+                // plan past nodes the body never reached (measured: the index
+                // jumped 4 ahead of the player and the rest of the route became
+                // unreachable, 238s frozen).
+                if (blinkSkipStreak < 3 && pathPosition + 1 < positions.size()) {
+                    blinkSkipStreak++;
+                    pathPosition++;
+                    BlinkDebugLog.INSTANCE.stallEscape(pathPosition, blinkStuckTicks);
+                } else {
+                    // Repeated skips without a single node gained: the plan is
+                    // not followable from here, so let PathingBehavior replan.
+                    failed = true;
+                }
+            }
+        } else {
+            blinkNoProgressHops = 0;
+            blinkOffPathHops = 0;
+            blinkNodeBestDist = -1.0D;
+            blinkNoImproveHops = 0;
+            blinkProgressX = player.posX;
+            blinkProgressY = player.posY;
+            blinkProgressZ = player.posZ;
         }
         blinkHoldY = player.posY;
 
@@ -1293,12 +1460,43 @@ public class PathExecutor implements IPathExecutor, Helper {
         while (pathPosition + 1 < positions.size()
                 && distSqToNode(player, positions.get(pathPosition + 1)) < 0.75D) {
             pathPosition++;
+            BlinkDebugLog.INSTANCE.credit(pathPosition, positions.get(pathPosition),
+                    distSqToNode(player, positions.get(pathPosition)));
         }
         if (pathPosition + 1 >= positions.size()) {
+            // Same XZ-cell guard as the fast-forward above: credit can run
+            // pathPosition to len while the player is still hovering beside
+            // the goal cell, leaving feet one cell short. Report failure so
+            // PathingBehavior replans instead of thinking we're done.
+            BetterBlockPos last = positions.get(positions.size() - 1);
+            if (!playerWithinGoalCellXZ(player, last)) {
+                failed = true;
+            }
             pathPosition = path.length();
         }
+        BlinkDebugLog.INSTANCE.endHop(player, pathPosition, moved, blinkLift, blinkHoldY);
         onChangeInPathPosition();
         return true;
+    }
+
+    /** True if the player's XZ sits inside the given node's cell. */
+    private static boolean playerInsideCellXZ(EntityPlayerSP player, BetterBlockPos node) {
+        return player.posX >= node.x && player.posX < node.x + 1.0D
+                && player.posZ >= node.z && player.posZ < node.z + 1.0D;
+    }
+
+    /**
+     * True if the player's feet cell (what playerFeet() reports) matches the
+     * goal node's cell — i.e. the player is actually standing inside it, not
+     * hovering on the ceiling two cells above or wedged against its face.
+     * The +0.1251 epsilon mirrors IPlayerContext.playerFeet()'s half-slab
+     * allowance so feet on a slab inside the cell still count.
+     */
+    private static boolean playerWithinGoalCellXZ(EntityPlayerSP player, BetterBlockPos node) {
+        int feetX = net.minecraft.util.math.MathHelper.floor(player.posX);
+        int feetY = net.minecraft.util.math.MathHelper.floor(player.posY + 0.1251D);
+        int feetZ = net.minecraft.util.math.MathHelper.floor(player.posZ);
+        return feetX == node.x && feetY == node.y && feetZ == node.z;
     }
 
     /**
@@ -1429,8 +1627,18 @@ public class PathExecutor implements IPathExecutor, Helper {
             double nz = node.z + 0.5D;
             double dy = ny - py;
             if (dy > 1.0E-4D) {
-                route.add(new Vec3d(px, ny, pz));
-                py = ny;
+                // The rise must itself be clear. blind `route.add(px, ny, pz)`
+                // instructed hops to climb into a ceiling whenever the next
+                // node's surface was higher than the route's current height,
+                // and the sweep then stalled at reached=0 while other legs kept
+                // moving - the player vibrated under the ceiling forever. When
+                // the rise is blocked, keep the current height: the node is
+                // unreachable from here and the executor's vertical off-path
+                // check replans instead of grinding.
+                if (freeSweepFrom(player, px, py, pz, 0, dy, 0) >= dy - 1.0E-4D) {
+                    route.add(new Vec3d(px, ny, pz));
+                    py = ny;
+                }
             }
             double dx = nx - px;
             double dz = nz - pz;
@@ -1444,7 +1652,7 @@ public class PathExecutor implements IPathExecutor, Helper {
                     double zRoom = freeSweepFrom(player, px, py, pz, 0, 0, dz);
                     xFirst = xRoom >= zRoom;
                 }
-                double vCap = Math.min(BlinkPathingConfig.maxVerticalStep, 9.0D);
+                double vCap = Math.min(BlinkPathingConfig.cfg().maxVerticalStep, 9.0D);
                 if (xFirst) {
                     py = appendHorizontalLeg(route, player, px, py, pz, dx, 0, vCap);
                     py = appendHorizontalLeg(route, player, nx, py, pz, 0, dz, vCap);
@@ -1497,7 +1705,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             double mx = d[0] / len * hop;
             double my = d[1] < 0 ? -hop : (d[1] > 0 ? hop : 0.0D);
             double mz = d[2] / len * hop;
-            if (blinkTeleportAxis(player, mx, my, mz) > 1.0E-4D) {
+            if (blinkTeleportAxis(player, mx, my, mz, 0.0D) > 1.0E-4D) {
                 return true;
             }
         }
@@ -1510,6 +1718,21 @@ public class PathExecutor implements IPathExecutor, Helper {
      * lets it pass: up → across at that height → back down to the route's Y,
      * all axis-aligned. Returns the Y the route continues at.
      */
+    /**
+     * True when the player's own box, moved to {@code (x,y,z)}, is
+     * collision-free. The sweeps answer "can I travel through", which says
+     * nothing about whether the point a leg ends on is occupiable - a
+     * step-up-over route that comes back down onto a fence post or into the
+     * cell the obstacle occupies passes every sweep and then wedges.
+     */
+    private static boolean blinkCellFits(EntityPlayerSP player, double x, double y, double z) {
+        if (player.world == null) {
+            return false;
+        }
+        return !player.world.collidesWithAnyBlock(player.getEntityBoundingBox()
+                .offset(x - player.posX, y - player.posY, z - player.posZ));
+    }
+
     private static double appendHorizontalLeg(List<Vec3d> route, EntityPlayerSP player,
             double px, double py, double pz, double dx, double dz, double vCap) {
         double len = Math.abs(dx) + Math.abs(dz);
@@ -1527,7 +1750,8 @@ public class PathExecutor implements IPathExecutor, Helper {
             if (freeSweepFrom(player, px, py, pz, 0, lift, 0) < lift - 1.0E-4D) {
                 break;
             }
-            if (freeSweepFrom(player, px, py + lift, pz, dx, 0, dz) >= len - 1.0E-4D) {
+            if (freeSweepFrom(player, px, py + lift, pz, dx, 0, dz) >= len - 1.0E-4D
+                    && blinkCellFits(player, px + dx, py, pz + dz)) {
                 route.add(new Vec3d(px, py + lift, pz));
                 route.add(new Vec3d(px + dx, py + lift, pz + dz));
                 route.add(new Vec3d(px + dx, py, pz + dz));
@@ -1540,6 +1764,28 @@ public class PathExecutor implements IPathExecutor, Helper {
         return py;
     }
 
+    /**
+     * True when the player's box can sweep {@code (dx,dy,dz)} from {@code base}
+     * without touching terrain.
+     *
+     * Every intermediate box the sweep loops probe is contained in the union of
+     * the start and end boxes, so a free union proves the whole sweep is free.
+     * That makes this an exact fast path, not an approximation: a true answer
+     * returns the same value the 0.25 step march would reach anyway, and a
+     * false answer (including the diagonal corners the march itself clears)
+     * just means "fall back to marching". Collision primitive, step size and
+     * the returned distance are untouched.
+     */
+    private static boolean sweepHullFree(EntityPlayerSP player, AxisAlignedBB base,
+            double dx, double dy, double dz) {
+        AxisAlignedBB end = base.offset(dx, dy, dz);
+        AxisAlignedBB hull = new AxisAlignedBB(
+                Math.min(base.minX, end.minX), Math.min(base.minY, end.minY),
+                Math.min(base.minZ, end.minZ), Math.max(base.maxX, end.maxX),
+                Math.max(base.maxY, end.maxY), Math.max(base.maxZ, end.maxZ));
+        return !player.world.collidesWithAnyBlock(hull);
+    }
+
     /** Like {@link #freeSweepDistance} but from an arbitrary feet position. */
     private static double freeSweepFrom(EntityPlayerSP player, double x, double y, double z,
             double dx, double dy, double dz) {
@@ -1549,6 +1795,9 @@ public class PathExecutor implements IPathExecutor, Helper {
         }
         AxisAlignedBB base = player.getEntityBoundingBox()
                 .offset(x - player.posX, y - player.posY, z - player.posZ);
+        if (length >= 1.0D && sweepHullFree(player, base, dx, dy, dz)) {
+            return length;
+        }
         double step = Math.min(0.25D, length);
         double reached = 0.0D;
         while (reached < length) {
@@ -1569,17 +1818,28 @@ public class PathExecutor implements IPathExecutor, Helper {
      * still stop the leg.
      */
     private static double freeSweepDistance(EntityPlayerSP player, double dx, double dy, double dz) {
+        return freeSweepDistance(player, dx, dy, dz, 0.0D);
+    }
+
+    private static double freeSweepDistance(EntityPlayerSP player, double dx, double dy, double dz,
+            double sweepLift) {
         double length = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
         if (length < 1.0E-4D || player.world == null) {
             return length;
         }
         AxisAlignedBB base = player.getEntityBoundingBox();
+        if (length >= 1.0D
+                && sweepHullFree(player, base.offset(0.0D, sweepLift, 0.0D), dx, dy, dz)) {
+            return length;
+        }
         double step = Math.min(0.25D, length);
         double reached = 0.0D;
         while (reached < length) {
             double next = Math.min(length, reached + step);
             double scale = next / length;
-            AxisAlignedBB box = base.offset(dx * scale, dy * scale, dz * scale);
+            // Probe at the lifted height so a thin floor or wall face the
+            // landing point would clear doesn't stop the sweep mid-leg.
+            AxisAlignedBB box = base.offset(dx * scale, dy * scale + sweepLift, dz * scale);
             if (player.world.collidesWithAnyBlock(box)) {
                 break;
             }
@@ -1594,6 +1854,11 @@ public class PathExecutor implements IPathExecutor, Helper {
      * corner. Returns the distance actually moved.
      */
     private static double blinkTeleportAxis(EntityPlayerSP player, double dx, double dy, double dz) {
+        return blinkTeleportAxis(player, dx, dy, dz, 0.0D);
+    }
+
+    private static double blinkTeleportAxis(EntityPlayerSP player, double dx, double dy, double dz,
+            double sweepLift) {
         double length = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
         if (length < 1.0E-4D) {
             return 0.0D;
@@ -1602,7 +1867,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             blinkTeleport(player, player.posX + dx, player.posY + dy, player.posZ + dz);
             return length;
         }
-        double reached = freeSweepDistance(player, dx, dy, dz);
+        double reached = freeSweepDistance(player, dx, dy, dz, sweepLift);
         if (reached < 1.0E-4D) {
             return 0.0D;
         }
@@ -1635,6 +1900,11 @@ public class PathExecutor implements IPathExecutor, Helper {
      * Squared distance from a node's surface point to a swept leg segment —
      * used to credit nodes the teleport passed through, not just the point it
      * ended at. Compares against the same threshold as distSqToNode.
+     *
+     * A leg must actually enter the node's XZ cell to earn credit: a vertical
+     * climb beside the cell (lift leg over a wall) can sit within the old 1.3
+     * radius in 3-D without ever stepping inside it, which used to fast-forward
+     * pathPosition past the goal node and finish the executor mid-air.
      */
     private static double distSqNodeToSeg(EntityPlayerSP player, BetterBlockPos node,
             Vec3d a, Vec3d b) {
@@ -1642,6 +1912,9 @@ public class PathExecutor implements IPathExecutor, Helper {
         // legs ride a collision-margin lift above the surface, so a node the
         // hop passes directly over/under sits ~0.5-1.0 off the leg axis even
         // though it was genuinely traversed.
+        if (!segEntersCellXZ(a, b, node.x, node.z)) {
+            return Double.POSITIVE_INFINITY;
+        }
         double nx = node.x + 0.5D;
         double ny = node.y + 0.5D;
         double nz = node.z + 0.5D;
@@ -1656,6 +1929,39 @@ public class PathExecutor implements IPathExecutor, Helper {
         double py = a.y + t * dy - ny;
         double pz = a.z + t * dz - nz;
         return px * px + py * py + pz * pz;
+    }
+
+    /**
+     * True when the segment's XZ projection intersects the unit cell
+     * [cx, cx+1) × [cz, cz+1). Handles degenerate (vertical) segments as a
+     * point-in-cell test.
+     */
+    private static boolean segEntersCellXZ(Vec3d a, Vec3d b, int cx, int cz) {
+        double minX = cx, maxX = cx + 1.0D;
+        double minZ = cz, maxZ = cz + 1.0D;
+        double dx = b.x - a.x, dz = b.z - a.z;
+        if (Math.abs(dx) < 1.0E-9D && Math.abs(dz) < 1.0E-9D) {
+            return a.x >= minX && a.x < maxX && a.z >= minZ && a.z < maxZ;
+        }
+        // Slab method: parametric interval of the segment inside the box.
+        double t0 = 0.0D, t1 = 1.0D;
+        if (Math.abs(dx) > 1.0E-9D) {
+            double tx1 = (minX - a.x) / dx, tx2 = (maxX - a.x) / dx;
+            double lo = Math.min(tx1, tx2), hi = Math.max(tx1, tx2);
+            t0 = Math.max(t0, lo);
+            t1 = Math.min(t1, hi);
+        } else if (a.x < minX || a.x >= maxX) {
+            return false;
+        }
+        if (Math.abs(dz) > 1.0E-9D) {
+            double tz1 = (minZ - a.z) / dz, tz2 = (maxZ - a.z) / dz;
+            double lo = Math.min(tz1, tz2), hi = Math.max(tz1, tz2);
+            t0 = Math.max(t0, lo);
+            t1 = Math.min(t1, hi);
+        } else if (a.z < minZ || a.z >= maxZ) {
+            return false;
+        }
+        return t0 <= t1;
     }
 
     private void onChangeInPathPosition() {

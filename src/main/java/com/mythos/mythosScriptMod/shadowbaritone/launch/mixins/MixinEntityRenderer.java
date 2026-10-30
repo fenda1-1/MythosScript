@@ -46,8 +46,21 @@ public class MixinEntityRenderer {
     @Inject(method = "renderWorldPass", at = @At(value = "INVOKE_STRING", target = "Lnet/minecraft/profiler/Profiler;endStartSection(Ljava/lang/String;)V", args = {
             "ldc=hand" }))
     private void renderWorldPass(int pass, float partialTicks, long finishTimeNano, CallbackInfo ci) {
-        for (IBaritone ibaritone : BaritoneAPI.getProvider().getAllBaritones()) {
+        java.util.List<IBaritone> all = BaritoneAPI.getProvider().getAllBaritones();
+        for (IBaritone ibaritone : all) {
             ibaritone.getGameEventHandler().onRenderPass(new RenderEvent(partialTicks));
+        }
+        // Session baritones (Nexus) are kept out of getAllBaritones, so the
+        // mounted session's path would never draw. Render the baritone bound
+        // to the mounted player too — getBaritoneForPlayer returns the pinned
+        // session baritone (or primary when standalone, already drawn above).
+        net.minecraft.client.entity.EntityPlayerSP mp =
+                net.minecraft.client.Minecraft.getMinecraft().player;
+        if (mp != null) {
+            IBaritone mounted = BaritoneAPI.getProvider().getBaritoneForPlayer(mp);
+            if (mounted != null && !all.contains(mounted)) {
+                mounted.getGameEventHandler().onRenderPass(new RenderEvent(partialTicks));
+            }
         }
     }
 

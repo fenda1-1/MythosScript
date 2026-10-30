@@ -35,11 +35,6 @@ public final class GuiTheme {
         return applyOpacity(base, TEXT_OPACITY_PERCENT);
     }
 
-    // Layout tokens
-    public static final int SPACE_XS = 4;
-    public static final int SPACE_SM = 8;
-    public static final int SPACE_MD = 12;
-    public static final int SPACE_LG = 16;
 
     // State colors
     public static int STATE_SUCCESS = 0xFF2FAF5E;
@@ -142,9 +137,6 @@ public final class GuiTheme {
         fr.drawStringWithShadow(title, x, y, applyOpacity(LABEL_TEXT, TEXT_OPACITY_PERCENT));
     }
 
-    public static void drawStatusText(int x, int y, String text, UiState state, FontRenderer fr) {
-        fr.drawStringWithShadow(text, x, y, applyOpacity(getStateTextColor(state), TEXT_OPACITY_PERCENT));
-    }
 
     public static void drawButtonFrame(int x, int y, int width, int height, UiState state) {
         int borderColor = applyOpacity(getButtonBorderColor(state), BUTTON_OPACITY_PERCENT);
@@ -152,20 +144,7 @@ public final class GuiTheme {
         ModernUiRenderer.drawSubtlePanel(x, y, width, height, 5, bgColor, borderColor);
     }
 
-    // 安全版：永远只绘制纯色，避免外部纹理/裁切影响关键操作控件
-    public static void drawButtonFrameSafe(int x, int y, int width, int height, UiState state) {
-        int borderColor = applyOpacity(getButtonBorderColor(state), BUTTON_OPACITY_PERCENT);
-        int bgColor = applyOpacity(getButtonBgColor(state), BUTTON_OPACITY_PERCENT);
-        ModernUiRenderer.drawSubtlePanel(x, y, width, height, 5, bgColor, borderColor);
-    }
 
-    public static void drawToggleFrame(int x, int y, int width, int height, boolean on, UiState state) {
-        UiState actualState = state;
-        if (on && state != UiState.DISABLED) {
-            actualState = (state == UiState.PRESSED) ? UiState.PRESSED : UiState.SUCCESS;
-        }
-        drawButtonFrame(x, y, width, height, actualState);
-    }
 
     public static void drawInputFrame(int x, int y, int width, int height, boolean focused, boolean enabled) {
         UiState state = !enabled ? UiState.DISABLED : (focused ? UiState.HOVER : UiState.NORMAL);
@@ -174,13 +153,6 @@ public final class GuiTheme {
         ModernUiRenderer.drawSubtlePanel(x, y, width, height, 4, bg, border);
     }
 
-    // 安全版：永远只绘制纯色，保证输入内容不会被外部纹理遮挡
-    public static void drawInputFrameSafe(int x, int y, int width, int height, boolean focused, boolean enabled) {
-        UiState state = !enabled ? UiState.DISABLED : (focused ? UiState.HOVER : UiState.NORMAL);
-        int border = applyOpacity(getInputBorderColor(state), INPUT_OPACITY_PERCENT);
-        int bg = applyOpacity((state == UiState.DISABLED) ? STATE_DISABLED : INPUT_BG, INPUT_OPACITY_PERCENT);
-        ModernUiRenderer.drawSubtlePanel(x, y, width, height, 4, bg, border);
-    }
 
     public static void applyProfile(ThemeProfile p) {
         if (p == null) {
@@ -276,13 +248,6 @@ public final class GuiTheme {
         }
     }
 
-    public static void drawCardHighlight(int x, int y, int width, int height, boolean hovered) {
-        if (!hovered) {
-            return;
-        }
-        ModernUiRenderer.drawRoundedRect(x, y, width, height, 5, 0x293F6576);
-        ModernUiRenderer.drawRoundedRect(x, y + 4, 3, Math.max(8, height - 8), 2, ModernUiRenderer.ACCENT);
-    }
 
     public static void drawScrollbar(int x, int y, int width, int height, int thumbY, int thumbHeight) {
         if (height <= 0) return;
@@ -371,53 +336,6 @@ public final class GuiTheme {
         }
     }
 
-    private static boolean drawTextureBackground(int x, int y, int width, int height, String path, String qualityName,
-            int scale, int cropX, int cropY, int opacityPercent) {
-        if (path == null || path.trim().isEmpty()) {
-            return false;
-        }
-        ImageQuality quality = parseQuality(qualityName);
-        ResourceLocation tex = TextureManagerHelper.getResourceLocationForPath(path, quality);
-        if (tex == null && path.trim().toLowerCase().startsWith("builtin:")) {
-            String resourcePath = path.trim().substring("builtin:".length()).replace('\\', '/');
-            while (resourcePath.startsWith("/")) {
-                resourcePath = resourcePath.substring(1);
-            }
-            if (!resourcePath.isEmpty()) {
-                tex = new ResourceLocation("mythos_script", resourcePath);
-            }
-        }
-        if (tex == null) {
-            return false;
-        }
-        Minecraft.getMinecraft().getTextureManager().bindTexture(tex);
-        float alpha = clampPercent(opacityPercent) / 100.0F;
-        GlStateManager.enableBlend();
-        GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
-        GlStateManager.color(1.0F, 1.0F, 1.0F, alpha);
-
-        int safeScale = Math.max(10, Math.min(300, scale));
-        float scaleFactor = 100.0F / safeScale;
-        int[] texSize = TextureManagerHelper.getTextureSizeForPath(path, quality);
-        int texW = (texSize != null) ? texSize[0] : width;
-        int texH = (texSize != null) ? texSize[1] : height;
-
-        int sampleW = Math.max(1, Math.min(texW, (int) (width * scaleFactor)));
-        int sampleH = Math.max(1, Math.min(texH, (int) (height * scaleFactor)));
-        int u = Math.max(0, cropX);
-        int v = Math.max(0, cropY);
-        if (u + sampleW > texW) {
-            u = Math.max(0, texW - sampleW);
-        }
-        if (v + sampleH > texH) {
-            v = Math.max(0, texH - sampleH);
-        }
-
-        Gui.drawScaledCustomSizeModalRect(x, y, u, v, sampleW, sampleH, width,
-                height, texW, texH);
-        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
-        return true;
-    }
 
     /**
      * 与 drawTextureBackground 类似，但按“整组区域”进行统一采样，
@@ -528,42 +446,6 @@ public final class GuiTheme {
         return (na << 24) | (color & 0x00FFFFFF);
     }
 
-    private static void drawVerticalGradientRect(int left, int top, int right, int bottom, int topColor,
-            int bottomColor) {
-        int height = Math.max(1, bottom - top);
-        for (int i = 0; i < height; i++) {
-            float t = i / (float) (height - 1 <= 0 ? 1 : height - 1);
-            int c = lerpColor(topColor, bottomColor, t);
-            Gui.drawRect(left, top + i, right, top + i + 1, c);
-        }
-    }
 
-    private static void drawHorizontalGradientRect(int left, int top, int right, int bottom, int leftColor,
-            int rightColor) {
-        int width = Math.max(1, right - left);
-        for (int i = 0; i < width; i++) {
-            float t = i / (float) (width - 1 <= 0 ? 1 : width - 1);
-            int c = lerpColor(leftColor, rightColor, t);
-            Gui.drawRect(left + i, top, left + i + 1, bottom, c);
-        }
-    }
 
-    private static int lerpColor(int c1, int c2, float t) {
-        int a1 = (c1 >> 24) & 0xFF;
-        int r1 = (c1 >> 16) & 0xFF;
-        int g1 = (c1 >> 8) & 0xFF;
-        int b1 = c1 & 0xFF;
-
-        int a2 = (c2 >> 24) & 0xFF;
-        int r2 = (c2 >> 16) & 0xFF;
-        int g2 = (c2 >> 8) & 0xFF;
-        int b2 = c2 & 0xFF;
-
-        int a = (int) (a1 + (a2 - a1) * t);
-        int r = (int) (r1 + (r2 - r1) * t);
-        int g = (int) (g1 + (g2 - g1) * t);
-        int b = (int) (b1 + (b2 - b1) * t);
-
-        return (a & 0xFF) << 24 | (r & 0xFF) << 16 | (g & 0xFF) << 8 | (b & 0xFF);
-    }
 }

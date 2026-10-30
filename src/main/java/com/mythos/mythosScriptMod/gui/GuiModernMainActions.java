@@ -27,8 +27,14 @@ final class GuiModernMainActions {
 
         if ("stop".equals(command) || "stop_foreground".equals(command)) {
             EmbeddedNavigationHandler.INSTANCE.stop();
-            PathSequenceEventListener.instance.stopTracking();
-            GuiInventory.isLooping = false;
+            // Stop only the mounted session's foreground sequence — the shared
+            // "" runner when human is mounted, or the bot's own runner when a
+            // bot is mounted. Other bots' foreground sequences keep running.
+            String mounted = com.mythos.mythosScriptMod.mcp.NexusSessions.mountedBotUsername();
+            PathSequenceEventListener.foregroundFor(mounted == null ? "" : mounted).stopTracking();
+            if (mounted == null || mounted.isEmpty()) {
+                GuiInventory.isLooping = false;
+            }
             return true;
         }
         if ("stop_background".equals(command)) {
@@ -60,7 +66,13 @@ final class GuiModernMainActions {
         }
 
         if ("debug_settings".equals(command)) {
-            if (mouseButton == 0 || mouseButton == 1) {
+            if (mouseButton == 0) {
+                // Same left/right convention as other feature rows: left =
+                // quick-toggle the global debug master switch, right = open
+                // the per-module debug panel.
+                com.mythos.mythosScriptMod.config.ModConfig.isDebugModeEnabled =
+                        !com.mythos.mythosScriptMod.config.ModConfig.isDebugModeEnabled;
+            } else if (mouseButton == 1) {
                 GuiModernMainScreen.openSettingsTab(mc, "debug_settings");
             }
         } else if ("memory_manager".equals(command) || "terrain_scanner".equals(command)) {
@@ -94,8 +106,11 @@ final class GuiModernMainActions {
             if (sequence == null) {
                 return false;
             }
-            if (PathSequenceEventListener.isSequenceRunningInForeground(sequenceName)
-                    || PathSequenceEventListener.isSequenceRunningInBackground(sequenceName)) {
+            // 防重只挡当前 viewed 会话 —— 另一个 bot 在跑同名序列不阻止本会话启动。
+            String viewOwner = com.mythos.mythosScriptMod.mcp.NexusSessions.mountedBotUsername();
+            if (viewOwner == null) viewOwner = "";
+            if (PathSequenceEventListener.isSequenceRunningInForegroundForOwner(viewOwner, sequenceName)
+                    || PathSequenceEventListener.isSequenceRunningInBackgroundForOwner(viewOwner, sequenceName)) {
                 return true;
             }
             if (sequence.isCustom()) {

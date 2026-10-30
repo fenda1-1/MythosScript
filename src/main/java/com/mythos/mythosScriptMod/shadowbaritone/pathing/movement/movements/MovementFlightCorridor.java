@@ -73,8 +73,8 @@ public final class MovementFlightCorridor extends Movement implements IRoutePoin
     public double recalculateCost(CalculationContext context) {
         if (ctx.player() != null && hasCompletedSegment()) {
             double speed = vertical
-                    ? Math.max(0.05D, FlyHandler.verticalSpeed)
-                    : Math.max(0.05D, FlyHandler.horizontalSpeed);
+                    ? Math.max(0.05D, FlyHandler.cfg().verticalSpeed)
+                    : Math.max(0.05D, FlyHandler.cfg().horizontalSpeed);
             double completedCost = Math.max(1.0D, segmentLength / speed + 20.0D);
             override(completedCost);
             return completedCost;
@@ -85,7 +85,7 @@ public final class MovementFlightCorridor extends Movement implements IRoutePoin
     }
 
     private double calculateCost(CalculationContext context, BetterBlockPos validationStart) {
-        if (!context.getBaritone().getPlayerContext().player().capabilities.allowFlying && !FlyHandler.enabled) {
+        if (!context.getBaritone().getPlayerContext().player().capabilities.allowFlying && !FlyHandler.enabled()) {
             return COST_INF;
         }
         if (!FlightDirectPath.isSegmentLoadedAndClear(context, validationStart, dest)) {
@@ -99,7 +99,7 @@ public final class MovementFlightCorridor extends Movement implements IRoutePoin
         } else if (corridorRadius > 0.0D) {
             // Recheck the approaching volume; scanning a whole wide route every tick
             // becomes expensive at high corridor widths. New obstacles trigger a detour.
-            int lookahead = (int) Math.ceil(Math.max(FlyHandler.horizontalSpeed, FlyHandler.verticalSpeed) * 2.0D) + 2;
+            int lookahead = (int) Math.ceil(Math.max(FlyHandler.cfg().horizontalSpeed, FlyHandler.cfg().verticalSpeed) * 2.0D) + 2;
             BetterBlockPos checkEnd = new BetterBlockPos(
                     validationStart.x + Integer.signum(dest.x - validationStart.x)
                             * Math.min(lookahead, Math.abs(dest.x - validationStart.x)),
@@ -112,8 +112,8 @@ public final class MovementFlightCorridor extends Movement implements IRoutePoin
             }
         }
         double speed = vertical
-                ? Math.max(0.05D, FlyHandler.verticalSpeed)
-                : Math.max(0.05D, FlyHandler.horizontalSpeed);
+                ? Math.max(0.05D, FlyHandler.cfg().verticalSpeed)
+                : Math.max(0.05D, FlyHandler.cfg().horizontalSpeed);
         return Math.max(1.0D, segmentLength / speed + 20.0D);
     }
 
@@ -190,7 +190,7 @@ public final class MovementFlightCorridor extends Movement implements IRoutePoin
             return;
         }
         if (Math.abs(lateralError) > getCorridorRadius() + 0.25D || along < -0.5D) {
-            double lookahead = Math.max(2.0D, Math.min(8.0D, FlyHandler.horizontalSpeed * 0.75D));
+            double lookahead = Math.max(2.0D, Math.min(8.0D, FlyHandler.cfg().horizontalSpeed * 0.75D));
             double captureAlong = Math.max(0.0D, Math.min(segmentLength, Math.max(0.0D, along) + lookahead));
             Vec3d capturePoint = startCenter.add(primary.scale(captureAlong));
             Vec3d recoveryDirection = new Vec3d(capturePoint.x - ctx.player().posX, 0.0D,
@@ -204,7 +204,7 @@ public final class MovementFlightCorridor extends Movement implements IRoutePoin
         double excess = Math.max(0.0D, Math.abs(lateralError) - getCorridorRadius());
         double correction = Math.min(MAX_CORRECTION, excess / Math.max(1.0D, getCorridorRadius() * 2.0D));
         correction = Math.min(correction,
-                (excess + 0.5D) / Math.max(1.0D, FlyHandler.horizontalSpeed));
+                (excess + 0.5D) / Math.max(1.0D, FlyHandler.cfg().horizontalSpeed));
         Vec3d desired = primary.add(perpendicular.scale(-Math.signum(lateralError) * correction)).normalize();
         forceForwardDirection(state, desired);
         maintainCruiseHeight(state);
@@ -315,8 +315,8 @@ public final class MovementFlightCorridor extends Movement implements IRoutePoin
         if (vertical) {
             remaining = Math.abs(dest.y - ctx.player().posY);
             double horizontalError = Math.hypot(startCenter.x - ctx.player().posX, startCenter.z - ctx.player().posZ);
-            setSpeedCaps(corridorRadius == 0.0D ? Math.min(0.3D, horizontalError * 0.65D) : FlyHandler.horizontalSpeed,
-                    Math.min(FlyHandler.verticalSpeed, Math.max(0.05D, remaining * 0.65D)));
+            setSpeedCaps(corridorRadius == 0.0D ? Math.min(0.3D, horizontalError * 0.65D) : FlyHandler.cfg().horizontalSpeed,
+                    Math.min(FlyHandler.cfg().verticalSpeed, Math.max(0.05D, remaining * 0.65D)));
             return;
         }
         Vec3d horizontalSegment = new Vec3d(segment.x, 0.0D, segment.z);
@@ -325,22 +325,22 @@ public final class MovementFlightCorridor extends Movement implements IRoutePoin
         double progress = fromStart.dotProduct(primary);
         double lateralError = Math.abs(fromStart.dotProduct(new Vec3d(-primary.z, 0.0D, primary.x)));
         remaining = Math.max(0.0D, horizontalSegment.lengthVector() - progress);
-        double approachCap = Math.min(FlyHandler.horizontalSpeed, Math.max(0.18D, remaining * 0.65D));
+        double approachCap = Math.min(FlyHandler.cfg().horizontalSpeed, Math.max(0.18D, remaining * 0.65D));
         if (lateralError > getCorridorRadius()) {
             double recoveryCap = Math.max(0.25D,
                     Math.min(MAX_CORNER_RECOVERY_SPEED, (lateralError - getCorridorRadius()) * 0.35D + 0.25D));
-            approachCap = Math.min(FlyHandler.horizontalSpeed, recoveryCap);
+            approachCap = Math.min(FlyHandler.cfg().horizontalSpeed, recoveryCap);
         }
         if (corridorRadius == 0.0D) {
             approachCap = Math.min(approachCap, lateralError > 0.08D ? lateralError * 0.65D : 0.3D);
         }
-        setSpeedCaps(approachCap, Math.min(FlyHandler.verticalSpeed,
+        setSpeedCaps(approachCap, Math.min(FlyHandler.cfg().verticalSpeed,
                 Math.max(0.05D, Math.abs(dest.y - ctx.player().posY) * 0.65D)));
     }
 
     private void setSpeedCaps(double horizontal, double vertical) {
-        horizontalCap = Math.max(0.05D, Math.min(FlyHandler.horizontalSpeed, horizontal));
-        verticalCap = Math.max(0.05D, Math.min(FlyHandler.verticalSpeed, vertical));
+        horizontalCap = Math.max(0.05D, Math.min(FlyHandler.cfg().horizontalSpeed, horizontal));
+        verticalCap = Math.max(0.05D, Math.min(FlyHandler.cfg().verticalSpeed, vertical));
         FlyHandler.INSTANCE.setPathingSpeedCaps(horizontalCap, verticalCap);
     }
 
@@ -441,7 +441,7 @@ public final class MovementFlightCorridor extends Movement implements IRoutePoin
 
     private double getRecoveryDistanceLimit() {
         return getCorridorRadius() + MAX_RECOVERY_DISTANCE
-                + Math.min(32.0D, Math.max(0.0D, FlyHandler.horizontalSpeed * 1.5D));
+                + Math.min(32.0D, Math.max(0.0D, FlyHandler.cfg().horizontalSpeed * 1.5D));
     }
 
     private double distanceFromCorridor() {

@@ -22,6 +22,7 @@ public final class ToggleActionLibraryGroup {
             "toggle_baritone_free_look",
             "toggle_baritone_human_like",
             "toggle_baritone_flight",
+            "toggle_baritone_blink",
             "toggle_other_feature"));
 
     private ToggleActionLibraryGroup() {

@@ -45,7 +45,7 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
     };
     private final AutoEscapeWorkbenchState state = new AutoEscapeWorkbenchState(
             AutoEscapeHandler.getRulesSnapshot(), AutoEscapeHandler.getCategoriesSnapshot(),
-            AutoEscapeHandler.isMasterEnabled());
+            AutoEscapeHandler.masterEnabled());
     private final Set<String> collapsedGroups = new HashSet<>();
     private final List<RuleHit> ruleHits = new ArrayList<>();
     private final List<GroupHit> groupHits = new ArrayList<>();
@@ -402,7 +402,7 @@ public final class ModernAutoEscapeWorkbenchTab implements ModernSettingsTab {
             if (!state.categories().contains(category)) AutoEscapeHandler.deleteCategory(category);
         }
         AutoEscapeHandler.replaceCategoryOrder(state.categories());
-        if (AutoEscapeHandler.isMasterEnabled() != state.masterEnabled()) AutoEscapeHandler.setMasterEnabled(state.masterEnabled());
+        if (AutoEscapeHandler.masterEnabled() != state.masterEnabled()) AutoEscapeHandler.setMasterEnabled(state.masterEnabled());
         state.markCommitted(); status = "gui.modern.escape.u037";
     }
 

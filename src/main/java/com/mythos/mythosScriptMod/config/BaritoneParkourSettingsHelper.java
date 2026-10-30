@@ -36,17 +36,6 @@ public final class BaritoneParkourSettingsHelper {
     private BaritoneParkourSettingsHelper() {
     }
 
-    public static boolean isParkourSettingKey(String key) {
-        if (key == null) {
-            return false;
-        }
-        for (String parkourKey : PARKOUR_SETTING_KEYS) {
-            if (parkourKey.equalsIgnoreCase(key)) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     public static boolean isParkourModeEnabled() {
         Settings settings = BaritoneAPI.getSettings();
@@ -67,13 +56,7 @@ public final class BaritoneParkourSettingsHelper {
         setParkourModeEnabled(!isParkourModeEnabled());
     }
 
-    public static Set<String> getParkourSettingKeys() {
-        return new LinkedHashSet<>(PARKOUR_SETTING_KEYS);
-    }
 
-    public static String buildStatusText() {
-        return isParkourModeEnabled() ? "§aBaritone跑酷: 开" : "§cBaritone跑酷: 关";
-    }
 
     public static String normalizeKey(String key) {
         return key == null ? "" : key.trim().toLowerCase(Locale.ROOT);

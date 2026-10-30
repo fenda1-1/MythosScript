@@ -8,7 +8,6 @@ import com.mythos.mythosScriptMod.PerformanceMonitor;
 import com.mythos.mythosScriptMod.otherfeatures.handler.movement.MovementFeatureManager;
 import com.mythos.mythosScriptMod.path.InventoryItemFilterExpressionEngine;
 import com.mythos.mythosScriptMod.system.ProfileManager;
-import com.mythos.mythosScriptMod.utils.ReflectionCompat;
 import com.mythos.mythosScriptMod.mythosScriptMod;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
@@ -40,7 +39,6 @@ import net.minecraft.item.ItemTool;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.network.play.client.CPacketEntityAction;
 import net.minecraft.network.play.client.CPacketPlayer;
-import net.minecraft.util.FoodStats;
 import net.minecraft.util.NonNullList;
 import net.minecraft.util.math.MathHelper;
 import net.minecraftforge.client.event.GuiScreenEvent;
@@ -59,8 +57,57 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ItemFeatureManager {
+
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        // 每个功能的数值和状态 HUD 开关是配置，按会话分开存；FeatureState 本身是共享的注册表项。
+        private final Map<String, Float> FEATURE_VALUES = new java.util.concurrent.ConcurrentHashMap<>();
+        private final Map<String, Boolean> FEATURE_STATUS_HUD = new java.util.concurrent.ConcurrentHashMap<>();
+        private int chestStealDelayTicks = DEFAULT_CHEST_STEAL_DELAY_TICKS;
+        private int autoEquipIntervalTicks = DEFAULT_AUTO_EQUIP_INTERVAL_TICKS;
+        private int dropAllDelayTicks = DEFAULT_DROP_ALL_DELAY_TICKS;
+        private String dropAllKeywordsText = "";
+        private final List<String> dropAllItemFilterExpressions = new ArrayList<>();
+        private final Comparator<ItemStack> INVENTORY_SORT_COMPARATOR = Comparator
+                .comparingInt(ItemFeatureManager::getSortCategory)
+                .thenComparing(stack -> safe(stack.getDisplayName()).toLowerCase(Locale.ROOT))
+                .thenComparing(stack -> {
+                    Item item = stack.getItem();
+                    return item == null || Item.REGISTRY.getNameForObject(item) == null
+                            ? ""
+                            : Item.REGISTRY.getNameForObject(item).toString();
+                })
+                .thenComparingInt(ItemStack::getMetadata);
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) ItemFeatureManager::loadConfig);
+            return config;
+        }
+    }
+
 
     public static final ItemFeatureManager INSTANCE = new ItemFeatureManager();
 
@@ -78,19 +125,28 @@ public class ItemFeatureManager {
     private static final double CRITICAL_PACKET_EPSILON_Y = 1.1E-5D;
     private static final float CRITICAL_MIN_ATTACK_STRENGTH = 0.9F;
 
-    private static int chestStealDelayTicks = DEFAULT_CHEST_STEAL_DELAY_TICKS;
-    private static int autoEquipIntervalTicks = DEFAULT_AUTO_EQUIP_INTERVAL_TICKS;
-    private static int dropAllDelayTicks = DEFAULT_DROP_ALL_DELAY_TICKS;
-    private static String dropAllKeywordsText = "";
-    private static final List<String> dropAllItemFilterExpressions = new ArrayList<>();
 
-    private int inventorySortCooldownTicks = 0;
-    private int chestStealCooldownTicks = 0;
-    private int autoEquipCooldownTicks = 0;
-    private int dropAllCooldownTicks = 0;
-    private int criticalSprintRestoreTicks = 0;
-    private boolean forceNoHungerReflectionFailed = false;
-    private boolean pendingCriticalSprintRestore = false;
+    private static final ConcurrentHashMap<String, RuntimeState> STATES = new ConcurrentHashMap<>();
+
+    private static RuntimeState rt() {
+        return STATES.computeIfAbsent(
+                com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner(),
+                k -> new RuntimeState());
+    }
+
+    private static String featureOwner() {
+        return com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner();
+    }
+
+    private static final class RuntimeState {
+        private int inventorySortCooldownTicks = 0;
+        private int chestStealCooldownTicks = 0;
+        private int autoEquipCooldownTicks = 0;
+        private int dropAllCooldownTicks = 0;
+        private int criticalSprintRestoreTicks = 0;
+        private boolean moveHungerSprintSuppressed = false;
+        private boolean pendingCriticalSprintRestore = false;
+    }
 
     static {
         register(new FeatureState("inventory_sort", "自动整理",
@@ -105,8 +161,8 @@ public class ItemFeatureManager {
         register(new FeatureState("always_critical", "刀刀暴击",
                 "攻击实体前补发短暂伪下落数据，尽量让近战命中按原版暴击条件结算。",
                 null, 0.0F, 0.0F, 0.0F, true));
-        register(new FeatureState("force_no_hunger", "强制不饥饿",
-                "持续锁定客户端饥饿值、饱和度和消耗值，尽量让角色保持满饱食状态。",
+        register(new FeatureState("force_no_hunger", "去除移动饥饿值消耗",
+                "不向服务端上报疾跑状态，并在起跳上升阶段上报着地，避免服务端结算疾跑与跳跃的饥饿消耗。攻击、受伤、回血等消耗仍由服务端正常结算。",
                 null, 0.0F, 0.0F, 0.0F, true));
         register(new FeatureState("drop_all", "丢弃所有",
                 "按物品过滤表达式自动丢弃指定物品，支持多条表达式。",
@@ -130,9 +186,7 @@ public class ItemFeatureManager {
         public final float maxValue;
         public final boolean behaviorImplemented;
 
-        private boolean enabled;
-        private float value;
-        private boolean statusHudEnabled;
+        private final ConcurrentHashMap<String, Boolean> enabledByOwner = new ConcurrentHashMap<>();
 
         private FeatureState(String id, String name, String description, String valueLabel,
                 float defaultValue, float minValue, float maxValue, boolean behaviorImplemented) {
@@ -144,9 +198,6 @@ public class ItemFeatureManager {
             this.minValue = minValue;
             this.maxValue = maxValue;
             this.behaviorImplemented = behaviorImplemented;
-            this.enabled = false;
-            this.value = defaultValue;
-            this.statusHudEnabled = true;
         }
 
         public boolean supportsValue() {
@@ -154,37 +205,45 @@ public class ItemFeatureManager {
         }
 
         public boolean isEnabled() {
-            return enabled;
+            return enabledByOwner.getOrDefault(featureOwner(), Boolean.FALSE);
         }
 
         public float getValue() {
-            return value;
+            return cfg().FEATURE_VALUES.getOrDefault(id, defaultValue);
         }
 
         public boolean isStatusHudEnabled() {
-            return statusHudEnabled;
+            return cfg().FEATURE_STATUS_HUD.getOrDefault(id, Boolean.TRUE);
         }
 
         private void setEnabledInternal(boolean enabled) {
-            this.enabled = enabled;
+            enabledByOwner.put(featureOwner(), enabled);
+        }
+
+        private void setEnabledForOwner(String owner, boolean enabled) {
+            enabledByOwner.put(owner == null ? "" : owner, enabled);
+        }
+
+        private java.util.Map<String, Boolean> snapshotEnabledByOwner() {
+            return new java.util.LinkedHashMap<>(enabledByOwner);
         }
 
         private void setValueInternal(float value) {
             if (!supportsValue()) {
-                this.value = defaultValue;
+                cfg().FEATURE_VALUES.put(id, defaultValue);
                 return;
             }
-            this.value = MathHelper.clamp(value, minValue, maxValue);
+            cfg().FEATURE_VALUES.put(id, MathHelper.clamp(value, minValue, maxValue));
         }
 
         private void setStatusHudEnabledInternal(boolean statusHudEnabled) {
-            this.statusHudEnabled = statusHudEnabled;
+            cfg().FEATURE_STATUS_HUD.put(id, statusHudEnabled);
         }
 
         private void resetToDefaultInternal() {
-            this.enabled = false;
-            this.value = defaultValue;
-            this.statusHudEnabled = true;
+            enabledByOwner.put(featureOwner(), false);
+            cfg().FEATURE_VALUES.put(id, defaultValue);
+            cfg().FEATURE_STATUS_HUD.put(id, true);
         }
     }
 
@@ -201,7 +260,7 @@ public class ItemFeatureManager {
     }
 
     private static File getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve(CONFIG_FILE_NAME).toFile();
+        return ProfileManager.currentConfigFile(CONFIG_FILE_NAME).toFile();
     }
 
     public static List<FeatureState> getFeatures() {
@@ -244,43 +303,36 @@ public class ItemFeatureManager {
     }
 
     public static int getChestStealDelayTicks() {
-        return chestStealDelayTicks;
+        return cfg().chestStealDelayTicks;
     }
 
     public static void setChestStealDelayTicks(int ticks) {
-        chestStealDelayTicks = MathHelper.clamp(ticks, 0, 20);
+        cfg().chestStealDelayTicks = MathHelper.clamp(ticks, 0, 20);
         saveConfig();
     }
 
     public static int getAutoEquipIntervalTicks() {
-        return autoEquipIntervalTicks;
+        return cfg().autoEquipIntervalTicks;
     }
 
     public static void setAutoEquipIntervalTicks(int ticks) {
-        autoEquipIntervalTicks = MathHelper.clamp(ticks, 1, 40);
+        cfg().autoEquipIntervalTicks = MathHelper.clamp(ticks, 1, 40);
         saveConfig();
     }
 
     public static int getDropAllDelayTicks() {
-        return dropAllDelayTicks;
+        return cfg().dropAllDelayTicks;
     }
 
     public static void setDropAllDelayTicks(int ticks) {
-        dropAllDelayTicks = MathHelper.clamp(ticks, 0, 20);
+        cfg().dropAllDelayTicks = MathHelper.clamp(ticks, 0, 20);
         saveConfig();
     }
 
-    public static String getDropAllKeywordsText() {
-        return dropAllKeywordsText;
-    }
 
-    public static void setDropAllKeywordsText(String text) {
-        dropAllKeywordsText = text == null ? "" : text.trim();
-        saveConfig();
-    }
 
     public static List<String> getDropAllItemFilterExpressions() {
-        List<String> expressions = normalizeDropAllExpressions(dropAllItemFilterExpressions);
+        List<String> expressions = normalizeDropAllExpressions(cfg().dropAllItemFilterExpressions);
         if (!expressions.isEmpty()) {
             return expressions;
         }
@@ -288,16 +340,12 @@ public class ItemFeatureManager {
     }
 
     public static void setDropAllItemFilterExpressions(List<String> expressions) {
-        dropAllItemFilterExpressions.clear();
-        dropAllItemFilterExpressions.addAll(normalizeDropAllExpressions(expressions));
-        dropAllKeywordsText = "";
+        cfg().dropAllItemFilterExpressions.clear();
+        cfg().dropAllItemFilterExpressions.addAll(normalizeDropAllExpressions(expressions));
+        cfg().dropAllKeywordsText = "";
         saveConfig();
     }
 
-    public static String getDropAllExpressionSummary() {
-        List<String> expressions = getDropAllItemFilterExpressions();
-        return expressions.isEmpty() ? "" : InventoryItemFilterExpressionEngine.summarizeExpressions(expressions);
-    }
 
     public static void setFeatureStatusHudEnabled(String featureId, boolean enabled) {
         FeatureState state = getFeature(featureId);
@@ -316,13 +364,13 @@ public class ItemFeatureManager {
         state.resetToDefaultInternal();
         String normalizedId = normalizeId(featureId);
         if ("chest_steal".equals(normalizedId)) {
-            chestStealDelayTicks = DEFAULT_CHEST_STEAL_DELAY_TICKS;
+            cfg().chestStealDelayTicks = DEFAULT_CHEST_STEAL_DELAY_TICKS;
         } else if ("auto_equip".equals(normalizedId)) {
-            autoEquipIntervalTicks = DEFAULT_AUTO_EQUIP_INTERVAL_TICKS;
+            cfg().autoEquipIntervalTicks = DEFAULT_AUTO_EQUIP_INTERVAL_TICKS;
         } else if ("drop_all".equals(normalizedId)) {
-            dropAllDelayTicks = DEFAULT_DROP_ALL_DELAY_TICKS;
-            dropAllKeywordsText = "";
-            dropAllItemFilterExpressions.clear();
+            cfg().dropAllDelayTicks = DEFAULT_DROP_ALL_DELAY_TICKS;
+            cfg().dropAllKeywordsText = "";
+            cfg().dropAllItemFilterExpressions.clear();
         }
         saveConfig();
     }
@@ -331,11 +379,11 @@ public class ItemFeatureManager {
         for (FeatureState state : FEATURES.values()) {
             state.resetToDefaultInternal();
         }
-        chestStealDelayTicks = DEFAULT_CHEST_STEAL_DELAY_TICKS;
-        autoEquipIntervalTicks = DEFAULT_AUTO_EQUIP_INTERVAL_TICKS;
-        dropAllDelayTicks = DEFAULT_DROP_ALL_DELAY_TICKS;
-        dropAllKeywordsText = "";
-        dropAllItemFilterExpressions.clear();
+        cfg().chestStealDelayTicks = DEFAULT_CHEST_STEAL_DELAY_TICKS;
+        cfg().autoEquipIntervalTicks = DEFAULT_AUTO_EQUIP_INTERVAL_TICKS;
+        cfg().dropAllDelayTicks = DEFAULT_DROP_ALL_DELAY_TICKS;
+        cfg().dropAllKeywordsText = "";
+        cfg().dropAllItemFilterExpressions.clear();
 
         try {
             File configFile = getConfigFile();
@@ -361,32 +409,63 @@ public class ItemFeatureManager {
                 }
                 JsonObject item = featuresObject.getAsJsonObject(entry.getKey());
                 FeatureState state = entry.getValue();
-                if (item.has("enabled")) {
-                    state.setEnabledInternal(item.get("enabled").getAsBoolean());
-                }
                 if (item.has("statusHudEnabled")) {
                     state.setStatusHudEnabledInternal(item.get("statusHudEnabled").getAsBoolean());
                 }
             }
+
+            File runtimeFile = getRuntimeConfigFile();
+            if (runtimeFile.exists()) {
+                try (FileReader rr = new FileReader(runtimeFile)) {
+                    JsonObject rroot = new JsonParser().parse(rr).getAsJsonObject();
+                    if (rroot.has("features") && rroot.get("features").isJsonObject()) {
+                        JsonObject rfeatures = rroot.getAsJsonObject("features");
+                        for (Map.Entry<String, FeatureState> entry : FEATURES.entrySet()) {
+                            if (!rfeatures.has(entry.getKey()) || !rfeatures.get(entry.getKey()).isJsonObject()) {
+                                continue;
+                            }
+                            JsonObject item = rfeatures.getAsJsonObject(entry.getKey());
+                            if (item.has("enabledByOwner") && item.get("enabledByOwner").isJsonObject()) {
+                                JsonObject owners = item.getAsJsonObject("enabledByOwner");
+                                for (Map.Entry<String, com.google.gson.JsonElement> oe : owners.entrySet()) {
+                                    if (oe.getValue().isJsonPrimitive()) {
+                                        entry.getValue().setEnabledForOwner(oe.getKey(), oe.getValue().getAsBoolean());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                for (Map.Entry<String, FeatureState> entry : FEATURES.entrySet()) {
+                    if (!featuresObject.has(entry.getKey()) || !featuresObject.get(entry.getKey()).isJsonObject()) {
+                        continue;
+                    }
+                    JsonObject item = featuresObject.getAsJsonObject(entry.getKey());
+                    if (item.has("enabled")) {
+                        entry.getValue().setEnabledForOwner(featureOwner(), item.get("enabled").getAsBoolean());
+                    }
+                }
+            }
             if (root.has("chestStealDelayTicks")) {
-                chestStealDelayTicks = MathHelper.clamp(root.get("chestStealDelayTicks").getAsInt(), 0, 20);
+                cfg().chestStealDelayTicks = MathHelper.clamp(root.get("chestStealDelayTicks").getAsInt(), 0, 20);
             }
             if (root.has("autoEquipIntervalTicks")) {
-                autoEquipIntervalTicks = MathHelper.clamp(root.get("autoEquipIntervalTicks").getAsInt(), 1, 40);
+                cfg().autoEquipIntervalTicks = MathHelper.clamp(root.get("autoEquipIntervalTicks").getAsInt(), 1, 40);
             }
             if (root.has("dropAllDelayTicks")) {
-                dropAllDelayTicks = MathHelper.clamp(root.get("dropAllDelayTicks").getAsInt(), 0, 20);
+                cfg().dropAllDelayTicks = MathHelper.clamp(root.get("dropAllDelayTicks").getAsInt(), 0, 20);
             }
             if (root.has("dropAllKeywordsText")) {
-                dropAllKeywordsText = safe(root.get("dropAllKeywordsText").getAsString());
+                cfg().dropAllKeywordsText = safe(root.get("dropAllKeywordsText").getAsString());
             }
             if (root.has("dropAllItemFilterExpressions") && root.get("dropAllItemFilterExpressions").isJsonArray()) {
-                dropAllItemFilterExpressions.clear();
+                cfg().dropAllItemFilterExpressions.clear();
                 for (JsonElement element : root.getAsJsonArray("dropAllItemFilterExpressions")) {
                     if (element != null && element.isJsonPrimitive()) {
                         String expression = safe(element.getAsString());
                         if (!expression.isEmpty()) {
-                            dropAllItemFilterExpressions.add(expression);
+                            cfg().dropAllItemFilterExpressions.add(expression);
                         }
                     }
                 }
@@ -407,17 +486,16 @@ public class ItemFeatureManager {
             JsonObject featuresObject = new JsonObject();
             for (FeatureState state : FEATURES.values()) {
                 JsonObject item = new JsonObject();
-                item.addProperty("enabled", state.isEnabled());
                 item.addProperty("statusHudEnabled", state.isStatusHudEnabled());
                 featuresObject.add(state.id, item);
             }
             root.add("features", featuresObject);
-            root.addProperty("chestStealDelayTicks", chestStealDelayTicks);
-            root.addProperty("autoEquipIntervalTicks", autoEquipIntervalTicks);
-            root.addProperty("dropAllDelayTicks", dropAllDelayTicks);
-            root.addProperty("dropAllKeywordsText", dropAllKeywordsText);
+            root.addProperty("chestStealDelayTicks", cfg().chestStealDelayTicks);
+            root.addProperty("autoEquipIntervalTicks", cfg().autoEquipIntervalTicks);
+            root.addProperty("dropAllDelayTicks", cfg().dropAllDelayTicks);
+            root.addProperty("dropAllKeywordsText", cfg().dropAllKeywordsText);
             JsonArray dropAllExpressionArray = new JsonArray();
-            for (String expression : normalizeDropAllExpressions(dropAllItemFilterExpressions)) {
+            for (String expression : normalizeDropAllExpressions(cfg().dropAllItemFilterExpressions)) {
                 dropAllExpressionArray.add(expression);
             }
             root.add("dropAllItemFilterExpressions", dropAllExpressionArray);
@@ -425,9 +503,33 @@ public class ItemFeatureManager {
             try (FileWriter writer = new FileWriter(configFile)) {
                 writer.write(root.toString());
             }
+
+            File runtimeFile = getRuntimeConfigFile();
+            if (!runtimeFile.getParentFile().exists()) {
+                runtimeFile.getParentFile().mkdirs();
+            }
+            JsonObject rroot = new JsonObject();
+            JsonObject rfeatures = new JsonObject();
+            for (FeatureState state : FEATURES.values()) {
+                JsonObject owners = new JsonObject();
+                for (java.util.Map.Entry<String, Boolean> e : state.snapshotEnabledByOwner().entrySet()) {
+                    owners.addProperty(e.getKey() == null ? "" : e.getKey(), e.getValue());
+                }
+                JsonObject item = new JsonObject();
+                item.add("enabledByOwner", owners);
+                rfeatures.add(state.id, item);
+            }
+            rroot.add("features", rfeatures);
+            try (FileWriter rw = new FileWriter(runtimeFile)) {
+                rw.write(rroot.toString());
+            }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("保存物品功能配置失败", e);
         }
+    }
+
+    private static File getRuntimeConfigFile() {
+        return ProfileManager.getCurrentRuntimeProfileDir().resolve(CONFIG_FILE_NAME).toFile();
     }
 
     public void onClientDisconnect() {
@@ -435,12 +537,14 @@ public class ItemFeatureManager {
     }
 
     private void resetRuntimeState() {
-        this.inventorySortCooldownTicks = 0;
-        this.chestStealCooldownTicks = 0;
-        this.autoEquipCooldownTicks = 0;
-        this.dropAllCooldownTicks = 0;
-        this.criticalSprintRestoreTicks = 0;
-        this.pendingCriticalSprintRestore = false;
+        RuntimeState rt = rt();
+        rt.inventorySortCooldownTicks = 0;
+        rt.chestStealCooldownTicks = 0;
+        rt.autoEquipCooldownTicks = 0;
+        rt.dropAllCooldownTicks = 0;
+        rt.criticalSprintRestoreTicks = 0;
+        rt.pendingCriticalSprintRestore = false;
+        rt.moveHungerSprintSuppressed = false;
     }
 
     @SubscribeEvent
@@ -458,7 +562,7 @@ public class ItemFeatureManager {
 
         tickCooldowns();
         handlePendingCriticalSprintRestore(player);
-        handleForceNoHunger(player);
+        handleMoveHungerSprintSync(player);
         if (PerformanceMonitor.isFeatureEnabled("auto_equip")) {
             PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("auto_equip");
             try {
@@ -473,53 +577,46 @@ public class ItemFeatureManager {
     }
 
     private void tickCooldowns() {
-        if (this.inventorySortCooldownTicks > 0) {
-            this.inventorySortCooldownTicks--;
+        RuntimeState rt = rt();
+        if (rt.inventorySortCooldownTicks > 0) {
+            rt.inventorySortCooldownTicks--;
         }
-        if (this.chestStealCooldownTicks > 0) {
-            this.chestStealCooldownTicks--;
+        if (rt.chestStealCooldownTicks > 0) {
+            rt.chestStealCooldownTicks--;
         }
-        if (this.autoEquipCooldownTicks > 0) {
-            this.autoEquipCooldownTicks--;
+        if (rt.autoEquipCooldownTicks > 0) {
+            rt.autoEquipCooldownTicks--;
         }
-        if (this.dropAllCooldownTicks > 0) {
-            this.dropAllCooldownTicks--;
+        if (rt.dropAllCooldownTicks > 0) {
+            rt.dropAllCooldownTicks--;
         }
-        if (this.criticalSprintRestoreTicks > 0) {
-            this.criticalSprintRestoreTicks--;
+        if (rt.criticalSprintRestoreTicks > 0) {
+            rt.criticalSprintRestoreTicks--;
         }
     }
 
-    private void handleForceNoHunger(EntityPlayerSP player) {
-        if (!isEnabled("force_no_hunger") || player == null) {
+    /**
+     * 开关切换时同步服务端疾跑状态：开启时补发一次 STOP_SPRINTING（之后的 START_SPRINTING
+     * 由 MixinNetworkManager 拦截），关闭时若客户端仍在疾跑则补发 START_SPRINTING。
+     */
+    private void handleMoveHungerSprintSync(EntityPlayerSP player) {
+        boolean enabled = isEnabled("force_no_hunger");
+        RuntimeState rt = rt();
+        if (enabled == rt.moveHungerSprintSuppressed || player == null || player.connection == null) {
             return;
         }
-
-        FoodStats foodStats = player.getFoodStats();
-        if (foodStats == null) {
-            return;
-        }
-
-        foodStats.setFoodLevel(20);
-        foodStats.setFoodSaturationLevel(20.0F);
-
-        if (this.forceNoHungerReflectionFailed) {
-            return;
-        }
-
-        try {
-            ReflectionCompat.setPrivateValue(FoodStats.class, foodStats, 0.0F,
-                    "foodExhaustionLevel", "field_75126_c");
-            ReflectionCompat.setPrivateValue(FoodStats.class, foodStats, 0,
-                    "foodTimer", "field_75123_d");
-        } catch (RuntimeException e) {
-            this.forceNoHungerReflectionFailed = true;
-            mythosScriptMod.LOGGER.warn("强制不饥饿无法重置 FoodStats 私有字段，将仅锁定可公开修改的饥饿值。", e);
+        rt.moveHungerSprintSuppressed = enabled;
+        if (enabled) {
+            player.connection.sendPacket(
+                    new CPacketEntityAction(player, CPacketEntityAction.Action.STOP_SPRINTING));
+        } else if (player.isSprinting()) {
+            player.connection.sendPacket(
+                    new CPacketEntityAction(player, CPacketEntityAction.Action.START_SPRINTING));
         }
     }
 
     private void handleAutoEquip(Minecraft mc, EntityPlayerSP player) {
-        if (!isEnabled("auto_equip") || this.autoEquipCooldownTicks > 0 || mc.playerController == null) {
+        if (!isEnabled("auto_equip") || rt().autoEquipCooldownTicks > 0 || mc.playerController == null) {
             return;
         }
         if (mc.currentScreen instanceof GuiContainer && !(mc.currentScreen instanceof GuiInventory)) {
@@ -570,13 +667,13 @@ public class ItemFeatureManager {
             int armorContainerSlot = 8 - armorType;
             mc.playerController.windowClick(0, armorContainerSlot, 0, ClickType.QUICK_MOVE, player);
             mc.playerController.windowClick(0, sourceContainerSlot, 0, ClickType.QUICK_MOVE, player);
-            this.autoEquipCooldownTicks = autoEquipIntervalTicks;
+            rt().autoEquipCooldownTicks = cfg().autoEquipIntervalTicks;
             return;
         }
     }
 
     private void handleChestSteal(Minecraft mc, EntityPlayerSP player) {
-        if (!isEnabled("chest_steal") || this.chestStealCooldownTicks > 0 || mc.playerController == null) {
+        if (!isEnabled("chest_steal") || rt().chestStealCooldownTicks > 0 || mc.playerController == null) {
             return;
         }
         if (!(mc.currentScreen instanceof GuiChest) || !(player.openContainer instanceof ContainerChest)) {
@@ -591,13 +688,13 @@ public class ItemFeatureManager {
                 continue;
             }
             mc.playerController.windowClick(chest.windowId, slot, 0, ClickType.QUICK_MOVE, player);
-            this.chestStealCooldownTicks = chestStealDelayTicks;
+            rt().chestStealCooldownTicks = cfg().chestStealDelayTicks;
             return;
         }
     }
 
     private void handleInventorySort(Minecraft mc, EntityPlayerSP player) {
-        if (!isEnabled("inventory_sort") || this.inventorySortCooldownTicks > 0 || mc.playerController == null) {
+        if (!isEnabled("inventory_sort") || rt().inventorySortCooldownTicks > 0 || mc.playerController == null) {
             return;
         }
         if (!(mc.currentScreen instanceof GuiInventory) || player.openContainer != player.inventoryContainer) {
@@ -611,7 +708,7 @@ public class ItemFeatureManager {
                 sorted.add(stack.copy());
             }
         }
-        sorted.sort(INVENTORY_SORT_COMPARATOR);
+        sorted.sort(cfg().INVENTORY_SORT_COMPARATOR);
         while (sorted.size() < 27) {
             sorted.add(ItemStack.EMPTY);
         }
@@ -628,7 +725,7 @@ public class ItemFeatureManager {
                 int emptySlot = findEmptyInventorySlot(player, targetInvSlot + 1, 35);
                 if (emptySlot >= 0) {
                     moveInventorySlot(player, targetInvSlot, emptySlot);
-                    this.inventorySortCooldownTicks = 4;
+                    rt().inventorySortCooldownTicks = 4;
                 }
                 return;
             }
@@ -636,16 +733,16 @@ public class ItemFeatureManager {
             int sourceInvSlot = findMatchingInventorySlot(player, desired, targetInvSlot + 1, 35);
             if (sourceInvSlot >= 0) {
                 moveInventorySlot(player, sourceInvSlot, targetInvSlot);
-                this.inventorySortCooldownTicks = 4;
+                rt().inventorySortCooldownTicks = 4;
             }
             return;
         }
 
-        this.inventorySortCooldownTicks = 10;
+        rt().inventorySortCooldownTicks = 10;
     }
 
     private void handleDropAll(Minecraft mc, EntityPlayerSP player) {
-        if (!isEnabled("drop_all") || this.dropAllCooldownTicks > 0 || mc.playerController == null) {
+        if (!isEnabled("drop_all") || rt().dropAllCooldownTicks > 0 || mc.playerController == null) {
             return;
         }
         if (player.openContainer != player.inventoryContainer) {
@@ -668,7 +765,7 @@ public class ItemFeatureManager {
             }
 
             mc.playerController.windowClick(0, toPlayerContainerSlot(actualInvSlot), 1, ClickType.THROW, player);
-            this.dropAllCooldownTicks = dropAllDelayTicks;
+            rt().dropAllCooldownTicks = cfg().dropAllDelayTicks;
             return;
         }
     }
@@ -862,8 +959,8 @@ public class ItemFeatureManager {
             player.connection.sendPacket(
                     new CPacketEntityAction(player, CPacketEntityAction.Action.STOP_SPRINTING));
             player.setSprinting(false);
-            this.pendingCriticalSprintRestore = true;
-            this.criticalSprintRestoreTicks = 1;
+            rt().pendingCriticalSprintRestore = true;
+            rt().criticalSprintRestoreTicks = 1;
         }
 
         sendCriticalPackets(player);
@@ -902,13 +999,14 @@ public class ItemFeatureManager {
     }
 
     private void handlePendingCriticalSprintRestore(EntityPlayerSP player) {
-        if (!this.pendingCriticalSprintRestore || this.criticalSprintRestoreTicks > 0
+        RuntimeState rt = rt();
+        if (!rt.pendingCriticalSprintRestore || rt.criticalSprintRestoreTicks > 0
                 || player == null || player.connection == null) {
             return;
         }
         player.connection.sendPacket(new CPacketEntityAction(player, CPacketEntityAction.Action.START_SPRINTING));
         player.setSprinting(true);
-        this.pendingCriticalSprintRestore = false;
+        rt.pendingCriticalSprintRestore = false;
     }
 
     private static boolean sameStackIdentity(ItemStack a, ItemStack b) {
@@ -925,10 +1023,10 @@ public class ItemFeatureManager {
 
     private List<String> getDropAllKeywords() {
         List<String> keywords = new ArrayList<>();
-        if (dropAllKeywordsText == null || dropAllKeywordsText.trim().isEmpty()) {
+        if (cfg().dropAllKeywordsText == null || cfg().dropAllKeywordsText.trim().isEmpty()) {
             return keywords;
         }
-        String normalized = dropAllKeywordsText.replace('，', ',').replace('\n', ',').replace(';', ',');
+        String normalized = cfg().dropAllKeywordsText.replace('，', ',').replace('\n', ',').replace(';', ',');
         for (String part : normalized.split(",")) {
             String keyword = safe(part);
             if (!keyword.isEmpty()) {
@@ -1028,7 +1126,7 @@ public class ItemFeatureManager {
     private String getRuntimeHudLine() {
         List<String> parts = new ArrayList<>();
         if (isEnabled("chest_steal") && shouldDisplayFeatureStatusHud("chest_steal")) {
-            parts.add("§e箱窃:" + chestStealDelayTicks + "t");
+            parts.add("§e箱窃:" + cfg().chestStealDelayTicks + "t");
         }
         if (isEnabled("drop_all") && shouldDisplayFeatureStatusHud("drop_all")) {
             parts.add("§c丢弃式:" + getDropAllItemFilterExpressions().size());
@@ -1058,15 +1156,15 @@ public class ItemFeatureManager {
 
         switch (featureId) {
         case "auto_equip":
-            return isEnabled(featureId) ? "自动装备扫描间隔: " + autoEquipIntervalTicks + " tick" : "未启用";
+            return isEnabled(featureId) ? "自动装备扫描间隔: " + cfg().autoEquipIntervalTicks + " tick" : "未启用";
         case "always_critical":
             return isEnabled(featureId) ? "攻击前补发伪下落数据，尽量触发近战原版暴击" : "未启用";
         case "force_no_hunger":
-            return isEnabled(featureId) ? "持续锁定客户端饥饿值与饱和度" : "未启用";
+            return isEnabled(featureId) ? "已屏蔽疾跑与跳跃的服务端饥饿消耗" : "未启用";
         case "inventory_sort":
             return isEnabled(featureId) ? "打开背包界面时自动整理主背包" : "未启用";
         case "chest_steal":
-            return isEnabled(featureId) ? "箱子搬运间隔: " + chestStealDelayTicks + " tick" : "未启用";
+            return isEnabled(featureId) ? "箱子搬运间隔: " + cfg().chestStealDelayTicks + " tick" : "未启用";
         case "drop_all":
             if (!isEnabled(featureId)) {
                 return "未启用";
@@ -1082,16 +1180,6 @@ public class ItemFeatureManager {
         }
     }
 
-    private static final Comparator<ItemStack> INVENTORY_SORT_COMPARATOR = Comparator
-            .comparingInt(ItemFeatureManager::getSortCategory)
-            .thenComparing(stack -> safe(stack.getDisplayName()).toLowerCase(Locale.ROOT))
-            .thenComparing(stack -> {
-                Item item = stack.getItem();
-                return item == null || Item.REGISTRY.getNameForObject(item) == null
-                        ? ""
-                        : Item.REGISTRY.getNameForObject(item).toString();
-            })
-            .thenComparingInt(ItemStack::getMetadata);
 
     private static int getSortCategory(ItemStack stack) {
         if (stack == null || stack.isEmpty() || stack.getItem() == null) {

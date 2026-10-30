@@ -600,12 +600,6 @@ public final class PacketFieldRuleManager {
         return LAST_CAPTURED_FIELDS.get(normalizeLookupKey(key));
     }
 
-    public static List<String> getLatestCapturedFieldKeysSnapshot() {
-        initialize();
-        List<String> keys = new ArrayList<>(LAST_CAPTURED_FIELDS.keySet());
-        Collections.sort(keys);
-        return keys;
-    }
 
     private static void writeValueToScope(String scope, String variableName, Object value) {
         String normalizedScope = normalizeScope(scope);

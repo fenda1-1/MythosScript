@@ -39,12 +39,6 @@ public final class RulesModernRoutes {
                 && isValidFeatureId(command.substring(OTHER_PREFIX.length()));
     }
 
-    public static boolean isKnownCommand(String command) {
-        if (command == null) return false;
-        for (String known : COMMANDS) if (known.equals(command)) return true;
-        for (String known : COMPATIBILITY_COMMANDS) if (known.equals(command)) return true;
-        return isDynamicCommand(command);
-    }
 
     public static String featureId(String command) {
         return isDynamicCommand(command) ? normalize(command.substring(OTHER_PREFIX.length())) : "";

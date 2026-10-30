@@ -9,7 +9,7 @@ import java.util.Locale;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.mythos.mythosScriptMod.utils.JsonCopy;
 import com.mythos.mythosScriptMod.utils.PacketCaptureHandler;
 
 /**
@@ -20,10 +20,15 @@ import com.mythos.mythosScriptMod.utils.PacketCaptureHandler;
 public final class RecordingPacketSupport {
     public static final String PACKETS_KEY = "_recordedPackets";
     public static final String INPUT_TIMESTAMP_KEY = "_recordingInputTimestamp";
+    public static final String COUNT_KEY = "_recordingPacketCount";
+    /** Legacy keys retained only so older in-memory objects read cleanly. */
+    @Deprecated
     public static final String WINDOW_SECONDS_KEY = "_recordingPacketWindowSeconds";
-    /** Legacy count-based key retained so older recordings can still be read. */
+    @Deprecated
     public static final String RANGE_KEY = "_recordingPacketRange";
-    public static final int DEFAULT_WINDOW_SECONDS = 2;
+    /** Packets captured at or after the input timestamp to attach to each action. */
+    public static final int DEFAULT_PACKET_COUNT = 5;
+    public static final int MAX_PACKET_COUNT = 50;
     public static final String ORIGINAL_TYPE_KEY = "_recordingOriginalType";
     public static final String ORIGINAL_PARAMS_KEY = "_recordingOriginalParams";
 
@@ -44,45 +49,24 @@ public final class RecordingPacketSupport {
         }
     }
 
-    /** Returns packets whose capture interval overlaps the time window around an input event. */
-    public static List<PacketEntry> snapshotAround(long inputTimestamp, int windowSeconds, long minimumTimestamp) {
-        return snapshotBetween(inputTimestamp - clampWindowSeconds(windowSeconds) * 1000L,
-                inputTimestamp + clampWindowSeconds(windowSeconds) * 1000L, minimumTimestamp);
-    }
-
-    /** Reads the original count-based format used by recordings created before the time-window setting. */
-    public static List<PacketEntry> snapshotAroundCount(long inputTimestamp, int range, long minimumTimestamp) {
-        int count = clampRange(range);
-        List<PacketEntry> all = snapshotBetween(Long.MIN_VALUE, Long.MAX_VALUE, minimumTimestamp);
-        if (all.isEmpty()) {
-            return all;
+    /**
+     * Returns up to {@code count} packets captured at or after the input
+     * timestamp. A server cannot respond before the action is sent, so only the
+     * post-input side carries response data.
+     */
+    public static List<PacketEntry> snapshotAfter(long inputTimestamp, int count, long minimumTimestamp) {
+        int limit = clampPacketCount(count);
+        if (limit <= 0) {
+            return Collections.emptyList();
         }
-        int insertion = 0;
-        while (insertion < all.size() && packetTime(all.get(insertion).packet) < inputTimestamp) {
-            insertion++;
-        }
-        int start = Math.max(0, insertion - count);
-        int end = Math.min(all.size(), insertion + count);
-        return new ArrayList<PacketEntry>(all.subList(start, end));
-    }
-
-    private static List<PacketEntry> snapshotBetween(long windowStart, long windowEnd, long minimumTimestamp) {
-        List<PacketEntry> all = new ArrayList<PacketEntry>();
+        List<PacketEntry> result = new ArrayList<PacketEntry>(limit);
         synchronized (PacketCaptureHandler.capturedPackets) {
-            for (PacketCaptureHandler.CapturedPacketData packet : PacketCaptureHandler.capturedPackets) {
-                if (overlapsWindow(packet, windowStart, windowEnd, minimumTimestamp)) {
-                    all.add(new PacketEntry(C2S, packet));
-                }
-            }
+            collectAfter(PacketCaptureHandler.capturedPackets, inputTimestamp, minimumTimestamp, limit, result, C2S);
         }
         synchronized (PacketCaptureHandler.capturedReceivedPackets) {
-            for (PacketCaptureHandler.CapturedPacketData packet : PacketCaptureHandler.capturedReceivedPackets) {
-                if (overlapsWindow(packet, windowStart, windowEnd, minimumTimestamp)) {
-                    all.add(new PacketEntry(S2C, packet));
-                }
-            }
+            collectAfter(PacketCaptureHandler.capturedReceivedPackets, inputTimestamp, minimumTimestamp, limit, result, S2C);
         }
-        Collections.sort(all, new Comparator<PacketEntry>() {
+        Collections.sort(result, new Comparator<PacketEntry>() {
             @Override
             public int compare(PacketEntry left, PacketEntry right) {
                 long leftTime = packetTime(left.packet);
@@ -93,7 +77,49 @@ public final class RecordingPacketSupport {
                 return C2S.equals(left.direction) ? -1 : 1;
             }
         });
-        return all;
+        if (result.size() > limit) {
+            return new ArrayList<PacketEntry>(result.subList(0, limit));
+        }
+        return result;
+    }
+
+    /** Packets in {@code source} at or after {@code inputTimestamp}, appending at most {@code limit} to {@code out}. */
+    private static void collectAfter(List<PacketCaptureHandler.CapturedPacketData> source, long inputTimestamp,
+            long minimumTimestamp, int limit, List<PacketEntry> out, String direction) {
+        for (PacketCaptureHandler.CapturedPacketData packet : source) {
+            if (out.size() >= limit) {
+                break;
+            }
+            if (packet == null || packet.getLastTimestamp() < inputTimestamp) {
+                continue;
+            }
+            if (minimumTimestamp > 0L && packet.getLastTimestamp() < minimumTimestamp) {
+                continue;
+            }
+            out.add(new PacketEntry(direction, packet));
+        }
+    }
+
+    /** How many captured packets fall at or after {@code inputTimestamp} (used by readiness checks). */
+    public static int countAfter(long inputTimestamp, long minimumTimestamp) {
+        int total = 0;
+        synchronized (PacketCaptureHandler.capturedPackets) {
+            for (PacketCaptureHandler.CapturedPacketData packet : PacketCaptureHandler.capturedPackets) {
+                if (packet != null && packet.getLastTimestamp() >= inputTimestamp
+                        && (minimumTimestamp <= 0L || packet.getLastTimestamp() >= minimumTimestamp)) {
+                    total++;
+                }
+            }
+        }
+        synchronized (PacketCaptureHandler.capturedReceivedPackets) {
+            for (PacketCaptureHandler.CapturedPacketData packet : PacketCaptureHandler.capturedReceivedPackets) {
+                if (packet != null && packet.getLastTimestamp() >= inputTimestamp
+                        && (minimumTimestamp <= 0L || packet.getLastTimestamp() >= minimumTimestamp)) {
+                    total++;
+                }
+            }
+        }
+        return total;
     }
 
     public static JsonArray toJson(List<PacketEntry> entries) {
@@ -193,7 +219,7 @@ public final class RecordingPacketSupport {
             return new JsonObject();
         }
         try {
-            return new JsonParser().parse(value.toString()).getAsJsonObject();
+            return JsonCopy.deepCopyObject(value);
         } catch (Exception ignored) {
             return new JsonObject();
         }
@@ -206,9 +232,12 @@ public final class RecordingPacketSupport {
         }
         result.addProperty("direction", normalizeDirection(direction));
         if (packet.isFmlPacket) {
+            result.addProperty("targetType", "channel");
             result.addProperty("channel", safe(packet.channel));
         } else if (packet.packetId != null) {
-            result.addProperty("packetId", packet.packetId.intValue());
+            result.addProperty("targetType", "packetId");
+            // Store the id as hex text so the hex-only parser and the UI agree on "0x14".
+            result.addProperty("packetId", String.format("0x%02X", packet.packetId.intValue()));
         }
         result.addProperty("hex", packet.getHexData());
         return result;
@@ -232,29 +261,58 @@ public final class RecordingPacketSupport {
                 && params.get(ORIGINAL_PARAMS_KEY).isJsonObject();
     }
 
+    /**
+     * Removes the recording-scratch keys (packet payload, timestamps, window
+     * settings) from a params object. These exist only to correlate live
+     * captures during a recording session and must never reach disk — including
+     * the copy embedded in {@link #ORIGINAL_PARAMS_KEY}. Mutates {@code params}
+     * in place.
+     */
+    public static void stripRecordingKeys(JsonObject params) {
+        if (params == null) {
+            return;
+        }
+        params.remove(PACKETS_KEY);
+        params.remove(INPUT_TIMESTAMP_KEY);
+        params.remove(COUNT_KEY);
+        params.remove(WINDOW_SECONDS_KEY);
+        params.remove(RANGE_KEY);
+        if (params.has(ORIGINAL_PARAMS_KEY) && params.get(ORIGINAL_PARAMS_KEY).isJsonObject()) {
+            stripRecordingKeys(params.getAsJsonObject(ORIGINAL_PARAMS_KEY));
+        }
+    }
+
+    /**
+     * Shallow copy of {@code params} with the recording-scratch keys omitted.
+     * Used at serialization time so live packet data never reaches disk while
+     * the in-memory object stays intact for the open review UI.
+     */
+    public static JsonObject paramsForSave(JsonObject params) {
+        if (params == null) {
+            return new JsonObject();
+        }
+        JsonObject copy = new JsonObject();
+        for (java.util.Map.Entry<String, JsonElement> e : params.entrySet()) {
+            String key = e.getKey();
+            if (PACKETS_KEY.equals(key) || INPUT_TIMESTAMP_KEY.equals(key) || COUNT_KEY.equals(key)
+                    || WINDOW_SECONDS_KEY.equals(key) || RANGE_KEY.equals(key)) {
+                continue;
+            }
+            JsonElement value = e.getValue();
+            if (ORIGINAL_PARAMS_KEY.equals(key) && value != null && value.isJsonObject()) {
+                value = paramsForSave(value.getAsJsonObject());
+            }
+            copy.add(key, value);
+        }
+        return copy;
+    }
+
     public static String normalizeDirection(String direction) {
         return S2C.equalsIgnoreCase(direction) || "INBOUND".equalsIgnoreCase(direction) ? S2C : C2S;
     }
 
-    public static int clampWindowSeconds(int seconds) {
-        return Math.max(0, Math.min(60, seconds));
-    }
-
-    /** @deprecated use {@link #clampWindowSeconds(int)}. */
-    @Deprecated
-    public static int clampRange(int range) {
-        return Math.max(0, Math.min(100, range));
-    }
-
-    private static boolean overlapsWindow(PacketCaptureHandler.CapturedPacketData packet, long windowStart,
-            long windowEnd, long minimumTimestamp) {
-        if (packet == null) {
-            return false;
-        }
-        long packetStart = packet.timestamp;
-        long packetEnd = packet.getLastTimestamp();
-        return (minimumTimestamp <= 0L || packetEnd >= minimumTimestamp)
-                && packetEnd >= windowStart && packetStart <= windowEnd;
+    public static int clampPacketCount(int count) {
+        return Math.max(0, Math.min(MAX_PACKET_COUNT, count));
     }
 
     private static long packetTime(PacketCaptureHandler.CapturedPacketData packet) {

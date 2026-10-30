@@ -38,15 +38,6 @@ public final class ModernPanelStack {
         }
     }
 
-    /**
-     * Discards nested panels while keeping the root panel available for a
-     * later tick or for reopening the workbench inside the same tab.
-     */
-    public void discardChildren() {
-        while (panels.size() > 1) {
-            panels.pop().discardDraft();
-        }
-    }
 
     public boolean isDirty() {
         for (ModernPanel panel : panels) {

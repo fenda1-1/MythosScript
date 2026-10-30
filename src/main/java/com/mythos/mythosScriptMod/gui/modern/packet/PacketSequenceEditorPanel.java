@@ -194,7 +194,7 @@ final class PacketSequenceEditorPanel extends PacketPanelBase {
         }
         PacketSequence.PacketToSend packet = state.value().packets.get(selected);
         String packetIdValue = packet.isFmlPacket ? safe(packet.channel)
-                : packet.packetId == null ? "0" : String.valueOf(packet.packetId);
+                : packet.packetId == null ? "0x00" : String.format("0x%02X", packet.packetId);
         return !packetIdValue.equals(packetId.text().trim()) || !safe(packet.hexData).equals(hex.text())
                 || !String.valueOf(packet.delayTicks).equals(delay.text().trim())
                 || !PacketSendSupport.normalizeDirection(packet.direction).equals(direction);
@@ -224,7 +224,7 @@ final class PacketSequenceEditorPanel extends PacketPanelBase {
     private void loadPacket(int index) {
         selected = index;
         PacketSequence.PacketToSend packet = state.value().packets.get(index);
-        packetId.setText(packet.isFmlPacket ? safe(packet.channel) : packet.packetId == null ? "0" : String.valueOf(packet.packetId));
+        packetId.setText(packet.isFmlPacket ? safe(packet.channel) : packet.packetId == null ? "0x00" : String.format("0x%02X", packet.packetId));
         hex.setText(safe(packet.hexData)); delay.setText(String.valueOf(packet.delayTicks)); direction = PacketSendSupport.normalizeDirection(packet.direction); directionDrop.setValue(direction);
     }
 
@@ -260,7 +260,7 @@ final class PacketSequenceEditorPanel extends PacketPanelBase {
         items.add(new PacketContextMenu.Item("gui.modern.pktseqe.u009", () -> { if (!state.value().packets.isEmpty()) PacketSendSupport.sendSequence(owner.minecraft(), state.value()); }));
         return items;
     }
-    private Integer parseId() { try { int value = Integer.decode(packetId.text().trim()); if (value < 0 || value > 255) throw new NumberFormatException(); return Integer.valueOf(value); } catch (NumberFormatException ignored) { validationError = "gui.modern.pktseqe.u023"; owner.status(validationError); return null; } }
+    private Integer parseId() { String raw = packetId.text().trim(); if (raw.isEmpty()) return null; int parsed = PacketSendSupport.parsePacketId(raw, -1); if (parsed < 0) { validationError = "gui.modern.pktseqe.u023"; owner.status(validationError); return null; } return Integer.valueOf(parsed); }
     private Integer parseDelay() { try { int value = Integer.parseInt(delay.text().trim()); if (value < 0 || value > 100000) throw new NumberFormatException(); return Integer.valueOf(value); } catch (NumberFormatException ignored) { validationError = "gui.modern.pktseqe.u024"; owner.status(validationError); return null; } }
     private void drawMobileScrollbar(int mouseX, int mouseY) {
         listScrollbar.idle();

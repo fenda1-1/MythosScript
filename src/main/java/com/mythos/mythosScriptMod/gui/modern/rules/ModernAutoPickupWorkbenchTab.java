@@ -60,8 +60,8 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
     }
 
     private final AutoPickupWorkbenchState state = new AutoPickupWorkbenchState(
-            new ArrayList<AutoPickupRule>(AutoPickupHandler.rules), AutoPickupHandler.getCategoriesSnapshot(),
-            AutoPickupHandler.globalEnabled);
+            new ArrayList<AutoPickupRule>(AutoPickupHandler.cfg().rules), AutoPickupHandler.getCategoriesSnapshot(),
+            AutoPickupHandler.globalEnabled());
     private final Set<String> collapsedGroups = new HashSet<>();
     private final List<RuleHit> ruleHits = new ArrayList<>();
     private final List<GroupHit> groupHits = new ArrayList<>();
@@ -789,9 +789,9 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
         for (AutoPickupRule rule : state.rules()) {
             AutoPickupWorkbenchState.normalizeRule(rule);
         }
-        AutoPickupHandler.globalEnabled = state.masterEnabled();
-        AutoPickupHandler.rules.clear();
-        AutoPickupHandler.rules.addAll(copyRules(state.rules()));
+        AutoPickupHandler.setGlobalEnabledSilently(state.masterEnabled());
+        AutoPickupHandler.cfg().rules.clear();
+        AutoPickupHandler.cfg().rules.addAll(copyRules(state.rules()));
         AutoPickupHandler.replaceCategoryOrder(new ArrayList<String>(state.categories()));
         AutoPickupHandler.saveConfig();
         state.markCommitted();
@@ -1279,32 +1279,7 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
         }
     }
 
-    private void openFilterList(boolean whitelist) {
-        inlineEntryEditor = false;
-        if (!prepareDraft() || editorRule == null) {
-            return;
-        }
-        overlay = inlineEntryEditor ? Overlay.NONE : Overlay.FILTER_LIST;
-        overlayWhitelist = whitelist;
-        overlaySelectedEntryIndex = entryList(whitelist).isEmpty() ? -1 : 0;
-        overlayScroll = 0;
-        overlayPendingDeleteIndex = -1;
-        overlayValidation = "";
-        overlayTitle = whitelist ? "gui.modern.pickup_wb.u077" : "gui.modern.pickup_wb.u085";
-    }
 
-    private void openActionList() {
-        inlineEntryEditor = false;
-        if (!prepareDraft() || editorRule == null) {
-            return;
-        }
-        overlay = inlineEntryEditor ? Overlay.NONE : Overlay.ACTION_LIST;
-        overlaySelectedEntryIndex = safeActionEntries(editorRule.pickupActionEntries).isEmpty() ? -1 : 0;
-        overlayScroll = 0;
-        overlayPendingDeleteIndex = -1;
-        overlayValidation = "";
-        overlayTitle = "gui.modern.pickup_wb.u127";
-    }
 
     private void openFilterEditor(boolean whitelist, int index) {
         List<AutoPickupRule.ItemMatchEntry> entries = entryList(whitelist);
@@ -2202,10 +2177,6 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
                 : ModernFormI18n.tr("gui.modern.pickup_wb.u164") + count + " 格）";
     }
 
-    private String entryButtonLabel(String title, List<AutoPickupRule.ItemMatchEntry> entries,
-            List<String> legacyKeywords) {
-        return title + " (" + safeItemEntries(entries, legacyKeywords).size() + ")";
-    }
 
     private String sequenceLabel(String sequence) {
         String value = safe(sequence).trim();
@@ -2282,15 +2253,6 @@ public final class ModernAutoPickupWorkbenchTab implements ModernSettingsTab {
         return new ArrayList<Integer>(result);
     }
 
-    private AutoPickupRule.ItemMatchEntry normalizeFilterEntry(AutoPickupRule.ItemMatchEntry source) {
-        if (source == null) {
-            return null;
-        }
-        AutoPickupRule.ItemMatchEntry result = new AutoPickupRule.ItemMatchEntry();
-        result.keyword = normalizeToken(source.keyword);
-        result.requiredNbtTags = normalizeKeywordList(source.requiredNbtTags);
-        return result.keyword.isEmpty() && result.requiredNbtTags.isEmpty() ? null : result;
-    }
 
     private AutoPickupRule.PickupActionEntry normalizeActionEntry(AutoPickupRule.PickupActionEntry source) {
         if (source == null || safe(source.sequenceName).trim().isEmpty()) {

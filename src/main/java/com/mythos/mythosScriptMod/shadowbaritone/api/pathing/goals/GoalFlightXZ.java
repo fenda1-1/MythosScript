@@ -13,7 +13,7 @@ public final class GoalFlightXZ extends GoalXZ {
     public boolean isInGoal(int x, int y, int z) {
         long xDiff = (long) x - getX();
         long zDiff = (long) z - getZ();
-        long range = FlightPathingConfig.arrivalRange;
+        long range = FlightPathingConfig.cfg().arrivalRange;
         return xDiff * xDiff + zDiff * zDiff <= range * range;
     }
 
@@ -22,7 +22,7 @@ public final class GoalFlightXZ extends GoalXZ {
         double xDiff = (double) x - getX();
         double zDiff = (double) z - getZ();
         double horizontalDistance = Math.max(0.0D,
-                Math.sqrt(xDiff * xDiff + zDiff * zDiff) - FlightPathingConfig.arrivalRange);
+                Math.sqrt(xDiff * xDiff + zDiff * zDiff) - FlightPathingConfig.cfg().arrivalRange);
         return GoalXZ.calculate(horizontalDistance, 0.0D);
     }
 }

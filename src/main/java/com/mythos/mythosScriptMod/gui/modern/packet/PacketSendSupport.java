@@ -88,14 +88,16 @@ public final class PacketSendSupport {
         return "C2S";
     }
 
-    static boolean isInboundDirection(String value) {
-        return "S2C".equals(normalizeDirection(value));
-    }
 
-    /** Integer.decode-compatible parser used by the sequence editor's ID field. */
+    /** Hex-only parser: accepts "0x14", "0X14", "#14" or bare "14" (all read as hexadecimal). */
     static int parsePacketId(String value, int fallback) {
-        if (value == null || value.trim().isEmpty()) return fallback;
-        try { return Math.max(0, Math.min(255, Integer.decode(value.trim()))); }
+        if (value == null) return fallback;
+        String s = value.trim();
+        if (s.isEmpty()) return fallback;
+        if (s.startsWith("0x") || s.startsWith("0X")) s = s.substring(2);
+        else if (s.startsWith("#")) s = s.substring(1);
+        if (s.isEmpty()) return fallback;
+        try { return Math.max(0, Math.min(255, Integer.parseInt(s, 16))); }
         catch (NumberFormatException ignored) { return fallback; }
     }
     private static String tr(String key) {

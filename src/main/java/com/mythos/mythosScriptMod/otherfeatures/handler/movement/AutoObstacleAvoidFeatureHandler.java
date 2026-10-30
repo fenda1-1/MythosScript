@@ -18,8 +18,9 @@ final class AutoObstacleAvoidFeatureHandler {
                 || player.isInLava()
                 || player.isRiding()
                 || !MovementFeatureSupport.isMoving(player)) {
-            manager.obstacleAvoidDirection = 0;
-            manager.obstacleAvoidTicks = 0;
+            MovementFeatureManager.RuntimeState rt = MovementFeatureManager.rt();
+            rt.obstacleAvoidDirection = 0;
+            rt.obstacleAvoidTicks = 0;
             return;
         }
 
@@ -37,7 +38,8 @@ final class AutoObstacleAvoidFeatureHandler {
             return;
         }
 
-        int preferredDirection = manager.obstacleAvoidTicks > 0 ? manager.obstacleAvoidDirection : 0;
+        int preferredDirection = MovementFeatureManager.rt().obstacleAvoidTicks > 0
+                ? MovementFeatureManager.rt().obstacleAvoidDirection : 0;
         int chosenDirection = chooseDirection(player, heading, detectDistance, preferredDirection);
         if (chosenDirection == 0) {
             return;
@@ -51,8 +53,9 @@ final class AutoObstacleAvoidFeatureHandler {
             player.motionX = desired.x * speed;
             player.motionZ = desired.z * speed;
             player.velocityChanged = true;
-            manager.obstacleAvoidDirection = chosenDirection;
-            manager.obstacleAvoidTicks = 6;
+            MovementFeatureManager.RuntimeState rt = MovementFeatureManager.rt();
+            rt.obstacleAvoidDirection = chosenDirection;
+            rt.obstacleAvoidTicks = 6;
         }
     }
 

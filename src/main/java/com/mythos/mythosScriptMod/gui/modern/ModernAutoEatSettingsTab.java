@@ -115,73 +115,73 @@ public final class ModernAutoEatSettingsTab {
 
     /** Defensive snapshot of every persisted automatic-eating value. */
     private static final class State {
-        private final boolean enabled = AutoEatHandler.autoEatEnabled;
-        private final int threshold = AutoEatHandler.foodLevelThreshold;
-        private final boolean autoMove = AutoEatHandler.autoMoveFoodEnabled;
-        private final boolean lookDown = AutoEatHandler.eatWithLookDown;
-        private final boolean smoothLookDown = AutoEatHandler.smoothLookDown;
-        private final boolean pathingOnly = AutoEatHandler.onlyDuringSequenceStepPathing;
-        private final int hotbarSlot = AutoEatHandler.targetHotbarSlot;
-        private final List<String> keywords = new ArrayList<>(AutoEatHandler.foodKeywords == null
-                ? AutoEatHandler.DEFAULT_FOOD_KEYWORDS : AutoEatHandler.foodKeywords);
+        private final boolean enabled = AutoEatHandler.autoEatEnabled();
+        private final int threshold = AutoEatHandler.cfg().foodLevelThreshold;
+        private final boolean autoMove = AutoEatHandler.cfg().autoMoveFoodEnabled;
+        private final boolean lookDown = AutoEatHandler.cfg().eatWithLookDown;
+        private final boolean smoothLookDown = AutoEatHandler.cfg().smoothLookDown;
+        private final boolean pathingOnly = AutoEatHandler.cfg().onlyDuringSequenceStepPathing;
+        private final int hotbarSlot = AutoEatHandler.cfg().targetHotbarSlot;
+        private final List<String> keywords = new ArrayList<>(AutoEatHandler.cfg().foodKeywords == null
+                ? AutoEatHandler.DEFAULT_FOOD_KEYWORDS : AutoEatHandler.cfg().foodKeywords);
 
         private void apply() {
-            AutoEatHandler.autoEatEnabled = enabled;
-            AutoEatHandler.foodLevelThreshold = threshold;
-            AutoEatHandler.autoMoveFoodEnabled = autoMove;
-            AutoEatHandler.eatWithLookDown = lookDown;
-            AutoEatHandler.smoothLookDown = smoothLookDown;
-            AutoEatHandler.onlyDuringSequenceStepPathing = pathingOnly;
-            AutoEatHandler.targetHotbarSlot = hotbarSlot;
-            AutoEatHandler.foodKeywords = new ArrayList<>(keywords);
+            AutoEatHandler.setAutoEatEnabledSilently(enabled);
+            AutoEatHandler.cfg().foodLevelThreshold = threshold;
+            AutoEatHandler.cfg().autoMoveFoodEnabled = autoMove;
+            AutoEatHandler.cfg().eatWithLookDown = lookDown;
+            AutoEatHandler.cfg().smoothLookDown = smoothLookDown;
+            AutoEatHandler.cfg().onlyDuringSequenceStepPathing = pathingOnly;
+            AutoEatHandler.cfg().targetHotbarSlot = hotbarSlot;
+            AutoEatHandler.cfg().foodKeywords = new ArrayList<>(keywords);
         }
 
         private static void applyDefaults() {
-            AutoEatHandler.foodLevelThreshold = 12;
-            AutoEatHandler.autoMoveFoodEnabled = true;
-            AutoEatHandler.eatWithLookDown = false;
-            AutoEatHandler.smoothLookDown = true;
-            AutoEatHandler.onlyDuringSequenceStepPathing = true;
-            AutoEatHandler.targetHotbarSlot = 9;
-            AutoEatHandler.foodKeywords = new ArrayList<>(AutoEatHandler.DEFAULT_FOOD_KEYWORDS);
+            AutoEatHandler.cfg().foodLevelThreshold = 12;
+            AutoEatHandler.cfg().autoMoveFoodEnabled = true;
+            AutoEatHandler.cfg().eatWithLookDown = false;
+            AutoEatHandler.cfg().smoothLookDown = true;
+            AutoEatHandler.cfg().onlyDuringSequenceStepPathing = true;
+            AutoEatHandler.cfg().targetHotbarSlot = 9;
+            AutoEatHandler.cfg().foodKeywords = new ArrayList<>(AutoEatHandler.DEFAULT_FOOD_KEYWORDS);
         }
 
         private static boolean getBoolean(String name) {
             switch (name) {
-                case "enabled": return AutoEatHandler.autoEatEnabled;
-                case "autoMove": return AutoEatHandler.autoMoveFoodEnabled;
-                case "lookDown": return AutoEatHandler.eatWithLookDown;
-                case "smoothLookDown": return AutoEatHandler.smoothLookDown;
-                case "pathingOnly": return AutoEatHandler.onlyDuringSequenceStepPathing;
+                case "enabled": return AutoEatHandler.autoEatEnabled();
+                case "autoMove": return AutoEatHandler.cfg().autoMoveFoodEnabled;
+                case "lookDown": return AutoEatHandler.cfg().eatWithLookDown;
+                case "smoothLookDown": return AutoEatHandler.cfg().smoothLookDown;
+                case "pathingOnly": return AutoEatHandler.cfg().onlyDuringSequenceStepPathing;
                 default: return false;
             }
         }
 
         private static void setBoolean(String name, boolean value) {
             switch (name) {
-                case "enabled": AutoEatHandler.autoEatEnabled = value; break;
-                case "autoMove": AutoEatHandler.autoMoveFoodEnabled = value; break;
-                case "lookDown": AutoEatHandler.eatWithLookDown = value; break;
-                case "smoothLookDown": AutoEatHandler.smoothLookDown = value; break;
-                case "pathingOnly": AutoEatHandler.onlyDuringSequenceStepPathing = value; break;
+                case "enabled": AutoEatHandler.setAutoEatEnabledSilently(value); break;
+                case "autoMove": AutoEatHandler.cfg().autoMoveFoodEnabled = value; break;
+                case "lookDown": AutoEatHandler.cfg().eatWithLookDown = value; break;
+                case "smoothLookDown": AutoEatHandler.cfg().smoothLookDown = value; break;
+                case "pathingOnly": AutoEatHandler.cfg().onlyDuringSequenceStepPathing = value; break;
                 default: break;
             }
         }
 
         private static int getInteger(String name) {
-            if ("threshold".equals(name)) return AutoEatHandler.foodLevelThreshold;
-            if ("hotbarSlot".equals(name)) return AutoEatHandler.targetHotbarSlot;
+            if ("threshold".equals(name)) return AutoEatHandler.cfg().foodLevelThreshold;
+            if ("hotbarSlot".equals(name)) return AutoEatHandler.cfg().targetHotbarSlot;
             return 0;
         }
 
         private static void setInteger(String name, int value) {
-            if ("threshold".equals(name)) AutoEatHandler.foodLevelThreshold = value;
-            if ("hotbarSlot".equals(name)) AutoEatHandler.targetHotbarSlot = value;
+            if ("threshold".equals(name)) AutoEatHandler.cfg().foodLevelThreshold = value;
+            if ("hotbarSlot".equals(name)) AutoEatHandler.cfg().targetHotbarSlot = value;
         }
 
         private static String getText(String name) {
             if (!"keywords".equals(name)) return "";
-            List<String> values = AutoEatHandler.foodKeywords;
+            List<String> values = AutoEatHandler.cfg().foodKeywords;
             return values == null ? "" : String.join(", ", values);
         }
 
@@ -198,7 +198,7 @@ public final class ModernAutoEatSettingsTab {
             if (parsed.isEmpty()) {
                 parsed.addAll(AutoEatHandler.DEFAULT_FOOD_KEYWORDS);
             }
-            AutoEatHandler.foodKeywords = parsed;
+            AutoEatHandler.cfg().foodKeywords = parsed;
         }
     }
 }

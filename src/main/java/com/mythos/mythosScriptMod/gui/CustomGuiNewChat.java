@@ -36,8 +36,12 @@ public class CustomGuiNewChat extends GuiNewChat {
 
     // --- 核心状态字段 ---
     private final List<String> sentMessages = Lists.newArrayList();
-    private final List<ChatLine> chatLines = Lists.newArrayList();
-    private final List<ChatLine> drawnChatLines = Lists.newArrayList();
+    // CopyOnWriteArrayList: session bots call sendMessage from their own tick
+    // threads — a plain ArrayList races with the render thread's drawChat pass
+    // (and with another bot's deleteChatLine). Chat lists are small and writes
+    // are rare, so the copy cost is noise.
+    private final List<ChatLine> chatLines = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<ChatLine> drawnChatLines = new java.util.concurrent.CopyOnWriteArrayList<>();
     private int scrollPos;
     private boolean isScrolled;
 
@@ -58,6 +62,56 @@ public class CustomGuiNewChat extends GuiNewChat {
 
     // !! 新增：缓存编译后的正则表达式，提高性能 !!
     private static final Map<String, Pattern> patternCache = new ConcurrentHashMap<>();
+
+    // --- [CHAT] 日志限流 ---
+    // Some servers echo the same action-bar / quest line hundreds of times per
+    // second. The [CHAT] mirror line is diagnostic only: the HUD line and the
+    // chat ring are written regardless of whether we log, so throttling it
+    // removes the sync-IO stall without changing anything the player sees.
+    //
+    // The flood lines are NOT byte-identical: the anti-spam path appends a
+    // counter ("msg [x2]", "msg [x3]", ...), so keying on the raw text would
+    // never hit. The key therefore drops a trailing " [xN]" counter, which
+    // collapses the whole flood into one key while keeping distinct messages
+    // distinct. Nothing is lost from the diagnostics: the next logged line
+    // carries the exact number of lines that were folded into it.
+    private static final long CHAT_LOG_MIN_INTERVAL_MS = 200L;
+    private static final int CHAT_LOG_KEY_LIMIT = 64;
+    private static final java.util.Map<String, Long> chatLogLastMs =
+            new java.util.LinkedHashMap<String, Long>(CHAT_LOG_KEY_LIMIT, 0.75F, true) {
+                private static final long serialVersionUID = 1L;
+
+                @Override
+                protected boolean removeEldestEntry(java.util.Map.Entry<String, Long> eldest) {
+                    return size() > CHAT_LOG_KEY_LIMIT;
+                }
+            };
+    private static final java.util.Map<String, Integer> chatLogSuppressed =
+            new java.util.HashMap<String, Integer>();
+
+    /** Drops the trailing anti-spam counter so "msg [x2]" and "msg [x99]" share one key. */
+    private static String chatLogKey(String text) {
+        if (text == null)
+            return "";
+        return text.replaceAll(" \\[x\\d+\\]$", "");
+    }
+
+    private static synchronized void logChatLine(String text) {
+        long now = System.currentTimeMillis();
+        String key = chatLogKey(text);
+        Long last = chatLogLastMs.get(key);
+        if (last != null && now - last < CHAT_LOG_MIN_INTERVAL_MS) {
+            Integer suppressed = chatLogSuppressed.get(key);
+            chatLogSuppressed.put(key, suppressed == null ? Integer.valueOf(1) : Integer.valueOf(suppressed.intValue() + 1));
+            return;
+        }
+        Integer suppressed = chatLogSuppressed.remove(key);
+        chatLogLastMs.put(key, Long.valueOf(now));
+        String suffix = suppressed != null && suppressed.intValue() > 0
+                ? " (identical lines suppressed: " + suppressed + ")"
+                : "";
+        LOGGER.info("[CHAT] {}{}", text, suffix);
+    }
 
     // --- 时间戳 ---
     private static final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
@@ -99,31 +153,34 @@ public class CustomGuiNewChat extends GuiNewChat {
 
         if (this.mc.gameSettings.chatVisibility != EntityPlayer.EnumChatVisibility.HIDDEN) {
             int lineCount = this.getLineCount();
-            int drawnLineCount = this.drawnChatLines.size();
+            // Bot tick threads can add/remove chat lines while the client thread
+            // renders. Keep one immutable view for both halves of this pass so
+            // an index collected before a deletion is never looked up again in
+            // a shorter live list.
+            List<ChatLine> drawnChatSnapshot = new ArrayList<>(this.drawnChatLines);
+            int drawnLineCount = drawnChatSnapshot.size();
             float chatOpacity = this.mc.gameSettings.chatOpacity * 0.9F + 0.1F;
 
             if (drawnLineCount > 0) {
+                int renderScrollPos = Math.max(0,
+                        Math.min(this.scrollPos, Math.max(0, drawnLineCount - lineCount)));
                 boolean chatIsOpen = this.getChatOpen();
                 float chatScale = this.getChatScale();
                 int chatWidth = MathHelper.ceil((float) this.getChatWidth() / chatScale);
 
-                ChatOptimizationConfig settings = ChatOptimizationConfig.INSTANCE;
+                ChatOptimizationConfig settings = ChatOptimizationConfig.instance();
 
-                GlStateManager.pushMatrix();
-                if (settings.smooth && !this.isScrolled) {
-                    GlStateManager.translate(2.0F + settings.xOffset,
-                            8.0F + settings.yOffset + (9 - 9 * percent) * chatScale, 0.0F);
-                } else {
-                    GlStateManager.translate(2.0F + settings.xOffset, 8.0F + settings.yOffset, 0.0F);
-                }
-                GlStateManager.scale(chatScale, chatScale, 1.0F);
+                // Single pass: compute per-line alpha and collect the lines that
+                // will actually render, so we don't walk drawnChatLines twice
+                // and don't redo alpha math per line.
+                java.util.List<int[]> visible = null; // [index, finalAlpha, textY]
                 int visibleLineCountForBg = 0;
                 int bgTop = 0;
                 int bgBottom = 0;
                 int maxBgAlpha = 0;
 
-                for (int i = 0; i + this.scrollPos < drawnLineCount && i < lineCount; ++i) {
-                    ChatLine chatline = this.drawnChatLines.get(i + this.scrollPos);
+                for (int i = 0; i + renderScrollPos < drawnLineCount && i < lineCount; ++i) {
+                    ChatLine chatline = drawnChatSnapshot.get(i + renderScrollPos);
                     if (chatline == null) {
                         continue;
                     }
@@ -144,10 +201,43 @@ public class CustomGuiNewChat extends GuiNewChat {
                     }
                     bgTop = textY - 9;
                     maxBgAlpha = Math.max(maxBgAlpha, finalAlpha);
+                    if (visible == null) {
+                        visible = new java.util.ArrayList<>(lineCount);
+                    }
+                    visible.add(new int[] { i + renderScrollPos, finalAlpha, textY });
                     visibleLineCountForBg++;
                 }
 
                 if (visibleLineCountForBg > 0) {
+                    GlStateManager.pushMatrix();
+                    if (settings.smooth && !this.isScrolled) {
+                        GlStateManager.translate(2.0F + settings.xOffset,
+                                8.0F + settings.yOffset + (9 - 9 * percent) * chatScale, 0.0F);
+                    } else {
+                        GlStateManager.translate(2.0F + settings.xOffset, 8.0F + settings.yOffset, 0.0F);
+                    }
+                    GlStateManager.scale(chatScale, chatScale, 1.0F);
+                    renderChatBody(visible, drawnChatSnapshot, drawnLineCount, lineCount,
+                            renderScrollPos, chatWidth,
+                            chatOpacity, percent, settings, chatIsOpen,
+                            bgTop, bgBottom, maxBgAlpha);
+                    GlStateManager.popMatrix();
+                }
+            }
+        }
+    }
+
+    /** Second half of drawChat — runs inside the already-pushed chat matrix.
+     *  Pulled out so the push/pop pair stays next to each other and the early
+     *  return path (no visible lines) can't leave the stack pushed. */
+    private void renderChatBody(java.util.List<int[]> visible,
+                                 List<ChatLine> drawnChatSnapshot,
+                                 int drawnLineCount, int lineCount,
+                                 int renderScrollPos,
+                                 int chatWidth, float chatOpacity, float percent,
+                                 ChatOptimizationConfig settings,
+                                 boolean chatIsOpen,
+                                 int bgTop, int bgBottom, int maxBgAlpha) {
                     ResourceLocation bgLocation = TextureManagerHelper.getResourceLocationForPath(
                             settings.backgroundImagePath, settings.imageQuality);
                     int targetW = chatWidth + 4;
@@ -192,36 +282,27 @@ public class CustomGuiNewChat extends GuiNewChat {
                         int backgroundColor = backgroundAlpha << 24;
                         drawRect(-2, bgTop, chatWidth + 4, bgBottom, backgroundColor);
                     }
-                }
 
-                for (int i = 0; i + this.scrollPos < drawnLineCount && i < lineCount; ++i) {
-                    ChatLine chatline = this.drawnChatLines.get(i + this.scrollPos);
-                    if (chatline == null) {
-                        continue;
+                if (visible != null) {
+                    for (int k = 0; k < visible.size(); k++) {
+                        int[] entry = visible.get(k);
+                        int idx = entry[0];
+                        int finalAlpha = entry[1];
+                        int textY = entry[2];
+                        ChatLine chatline = drawnChatSnapshot.get(idx);
+                        if (chatline == null) continue;
+                        String s = chatline.getChatComponent().getFormattedText();
+                        GlStateManager.enableBlend();
+                        if (settings.smooth && idx - renderScrollPos <= newLines) {
+                            this.mc.fontRenderer.drawStringWithShadow(s, 0.0F, (float) (textY - 8),
+                                    16777215 + ((int) (finalAlpha * percent) << 24));
+                        } else {
+                            this.mc.fontRenderer.drawStringWithShadow(s, 0.0F, (float) (textY - 8),
+                                    16777215 + (finalAlpha << 24));
+                        }
+                        GlStateManager.disableAlpha();
+                        GlStateManager.disableBlend();
                     }
-                    int age = updateCounter - chatline.getUpdatedCounter();
-                    if (age >= 200 && !chatIsOpen) {
-                        continue;
-                    }
-                    double alpha = chatIsOpen ? 1.0D : 1.0D - (double) age / 200.0D;
-                    alpha = MathHelper.clamp(alpha * 10.0D, 0.0D, 1.0D) * alpha;
-                    int finalAlpha = (int) (255.0D * alpha * chatOpacity);
-                    if (finalAlpha <= 3) {
-                        continue;
-                    }
-
-                    int textY = -i * 9;
-                    String s = chatline.getChatComponent().getFormattedText();
-                    GlStateManager.enableBlend();
-                    if (settings.smooth && i <= newLines) {
-                        this.mc.fontRenderer.drawStringWithShadow(s, 0.0F, (float) (textY - 8),
-                                16777215 + ((int) (finalAlpha * percent) << 24));
-                    } else {
-                        this.mc.fontRenderer.drawStringWithShadow(s, 0.0F, (float) (textY - 8),
-                                16777215 + (finalAlpha << 24));
-                    }
-                    GlStateManager.disableAlpha();
-                    GlStateManager.disableBlend();
                 }
 
                 if (chatIsOpen) {
@@ -229,7 +310,7 @@ public class CustomGuiNewChat extends GuiNewChat {
                     GlStateManager.translate((float) chatWidth + 4.0F, 0.0F, 0.0F);
                     int l2 = drawnLineCount * k2 + drawnLineCount;
                     int i3 = lineCount * k2 + lineCount;
-                    int j3 = this.scrollPos * i3 / drawnLineCount;
+                    int j3 = renderScrollPos * i3 / drawnLineCount;
                     int k1 = i3 * i3 / l2;
                     if (l2 != i3) {
                         int k3 = j3 > 0 ? 170 : 96;
@@ -238,9 +319,6 @@ public class CustomGuiNewChat extends GuiNewChat {
                         drawRect(2, -j3, 1, -j3 - k1, 13421772 + (k3 << 24));
                     }
                 }
-                GlStateManager.popMatrix();
-            }
-        }
     }
 
     // !! CORE REFACTOR: 完全重写此方法以实现高级防刷屏 !!
@@ -265,7 +343,7 @@ public class CustomGuiNewChat extends GuiNewChat {
 
         String rawText = chatComponent.getUnformattedText();
         long currentTime = System.currentTimeMillis();
-        ChatOptimizationConfig settings = ChatOptimizationConfig.INSTANCE;
+        ChatOptimizationConfig settings = ChatOptimizationConfig.instance();
 
         // 清理过期的刷屏记录
         spamTracker.entrySet().removeIf(
@@ -340,8 +418,7 @@ public class CustomGuiNewChat extends GuiNewChat {
 
         // 使用新的唯一ID来设置聊天行
         this.setChatLine(componentToDisplay, logicalIdToUse, this.mc.ingameGUI.getUpdateCounter(), false);
-        LOGGER.info("[CHAT] {}",
-                (Object) componentToDisplay.getUnformattedText().replaceAll("\r", "\\\\r").replaceAll("\n", "\\\\n"));
+        logChatLine(componentToDisplay.getUnformattedText().replaceAll("\r", "\\\\r").replaceAll("\n", "\\\\n"));
 
         // 更新刷屏信息中的ID和时间
         spamInfo.logicalChatLineId = logicalIdToUse;
@@ -381,14 +458,21 @@ public class CustomGuiNewChat extends GuiNewChat {
         }
 
         while (this.drawnChatLines.size() > 100) {
-            this.drawnChatLines.remove(this.drawnChatLines.size() - 1);
+            // COW list: size() can change between the check and remove — guard
+            synchronized (this.drawnChatLines) {
+                int n = this.drawnChatLines.size();
+                if (n > 0) this.drawnChatLines.remove(n - 1);
+            }
         }
 
         if (!displayOnly) {
             // 原始的、未分割的逻辑消息行也使用同一个 chatLineId 存入 chatLines
             this.chatLines.add(0, new ChatLine(updateCounter, chatComponent, chatLineId));
             while (this.chatLines.size() > 100) {
-                this.chatLines.remove(this.chatLines.size() - 1);
+                synchronized (this.chatLines) {
+                    int n = this.chatLines.size();
+                    if (n > 0) this.chatLines.remove(n - 1);
+                }
             }
         }
     }
@@ -455,7 +539,7 @@ public class CustomGuiNewChat extends GuiNewChat {
             ScaledResolution scaledresolution = new ScaledResolution(this.mc);
             int scaleFactor = scaledresolution.getScaleFactor();
             float chatScale = this.getChatScale();
-            ChatOptimizationConfig settings = ChatOptimizationConfig.INSTANCE; // 获取设置实例
+            ChatOptimizationConfig settings = ChatOptimizationConfig.instance(); // 获取设置实例
 
             // 1. 获取在缩放后的GUI空间中的鼠标坐标
             int scaledMouseX = mouseX / scaleFactor;

@@ -39,7 +39,7 @@ public final class NodeTriggerManager {
             return;
         }
 
-        EntityPlayerSP player = Minecraft.getMinecraft().player;
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
         if (player == null) {
             activeRuns.clear();
             return;
@@ -78,7 +78,7 @@ public final class NodeTriggerManager {
             return TriggerResult.ignored("无匹配触发图: " + normalizedType);
         }
 
-        EntityPlayerSP player = Minecraft.getMinecraft().player;
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
         if (player == null) {
             return TriggerResult.failed("当前无玩家实例");
         }

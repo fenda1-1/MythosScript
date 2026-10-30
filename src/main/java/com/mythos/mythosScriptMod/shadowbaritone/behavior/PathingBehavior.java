@@ -123,7 +123,14 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
     @Override
     public void onTick(TickEvent event) {
         dispatchEvents();
-        if (event.getType() == TickEvent.Type.OUT) {
+        // A session baritone can be ticked IN while its player reference is
+        // mid-respawn (non-null session field but the entity isn't fully
+        // attached yet) — treat a null player the same as OUT: cancel and
+        // wait for a stable tick instead of NPEing inside pathStart().
+        if (event.getType() == TickEvent.Type.OUT || mythos$unready()) {
+            if (event.getType() != TickEvent.Type.OUT) {
+                mythos$dbg("onTick: player unready, treating as OUT (pathing=%s)", isPathing());
+            }
             secretInternalSegmentCancel();
             baritone.getPathingControlManager().cancelEverything();
             secretInternalSetGoal(null);
@@ -173,6 +180,36 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         if (isPathing()) {
             event.setState(current.isSprinting());
         }
+    }
+
+    /**
+     * True when ctx.player() is null or the entity isn't attached to a live
+     * world yet (respawn window). Pathing code dereferences the player in
+     * dozens of places — one cheap check here beats NPEs scattered through
+     * pathStart/tickPath every tick while a bot remounts mid-respawn.
+     */
+    private boolean mythos$unready() {
+        try {
+            net.minecraft.client.entity.EntityPlayerSP p = ctx.player();
+            return p == null || p.world == null || ctx.world() == null;
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
+    private static java.lang.reflect.Method nexusLogBaritoneM;
+    private static boolean nexusLogTried;
+
+    private static void mythos$dbg(String fmt, Object... a) {
+        try {
+            if (!nexusLogTried) {
+                nexusLogTried = true;
+                nexusLogBaritoneM = Class.forName("com.mythos.nexus.core.NexusLog")
+                        .getMethod("baritone", String.class, Object[].class);
+            }
+            if (nexusLogBaritoneM != null)
+                nexusLogBaritoneM.invoke(null, String.format(fmt, a), new Object[0]);
+        } catch (Throwable ignored) {}
     }
 
     private void tickPath() {
@@ -390,7 +427,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                     double dz = ctx.player().posZ - (relayStart.z + 0.5D);
                     double distanceToRelay = Math.sqrt(dx * dx + dy * dy + dz * dz);
                     double planningDistance = Math.max(48.0D,
-                            FlyHandler.horizontalSpeed * Baritone.settings().planningTickLookahead.value);
+                            FlyHandler.cfg().horizontalSpeed * Baritone.settings().planningTickLookahead.value);
                     if (!flightPath.isFinalSegment() && distanceToRelay <= planningDistance
                             && flightLifecycleTick >= nextFlightRelayPlanTick) {
                         FlightDirectPath.PlanResult relayResult = FlightDirectPath.plan(baritone, goal, relayStart);
@@ -1069,6 +1106,12 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
             return null;
         }
         BetterBlockPos portalPlane = feet.up();
+        // ponytail: fast reject — narrow-gap recovery only fires when the
+        // player is airborne mid-jump or standing at a wall gap. Both of those
+        // leave `!onGround || !canWalkOn(down)` true; on open ground onGround
+        // and canWalkOn are both true and the whole 4-side scan returns null
+        // anyway. Skip it before touching CalculationContext.
+        if (ctx.player().onGround && MovementHelper.canWalkOn(ctx, feet.down())) return null;
         CalculationContext recoveryContext = new CalculationContext(baritone, false);
         NarrowGapRecoveryCandidate best = null;
 
@@ -1301,7 +1344,6 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         }
         Goal goal = this.goal;
         if (goal == null) {
-            logDebug("no goal"); // TODO should this be an exception too? definitely should be checked by caller
             return;
         }
         long primaryTimeout;
@@ -1316,9 +1358,14 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         BetterBlockPos requestedStart = new BetterBlockPos(start);
         Goal requestedGoal = goal;
         long generation = ++pathCalculationGeneration;
-        AbstractNodeCostSearch pathfinder = createPathfinder(start, requestedGoal,
-                current == null ? null : current.getPath(),
-                context);
+        AbstractNodeCostSearch pathfinder;
+        try {
+            pathfinder = createPathfinder(start, requestedGoal,
+                    current == null ? null : current.getPath(),
+                    context);
+        } catch (Throwable t) {
+            return;
+        }
         if (!Objects.equals(pathfinder.getGoal(), goal)) { // will return the exact same object if simplification didn't
                                                            // happen
             logDebug("Simplifying " + goal.getClass() + " to GoalXZ due to distance");
@@ -1331,15 +1378,25 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                 logDebug("Starting to search for path from " + start + " to " + goal);
             }
 
-            PathCalculationResult calcResult = profile
-                    ? com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.parkour.ParkourDebugLog.profile(
-                            "kind=graph id=graph-" + generation, submitted,
-                            () -> pathfinder.calculate(primaryTimeout, failureTimeout))
-                    : pathfinder.calculate(primaryTimeout, failureTimeout);
+            PathCalculationResult calcResult;
+            try {
+                calcResult = profile
+                        ? com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.parkour.ParkourDebugLog.profile(
+                                "kind=graph id=graph-" + generation, submitted,
+                                () -> pathfinder.calculate(primaryTimeout, failureTimeout))
+                        : pathfinder.calculate(primaryTimeout, failureTimeout);
+            } catch (Throwable t) {
+                synchronized (pathCalcLock) { if (inProgress == pathfinder) inProgress = null; }
+                return;
+            }
             synchronized (pathPlanLock) {
                 synchronized (pathCalcLock) {
                     if (generation != pathCalculationGeneration || inProgress != pathfinder
                             || !Objects.equals(this.goal, requestedGoal)) {
+                        mythos$dbg("calc finished DROPPED gen=%d!=%d inProg=%s goal=%s vs req=%s",
+                                generation, pathCalculationGeneration,
+                                inProgress == pathfinder ? "same" : String.valueOf(inProgress),
+                                this.goal, requestedGoal);
                         if (inProgress == pathfinder) {
                             inProgress = null;
                         }
@@ -1358,8 +1415,13 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                         if (executor.get().getPath().positions().contains(requestedStart)) {
                             queuePathEvent(PathEvent.CALC_FINISHED_NOW_EXECUTING);
                             current = executor.get();
+                            mythos$dbg("calc finished ADOPTED executor=%s src=%s len=%d",
+                                    Integer.toHexString(System.identityHashCode(current)),
+                                    requestedStart, current.getPath().length());
                             resetEstimatedTicksToGoal(start);
                         } else {
+                            mythos$dbg("calc finished ORPHAN src=%s not in path src=%s",
+                                    requestedStart, executor.get().getPath().getSrc());
                             logDebug("Warning: discarding orphan path segment with incorrect start");
                         }
                     } else {

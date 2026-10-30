@@ -56,7 +56,7 @@
     "mythosscript": {
       "command": "python",
       "args": [
-        "E:/我的世界脚本/MythosScript/skills/mythosscript-mcp/scripts/client.py",
+        "E:/MythosScript/MythosScript/skills/mythosscript-mcp/scripts/client.py",
         "--auto-discover",
         "stdio"
       ]

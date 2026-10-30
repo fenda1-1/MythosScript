@@ -45,6 +45,7 @@ gui.point_picker.title.radius=中心与半径取点
 gui.point_picker.title.returns=回归点取点
 gui.point_picker.navigation.start=已开启寻路选点：WASD移动镜头，空格上升，潜行下降；左键或右键选择准星高亮目标，再次点击菜单按钮或按绑定快捷键关闭。
 gui.point_picker.navigation.selected=已开始寻路至 %s, %s, %s；可继续选点或自由观察本体。
+gui.point_picker.navigation.error.no_baritone=当前玩家没有可用的寻路控制器。
 gui.point_picker.navigation.goal=寻路目标
 gui.point_picker.navigation.busy=请先完成或取消当前取点。
 gui.point_picker.start.area=开始范围取点：左键选择点1，右键选择点2，中键确认，Esc取消。

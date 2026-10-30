@@ -98,7 +98,7 @@ public final class InputTimelineManager {
     }
 
     public static synchronized void recordKeyPress(int keyCode) {
-        if (!PacketCaptureHandler.isCapturing) {
+        if (!PacketCaptureHandler.isCapturingForeground()) {
             return;
         }
         if (keyCode <= 0) {
@@ -111,7 +111,7 @@ public final class InputTimelineManager {
     }
 
     public static synchronized void recordMouseClick(int button) {
-        if (!PacketCaptureHandler.isCapturing) {
+        if (!PacketCaptureHandler.isCapturingForeground()) {
             return;
         }
         String detail;

@@ -9,6 +9,7 @@ import com.mythos.mythosScriptMod.gui.modern.keybind.KeybindModernRoutes;
 import com.mythos.mythosScriptMod.gui.modern.nonmanagement.ModernNonManagementRoutes;
 import com.mythos.mythosScriptMod.gui.modern.packet.PacketModernRoutes;
 import com.mythos.mythosScriptMod.gui.modern.path.ModernPathRoutes;
+import com.mythos.mythosScriptMod.gui.modern.plugin.ModernPluginCenterTab;
 import com.mythos.mythosScriptMod.gui.modern.profile.ProfileModernRoutes;
 import com.mythos.mythosScriptMod.gui.modern.rules.RulesModernRoutes;
 import com.mythos.mythosScriptMod.gui.modern.utilities.ModernUtilityRoutes;
@@ -60,6 +61,9 @@ public final class ModernTabCatalog {
         register(registry, "toggle_kill_aura", "gui.modern.tabcat.u008", factory(new TabCreator() {
             @Override public ModernSettingsTab create() { return ModernKillAuraSettingsTab.create(); }
         }));
+        register(registry, "plugin_center", "gui.modern.plugin.title", factory(new TabCreator() {
+            @Override public ModernSettingsTab create() { return new ModernPluginCenterTab(); }
+        }));
         registerMissing(registry, RulesModernRoutes.routes());
         registerMissing(registry, PacketModernRoutes.routes());
         registerMissing(registry, ProfileModernRoutes.routes());
@@ -69,7 +73,32 @@ public final class ModernTabCatalog {
         registerMissing(registry, ModernUtilityRoutes.routes());
         registerMissing(registry, ModernWorldRoutes.routes());
         registerMissing(registry, ModernNonManagementRoutes.routes());
+        registerPluginTabs(registry);
         return registry;
+    }
+
+    /**
+     * Appends tabs contributed by running plugins.
+     *
+     * <p>A plugin route never replaces a built-in one: the registry is asked first,
+     * so a plugin that picks a colliding name simply does not get a tab. Failing
+     * loudly here would turn a naming mistake into a broken main window.</p>
+     *
+     * <p>Idempotent: calling it again after more plugins loaded only adds what is
+     * still missing, which is what lets an open screen pick up a hot-loaded plugin.</p>
+     */
+    public static void registerPluginTabs(ModernTabRegistry registry) {
+        for (com.mythos.mythosScriptMod.gui.modern.plugin.PluginLoader.TabRegistration tab
+                : com.mythos.mythosScriptMod.gui.modern.plugin.PluginLoader.tabs()) {
+            if (registry.find(tab.command) != null) {
+                continue;
+            }
+            registry.register(new ModernTabDescriptor(tab.command, tab.title, new ModernTabFactory() {
+                @Override public ModernSettingsTab create(Minecraft mc, ModernScreenContext context) {
+                    return tab.factory.create();
+                }
+            }));
+        }
     }
 
     private interface TabCreator {

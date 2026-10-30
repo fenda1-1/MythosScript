@@ -187,13 +187,6 @@ public final class ModernMainLayout {
             this.gap = gap;
         }
 
-        public Rect cardAt(int index, int scrollOffset) {
-            int safeIndex = Math.max(0, index);
-            int column = safeIndex % columns;
-            int row = safeIndex / columns;
-            return new Rect(bounds.x + column * (cardWidth + gap),
-                    bounds.y + row * (cardHeight + gap) - Math.max(0, scrollOffset), cardWidth, cardHeight);
-        }
 
         public int contentHeight(int itemCount) {
             int rows = Math.max(1, (Math.max(0, itemCount) + columns - 1) / columns);

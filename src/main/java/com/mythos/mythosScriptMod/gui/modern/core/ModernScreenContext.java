@@ -40,13 +40,7 @@ public final class ModernScreenContext {
         return minecraft;
     }
 
-    public int getScreenWidth() {
-        return screenWidth;
-    }
 
-    public int getScreenHeight() {
-        return screenHeight;
-    }
 
     public ModernMainLayout.Rect getContentBounds() {
         return contentBounds;
@@ -56,9 +50,6 @@ public final class ModernScreenContext {
         return command;
     }
 
-    public String getStatusMessage() {
-        return statusMessage;
-    }
 
     public Consumer<String> getRouteRequest() {
         return routeRequest;

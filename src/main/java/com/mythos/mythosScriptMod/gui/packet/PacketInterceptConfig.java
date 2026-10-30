@@ -99,11 +99,6 @@ public class PacketInterceptConfig {
         }
     }
 
-    private static InterceptRule createBuiltinSmartCopyRule(boolean enabled) {
-        InterceptRule rule = new InterceptRule();
-        applyBuiltinSmartCopyRule(rule, enabled);
-        return rule;
-    }
 
     public static void applyBuiltinSmartCopyRule(InterceptRule rule, boolean enabled) {
         rule.name = BUILTIN_SMART_COPY_RULE_NAME;

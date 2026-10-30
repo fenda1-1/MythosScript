@@ -200,12 +200,15 @@ public final class ModernHudPositionSettingsTab implements ModernSettingsTab {
                 ModernUiRenderer.TEXT, Math.max(1, bounds.width - 12));
     }
 
+    // HUD positions live in the in-game HUD's coordinate space, not the locked UI scale
     private int screenWidth() {
-        return minecraft == null ? 1 : new ScaledResolution(minecraft).getScaledWidth();
+        return minecraft == null ? 1
+                : com.mythos.mythosScriptMod.gui.GuiScaleLock.userScaledResolution(minecraft).getScaledWidth();
     }
 
     private int screenHeight() {
-        return minecraft == null ? 1 : new ScaledResolution(minecraft).getScaledHeight();
+        return minecraft == null ? 1
+                : com.mythos.mythosScriptMod.gui.GuiScaleLock.userScaledResolution(minecraft).getScaledHeight();
     }
 
     private static int clamp(int value, int min, int max) {

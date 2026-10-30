@@ -457,31 +457,6 @@ public class CapturedIdRuleManager {
         return capturedRecaptureVersions.getOrDefault(resolvedKey, 0L);
     }
 
-    public static List<DisplayEntry> getDisplayEntries() {
-        initialize();
-        List<DisplayEntry> result = new ArrayList<>();
-        Set<String> rendered = new LinkedHashSet<>();
-
-        for (CaptureRule rule : rules) {
-            if (rule == null || isBlank(rule.name)) {
-                continue;
-            }
-            String key = canonicalKey(rule.name);
-            if (!rendered.add(key)) {
-                continue;
-            }
-            String displayName = isBlank(rule.displayName) ? rule.name : rule.displayName;
-            result.add(new DisplayEntry(key, displayName, getCapturedIdHex(key)));
-        }
-
-        for (String key : capturedValues.keySet()) {
-            if (!rendered.contains(key)) {
-                result.add(new DisplayEntry(key, key, getCapturedIdHex(key)));
-            }
-        }
-
-        return result;
-    }
 
     public static List<RuleCard> getRuleCards() {
         initialize();

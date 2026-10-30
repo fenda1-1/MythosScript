@@ -203,7 +203,7 @@ public class OverlayGuiHandler {
 
                 if (dungeonWarehouseShiftClickButton == null) {
                     dungeonWarehouseShiftClickButton = new ToggleGuiButton(9005, 0, 0, 0, 0, "",
-                            DungeonWarehouseHandler.settings.shiftClickEnabled);
+                            DungeonWarehouseHandler.cfg().settings.shiftClickEnabled);
                 }
                 dungeonWarehouseShiftClickButton.x = controlX;
                 dungeonWarehouseShiftClickButton.y = currentY;
@@ -211,16 +211,16 @@ public class OverlayGuiHandler {
                 dungeonWarehouseShiftClickButton.height = 20;
                 dungeonWarehouseShiftClickButton.displayString = I18n.format("gui.dungeon_warehouse.shift_click")
                         + ": "
-                        + (DungeonWarehouseHandler.settings.shiftClickEnabled ? I18n.format("gui.common.enabled")
+                        + (DungeonWarehouseHandler.cfg().settings.shiftClickEnabled ? I18n.format("gui.common.enabled")
                                 : I18n.format("gui.common.disabled"));
-                dungeonWarehouseShiftClickButton.setEnabledState(DungeonWarehouseHandler.settings.shiftClickEnabled);
+                dungeonWarehouseShiftClickButton.setEnabledState(DungeonWarehouseHandler.cfg().settings.shiftClickEnabled);
                 dungeonWarehouseShiftClickButton.drawButton(mc, event.getMouseX(), event.getMouseY(),
                         event.getRenderPartialTicks());
                 currentY += 22;
 
                 if (dungeonWarehouseCtrlClickButton == null) {
                     dungeonWarehouseCtrlClickButton = new ToggleGuiButton(9006, 0, 0, 0, 0, "",
-                            DungeonWarehouseHandler.settings.ctrlClickEnabled);
+                            DungeonWarehouseHandler.cfg().settings.ctrlClickEnabled);
                 }
                 dungeonWarehouseCtrlClickButton.x = controlX;
                 dungeonWarehouseCtrlClickButton.y = currentY;
@@ -228,9 +228,9 @@ public class OverlayGuiHandler {
                 dungeonWarehouseCtrlClickButton.height = 20;
                 dungeonWarehouseCtrlClickButton.displayString = I18n.format("gui.dungeon_warehouse.ctrl_click")
                         + ": "
-                        + (DungeonWarehouseHandler.settings.ctrlClickEnabled ? I18n.format("gui.common.enabled")
+                        + (DungeonWarehouseHandler.cfg().settings.ctrlClickEnabled ? I18n.format("gui.common.enabled")
                                 : I18n.format("gui.common.disabled"));
-                dungeonWarehouseCtrlClickButton.setEnabledState(DungeonWarehouseHandler.settings.ctrlClickEnabled);
+                dungeonWarehouseCtrlClickButton.setEnabledState(DungeonWarehouseHandler.cfg().settings.ctrlClickEnabled);
                 dungeonWarehouseCtrlClickButton.drawButton(mc, event.getMouseX(), event.getMouseY(),
                         event.getRenderPartialTicks());
                 currentY += 22;
@@ -240,7 +240,7 @@ public class OverlayGuiHandler {
                 if (dungeonWarehouseIntervalField == null) {
                     dungeonWarehouseIntervalField = new GuiTextField(9007, mc.fontRenderer, 0, 0, 50, 20);
                     dungeonWarehouseIntervalField
-                            .setText(String.valueOf(DungeonWarehouseHandler.settings.clickIntervalMs));
+                            .setText(String.valueOf(DungeonWarehouseHandler.cfg().settings.clickIntervalMs));
                     dungeonWarehouseIntervalField.setEnableBackgroundDrawing(false);
                     dungeonWarehouseIntervalField.setMaxStringLength(6);
                 }
@@ -402,14 +402,14 @@ public class OverlayGuiHandler {
             if (DungeonWarehouseHandler.isDungeonWarehouseGui(gui)) {
                 if (dungeonWarehouseShiftClickButton != null
                         && dungeonWarehouseShiftClickButton.mousePressed(mc, mouseX, mouseY)) {
-                    DungeonWarehouseHandler.settings.shiftClickEnabled = !DungeonWarehouseHandler.settings.shiftClickEnabled;
+                    DungeonWarehouseHandler.cfg().settings.shiftClickEnabled = !DungeonWarehouseHandler.cfg().settings.shiftClickEnabled;
                     DungeonWarehouseHandler.saveConfig();
                     event.setCanceled(true);
                     return;
                 }
                 if (dungeonWarehouseCtrlClickButton != null
                         && dungeonWarehouseCtrlClickButton.mousePressed(mc, mouseX, mouseY)) {
-                    DungeonWarehouseHandler.settings.ctrlClickEnabled = !DungeonWarehouseHandler.settings.ctrlClickEnabled;
+                    DungeonWarehouseHandler.cfg().settings.ctrlClickEnabled = !DungeonWarehouseHandler.cfg().settings.ctrlClickEnabled;
                     DungeonWarehouseHandler.saveConfig();
                     event.setCanceled(true);
                     return;
@@ -424,8 +424,8 @@ public class OverlayGuiHandler {
                     boolean isShift = GuiScreen.isShiftKeyDown();
                     boolean isCtrl = GuiScreen.isCtrlKeyDown();
 
-                    boolean shouldHandle = (isCtrl && DungeonWarehouseHandler.settings.ctrlClickEnabled) ||
-                            (isShift && DungeonWarehouseHandler.settings.shiftClickEnabled
+                    boolean shouldHandle = (isCtrl && DungeonWarehouseHandler.cfg().settings.ctrlClickEnabled) ||
+                            (isShift && DungeonWarehouseHandler.cfg().settings.shiftClickEnabled
                                     && slot.inventory == mc.player.inventory);
 
                     if (shouldHandle) {
@@ -533,7 +533,7 @@ public class OverlayGuiHandler {
                     if (dungeonWarehouseIntervalField.textboxKeyTyped(typedChar, keyCode)) {
                         try {
                             int interval = Integer.parseInt(dungeonWarehouseIntervalField.getText());
-                            DungeonWarehouseHandler.settings.clickIntervalMs = Math.max(100, interval);
+                            DungeonWarehouseHandler.cfg().settings.clickIntervalMs = Math.max(100, interval);
                             DungeonWarehouseHandler.saveConfig();
                         } catch (NumberFormatException ignored) {
                         }

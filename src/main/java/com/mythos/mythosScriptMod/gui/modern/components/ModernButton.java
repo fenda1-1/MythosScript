@@ -27,15 +27,7 @@ public final class ModernButton implements ModernComponent {
         return this;
     }
 
-    public ModernButton setPrimary(boolean primary) {
-        this.primary = primary;
-        return this;
-    }
 
-    public ModernButton setAction(Runnable action) {
-        this.action = action;
-        return this;
-    }
 
     @Override
     public void layout(ModernMainLayout.Rect bounds) {

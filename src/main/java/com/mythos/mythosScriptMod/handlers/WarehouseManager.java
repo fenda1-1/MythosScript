@@ -33,20 +33,50 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class WarehouseManager {
+
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        private final List<String> categories = new CopyOnWriteArrayList<>();
+        public List<Warehouse> warehouses = new CopyOnWriteArrayList<>();
+        public Warehouse currentWarehouse = null;
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) WarehouseManager::loadWarehouses);
+            return config;
+        }
+    }
+
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final String CATEGORY_DEFAULT = "默认";
-    private static final List<String> categories = new CopyOnWriteArrayList<>();
-    public static List<Warehouse> warehouses = new CopyOnWriteArrayList<>();
-    public static Warehouse currentWarehouse = null;
 
     private static Path getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("warehouses.json");
+        return ProfileManager.currentConfigFile("warehouses.json");
     }
 
     public static synchronized void loadWarehouses() {
         Path configFile = getConfigFile();
-        categories.clear();
+        cfg().categories.clear();
         if (Files.exists(configFile)) {
             try (BufferedReader reader = Files.newBufferedReader(configFile, StandardCharsets.UTF_8)) {
                 com.google.gson.JsonElement parsed = new com.google.gson.JsonParser().parse(reader);
@@ -55,29 +85,29 @@ public class WarehouseManager {
                     if (root.has("categories") && root.get("categories").isJsonArray()) {
                         for (com.google.gson.JsonElement element : root.getAsJsonArray("categories")) {
                             if (element != null && element.isJsonPrimitive()) {
-                                categories.add(element.getAsString());
+                                cfg().categories.add(element.getAsString());
                             }
                         }
                     }
                     if (root.has("warehouses") && root.get("warehouses").isJsonArray()) {
                         Type listType = new TypeToken<CopyOnWriteArrayList<Warehouse>>() {
                         }.getType();
-                        warehouses = GSON.fromJson(root.get("warehouses"), listType);
+                        cfg().warehouses = GSON.fromJson(root.get("warehouses"), listType);
                     } else {
-                        warehouses = new CopyOnWriteArrayList<>();
+                        cfg().warehouses = new CopyOnWriteArrayList<>();
                     }
                 } else if (parsed != null && parsed.isJsonArray()) {
                     Type listType = new TypeToken<CopyOnWriteArrayList<Warehouse>>() {
                     }.getType();
-                    warehouses = GSON.fromJson(parsed, listType);
+                    cfg().warehouses = GSON.fromJson(parsed, listType);
                 } else {
-                    warehouses = new CopyOnWriteArrayList<>();
+                    cfg().warehouses = new CopyOnWriteArrayList<>();
                 }
 
-                if (warehouses == null) {
-                    warehouses = new CopyOnWriteArrayList<>();
+                if (cfg().warehouses == null) {
+                    cfg().warehouses = new CopyOnWriteArrayList<>();
                 }
-                for (Warehouse warehouse : warehouses) {
+                for (Warehouse warehouse : cfg().warehouses) {
                     if (warehouse == null) {
                         continue;
                     }
@@ -86,10 +116,10 @@ public class WarehouseManager {
                 }
             } catch (Exception e) {
                 mythosScriptMod.LOGGER.error(I18n.format("log.warehouse.load_failed"), e);
-                warehouses = new CopyOnWriteArrayList<>();
+                cfg().warehouses = new CopyOnWriteArrayList<>();
             }
         } else {
-            warehouses = new CopyOnWriteArrayList<>();
+            cfg().warehouses = new CopyOnWriteArrayList<>();
         }
         ensureCategoriesSynced();
     }
@@ -101,8 +131,8 @@ public class WarehouseManager {
             Files.createDirectories(configFile.getParent());
             try (BufferedWriter writer = Files.newBufferedWriter(configFile, StandardCharsets.UTF_8)) {
                 com.google.gson.JsonObject root = new com.google.gson.JsonObject();
-                root.add("categories", GSON.toJsonTree(new ArrayList<>(categories)));
-                root.add("warehouses", GSON.toJsonTree(warehouses));
+                root.add("categories", GSON.toJsonTree(new ArrayList<>(cfg().categories)));
+                root.add("warehouses", GSON.toJsonTree(cfg().warehouses));
                 GSON.toJson(root, writer);
             }
         } catch (Exception e) {
@@ -117,10 +147,10 @@ public class WarehouseManager {
 
     private static void ensureCategoriesSynced() {
         LinkedHashSet<String> normalized = new LinkedHashSet<>();
-        for (String category : categories) {
+        for (String category : cfg().categories) {
             normalized.add(normalizeCategory(category));
         }
-        for (Warehouse warehouse : warehouses) {
+        for (Warehouse warehouse : cfg().warehouses) {
             if (warehouse == null) {
                 continue;
             }
@@ -130,12 +160,12 @@ public class WarehouseManager {
         if (normalized.isEmpty()) {
             normalized.add(CATEGORY_DEFAULT);
         }
-        categories.clear();
-        categories.addAll(normalized);
+        cfg().categories.clear();
+        cfg().categories.addAll(normalized);
     }
 
     private static boolean containsCategoryIgnoreCase(String category) {
-        for (String existing : categories) {
+        for (String existing : cfg().categories) {
             if (normalizeCategory(existing).equalsIgnoreCase(normalizeCategory(category))) {
                 return true;
             }
@@ -144,9 +174,9 @@ public class WarehouseManager {
     }
 
     private static boolean removeCategoryIgnoreCase(String category) {
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
-                categories.remove(i);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
+                cfg().categories.remove(i);
                 return true;
             }
         }
@@ -155,7 +185,7 @@ public class WarehouseManager {
 
     public static synchronized List<String> getCategoriesSnapshot() {
         ensureCategoriesSynced();
-        return new ArrayList<>(categories);
+        return new ArrayList<>(cfg().categories);
     }
 
     public static synchronized boolean addCategory(String category) {
@@ -164,7 +194,7 @@ public class WarehouseManager {
         if (containsCategoryIgnoreCase(normalized)) {
             return false;
         }
-        categories.add(normalized);
+        cfg().categories.add(normalized);
         saveWarehouses();
         return true;
     }
@@ -182,15 +212,15 @@ public class WarehouseManager {
         }
 
         boolean changed = false;
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizedOld)) {
-                categories.set(i, normalizedNew);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizedOld)) {
+                cfg().categories.set(i, normalizedNew);
                 changed = true;
                 break;
             }
         }
 
-        for (Warehouse warehouse : warehouses) {
+        for (Warehouse warehouse : cfg().warehouses) {
             if (warehouse != null && normalizeCategory(warehouse.category).equalsIgnoreCase(normalizedOld)) {
                 warehouse.category = normalizedNew;
                 changed = true;
@@ -211,7 +241,7 @@ public class WarehouseManager {
         ensureCategoriesSynced();
 
         boolean changed = removeCategoryIgnoreCase(normalized);
-        for (Warehouse warehouse : warehouses) {
+        for (Warehouse warehouse : cfg().warehouses) {
             if (warehouse != null && normalizeCategory(warehouse.category).equalsIgnoreCase(normalized)) {
                 warehouse.category = CATEGORY_DEFAULT;
                 changed = true;
@@ -229,22 +259,22 @@ public class WarehouseManager {
 
     public static void updateCurrentWarehouse() {
         if (mc.player == null) {
-            currentWarehouse = null;
+            cfg().currentWarehouse = null;
             return;
         }
-        for (Warehouse warehouse : warehouses) {
+        for (Warehouse warehouse : cfg().warehouses) {
             if (warehouse.isActive && warehouse.isPlayerInside(mc.player.posX, mc.player.posZ)) {
-                if (currentWarehouse != warehouse) {
-                    currentWarehouse = warehouse;
+                if (cfg().currentWarehouse != warehouse) {
+                    cfg().currentWarehouse = warehouse;
                     mythosScriptMod.LOGGER.info(I18n.format("log.warehouse.enter_area"), warehouse.name);
                     checkBrokenChests(warehouse);
                 }
                 return;
             }
         }
-        if (currentWarehouse != null) {
-            mythosScriptMod.LOGGER.info(I18n.format("log.warehouse.leave_area"), currentWarehouse.name);
-            currentWarehouse = null;
+        if (cfg().currentWarehouse != null) {
+            mythosScriptMod.LOGGER.info(I18n.format("log.warehouse.leave_area"), cfg().currentWarehouse.name);
+            cfg().currentWarehouse = null;
         }
     }
 
@@ -255,7 +285,7 @@ public class WarehouseManager {
         }
 
         Warehouse targetWarehouse = null;
-        for (Warehouse warehouse : warehouses) {
+        for (Warehouse warehouse : cfg().warehouses) {
             if (warehouse.isPosInside(pos)) {
                 targetWarehouse = warehouse;
                 break;
@@ -287,7 +317,7 @@ public class WarehouseManager {
     }
 
     public static Warehouse findWarehouseForPos(BlockPos pos) {
-        for (Warehouse warehouse : warehouses) {
+        for (Warehouse warehouse : cfg().warehouses) {
             if (warehouse.isPosInside(pos)) {
                 return warehouse;
             }

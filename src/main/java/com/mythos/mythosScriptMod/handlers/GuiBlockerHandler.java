@@ -18,8 +18,8 @@ public class GuiBlockerHandler {
         int effectiveCount = Math.max(1, count);
         remainingBlockCount += effectiveCount;
 
-        if (Minecraft.getMinecraft().player != null) {
-            Minecraft.getMinecraft().player.sendMessage(
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(
                     new TextComponentString(I18n.format("msg.gui_blocker.enabled", remainingBlockCount)));
         }
         mythosScriptMod.LOGGER.info(I18n.format("log.gui_blocker.enabled"), effectiveCount, remainingBlockCount);
@@ -38,8 +38,8 @@ public class GuiBlockerHandler {
         mythosScriptMod.LOGGER.info(I18n.format("log.gui_blocker.blocked"), gui.getClass().getName(),
                 remainingBlockCount);
 
-        if (Minecraft.getMinecraft().player != null) {
-            Minecraft.getMinecraft().player.sendMessage(
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(
                     new TextComponentString(I18n.format("msg.gui_blocker.blocked", remainingBlockCount)));
         }
 

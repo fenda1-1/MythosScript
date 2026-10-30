@@ -534,13 +534,6 @@ public final class ActionParameterVariableResolver {
         return scope + "." + tail.substring(0, end);
     }
 
-    private static String buildCanonicalReference(String scopeKey, String baseVariableName) {
-        String normalizedBaseName = safe(baseVariableName).trim();
-        if (normalizedBaseName.isEmpty()) {
-            return "";
-        }
-        return normalizeScopeToken(scopeKey) + "." + normalizedBaseName;
-    }
 
     private static String normalizeScopeToken(String rawScope) {
         String normalized = safe(rawScope).trim().toLowerCase(Locale.ROOT);

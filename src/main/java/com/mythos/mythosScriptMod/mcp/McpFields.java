@@ -10,19 +10,21 @@ public final class McpFields {
     private McpFields() {}
     public static List<Field> fields(Class<?> type) {
         List<Field> result = new ArrayList<>();
-        for (Field f : type.getFields()) {
-            int m = f.getModifiers();
-            if (Modifier.isStatic(m) && !Modifier.isFinal(m) && !f.isSynthetic()
-                    && (f.getType().isPrimitive() || f.getType() == String.class
-                        || f.getType().isEnum() || Collection.class.isAssignableFrom(f.getType())
-                        || Map.class.isAssignableFrom(f.getType()))) result.add(f);
-        }
+        Class<?> holder = holderType(type);
+        for (Field f : type.getFields()) if (Modifier.isStatic(f.getModifiers()) && writable(f)) result.add(f);
+        if (holder != null) for (Field f : holder.getFields()) if (!Modifier.isStatic(f.getModifiers()) && writable(f)) result.add(f);
         result.sort(Comparator.comparing(Field::getName));
         return result;
     }
+    private static boolean writable(Field f) {
+        return !Modifier.isFinal(f.getModifiers()) && !f.isSynthetic()
+                && (f.getType().isPrimitive() || f.getType() == String.class
+                    || f.getType().isEnum() || Collection.class.isAssignableFrom(f.getType())
+                    || Map.class.isAssignableFrom(f.getType()));
+    }
     public static JsonObject snapshot(Class<?> type) {
         JsonObject values = new JsonObject();
-        for (Field f : fields(type)) try { values.add(f.getName(), GSON.toJsonTree(f.get(null), f.getGenericType())); }
+        for (Field f : fields(type)) try { values.add(f.getName(), GSON.toJsonTree(f.get(target(f)), f.getGenericType())); }
         catch (IllegalAccessException e) { throw new IllegalStateException(e); }
         return values;
     }
@@ -35,7 +37,12 @@ public final class McpFields {
             if (f == null) throw new IllegalArgumentException("Unknown writable field: " + e.getKey());
             JsonElement v = e.getValue();
             Class<?> t = f.getType();
-            if (v.isJsonNull()) throw new IllegalArgumentException("Null is not supported: " + f.getName());
+            if (v.isJsonNull()) {
+                // snapshot() may store null for uninitialized String/collection fields; restore them as null.
+                if (t.isPrimitive()) throw new IllegalArgumentException("Null is not supported: " + f.getName());
+                decoded.put(f, null);
+                continue;
+            }
             if ((t == boolean.class && (!v.isJsonPrimitive() || !v.getAsJsonPrimitive().isBoolean()))
                     || (t == String.class && (!v.isJsonPrimitive() || !v.getAsJsonPrimitive().isString())))
                 throw new IllegalArgumentException("Wrong type for " + f.getName());
@@ -54,8 +61,24 @@ public final class McpFields {
         return decoded;
     }
     public static void apply(Map<Field, Object> values) {
-        for (Map.Entry<Field, Object> e : values.entrySet()) try { e.getKey().set(null, e.getValue()); }
+        for (Map.Entry<Field, Object> e : values.entrySet()) try { e.getKey().set(target(e.getKey()), e.getValue()); }
         catch (IllegalAccessException ex) { throw new IllegalStateException(ex); }
+    }
+    // 配置改成按会话（owner）存的实例字段后，模块名仍是外层类，字段读写落到当前会话的配置对象上：
+    // 杀戮光环是 KillAuraHandler.AuraConfig，其余模块是各自的 OwnerConfig，都由外层的 static cfg() 取得。
+    private static Class<?> holderType(Class<?> type) {
+        for (Class<?> nested : type.getDeclaredClasses()) {
+            if (nested.getSimpleName().equals("AuraConfig") || nested.getSimpleName().equals("OwnerConfig")) return nested;
+        }
+        return null;
+    }
+    private static Object target(Field f) {
+        if (Modifier.isStatic(f.getModifiers())) return null;
+        try {
+            return f.getDeclaringClass().getEnclosingClass().getMethod("cfg").invoke(null);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
     }
     public static JsonArray describe(Class<?> type) {
         JsonArray result = new JsonArray();

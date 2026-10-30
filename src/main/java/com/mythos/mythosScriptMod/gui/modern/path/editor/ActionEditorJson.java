@@ -73,12 +73,6 @@ public final class ActionEditorJson {
         }
     }
 
-    public static void writeInt(JsonObject params, String key, int value) {
-        if (params == null || key == null) {
-            return;
-        }
-        params.addProperty(key, value);
-    }
 
     public static String readString(JsonObject params, String key, String fallback) {
         if (params == null || !params.has(key) || !params.get(key).isJsonPrimitive()) {
@@ -92,16 +86,6 @@ public final class ActionEditorJson {
         }
     }
 
-    public static boolean readBoolean(JsonObject params, String key, boolean fallback) {
-        if (params == null || !params.has(key) || !params.get(key).isJsonPrimitive()) {
-            return fallback;
-        }
-        try {
-            return params.get(key).getAsBoolean();
-        } catch (Exception ignored) {
-            return fallback;
-        }
-    }
 
     public static List<Integer> readSortedSlots(JsonObject params, String key) {
         Set<Integer> unique = new LinkedHashSet<Integer>();
@@ -221,57 +205,7 @@ public final class ActionEditorJson {
         entry.addProperty(key, value);
     }
 
-    public static String validateSlotLimits(JsonObject params) {
-        if (params == null || !params.has("slotLimits")) {
-            return "";
-        }
-        if (!params.get("slotLimits").isJsonObject()) {
-            return "gui.modern.path.json.u001";
-        }
-        JsonObject slotLimits = params.getAsJsonObject("slotLimits");
-        for (String region : new String[] { "inventory", "chest" }) {
-            if (!slotLimits.has(region)) {
-                continue;
-            }
-            if (!slotLimits.get(region).isJsonObject()) {
-                return tr("gui.modern.path.json.fmt.region_obj", region);
-            }
-            JsonObject regionObject = slotLimits.getAsJsonObject(region);
-            for (java.util.Map.Entry<String, JsonElement> entry : regionObject.entrySet()) {
-                if (entry.getValue() == null || !entry.getValue().isJsonObject()) {
-                    return tr("gui.modern.path.json.fmt.entry_obj", region, entry.getKey());
-                }
-                JsonObject limits = entry.getValue().getAsJsonObject();
-                String takeError = validateLimitValue(limits, "maxTake");
-                if (!takeError.isEmpty()) {
-                    return takeError;
-                }
-                String putError = validateLimitValue(limits, "maxPut");
-                if (!putError.isEmpty()) {
-                    return putError;
-                }
-            }
-        }
-        return "";
-    }
 
-    private static String validateLimitValue(JsonObject limits, String key) {
-        if (limits == null || !limits.has(key) || limits.get(key).isJsonNull()) {
-            return "";
-        }
-        if (!limits.get(key).isJsonPrimitive()) {
-            return tr("gui.modern.path.json.fmt.int", key);
-        }
-        try {
-            int value = limits.get(key).getAsInt();
-            if (value < 0) {
-                return tr("gui.modern.path.json.fmt.negative", key);
-            }
-        } catch (Exception ignored) {
-            return tr("gui.modern.path.json.fmt.int", key);
-        }
-        return "";
-    }
 
     public static void canonicalizeMoveChestActions(List<PathSequence> sequences) {
         if (sequences == null) {
@@ -341,34 +275,7 @@ public final class ActionEditorJson {
         return "";
     }
 
-    public static List<String> readLines(String text) {
-        List<String> lines = new ArrayList<String>();
-        if (text == null || text.isEmpty()) {
-            return lines;
-        }
-        String[] tokens = text.split("\\r?\\n", -1);
-        for (String token : tokens) {
-            lines.add(token);
-        }
-        while (!lines.isEmpty() && lines.get(lines.size() - 1).isEmpty()) {
-            lines.remove(lines.size() - 1);
-        }
-        return lines;
-    }
 
-    public static String writeLines(List<String> lines) {
-        if (lines == null || lines.isEmpty()) {
-            return "";
-        }
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < lines.size(); i++) {
-            if (i > 0) {
-                builder.append('\n');
-            }
-            builder.append(lines.get(i) == null ? "" : lines.get(i));
-        }
-        return builder.toString();
-    }
 
     public static boolean isMoveChestOwnedKey(String key) {
         if (key == null) {

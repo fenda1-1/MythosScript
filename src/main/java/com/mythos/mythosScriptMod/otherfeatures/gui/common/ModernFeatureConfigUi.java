@@ -35,25 +35,7 @@ public final class ModernFeatureConfigUi {
                 ModernUiRenderer.BORDER_SUBTLE);
     }
 
-    public static void drawInstruction(FontRenderer fontRenderer, List<String> lines, int x, int y, int maxWidth) {
-        if (lines == null) {
-            return;
-        }
-        int lineStep = fontRenderer.FONT_HEIGHT + 2;
-        int currentY = y;
-        for (String line : lines) {
-            ModernUiRenderer.drawText(fontRenderer, line, x, currentY, ModernUiRenderer.SUBTLE_TEXT, maxWidth);
-            currentY += lineStep;
-        }
-    }
 
-    public static void drawStatus(FontRenderer fontRenderer, int x, int y, int width, boolean enabled, String text) {
-        int fill = enabled ? 0xFF19352B : 0xFF30212A;
-        int border = enabled ? 0xFF3B8A68 : 0xFF754254;
-        ModernUiRenderer.drawSubtlePanel(x, y, width, 20, 5, fill, border);
-        ModernUiRenderer.drawStatusDot(x + 8, y + 7, enabled ? ModernUiRenderer.SUCCESS : ModernUiRenderer.ACCENT);
-        ModernUiRenderer.drawText(fontRenderer, text, x + 21, y + 6, ModernUiRenderer.TEXT, Math.max(30, width - 28));
-    }
 
     public static void drawSection(FontRenderer fontRenderer, String title, int x, int y, int width, int height) {
         if (width <= 0 || height <= 0) {

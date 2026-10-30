@@ -19,6 +19,7 @@ package com.mythos.mythosScriptMod.shadowbaritone.launch.mixins;
 
 import com.mythos.mythosScriptMod.shadowbaritone.api.BaritoneAPI;
 import com.mythos.mythosScriptMod.otherfeatures.handler.movement.FreecamFeatureHandler;
+import com.mythos.mythosScriptMod.handlers.TeleportCompanionHandler;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import com.mythos.mythosScriptMod.shadowbaritone.api.IBaritone;
 import com.mythos.mythosScriptMod.shadowbaritone.api.event.events.ChatEvent;
@@ -46,7 +47,8 @@ public class MixinEntityPlayerSP {
     // RenderPlayer hides the local model when it is not the view entity unless isUser is false.
     @Inject(method = "isUser", at = @At("HEAD"), cancellable = true)
     private void mythos$freecamShowBody(CallbackInfoReturnable<Boolean> ci) {
-        if (FreecamFeatureHandler.isBody((EntityPlayerSP) (Object) this)) {
+        if (FreecamFeatureHandler.isBody((EntityPlayerSP) (Object) this)
+                || TeleportCompanionHandler.isBody((EntityPlayerSP) (Object) this)) {
             ci.setReturnValue(false);
         }
     }
@@ -54,7 +56,8 @@ public class MixinEntityPlayerSP {
     // Vanilla otherwise stops sending walking updates when another entity owns the camera.
     @Inject(method = "isCurrentViewEntity", at = @At("HEAD"), cancellable = true)
     private void mythos$freecamKeepBodyUpdates(CallbackInfoReturnable<Boolean> ci) {
-        if (FreecamFeatureHandler.isBody((EntityPlayerSP) (Object) this)) {
+        if (FreecamFeatureHandler.isBody((EntityPlayerSP) (Object) this)
+                || TeleportCompanionHandler.isBody((EntityPlayerSP) (Object) this)) {
             ci.setReturnValue(true);
         }
     }
@@ -86,7 +89,9 @@ public class MixinEntityPlayerSP {
     private boolean isKeyDown(KeyBinding keyBinding) {
         IBaritone baritone = BaritoneAPI.getProvider().getBaritoneForPlayer((EntityPlayerSP) (Object) this);
         if (baritone == null) {
-            return !FreecamFeatureHandler.isBody((EntityPlayerSP) (Object) this) && keyBinding.isKeyDown();
+            return !FreecamFeatureHandler.isBody((EntityPlayerSP) (Object) this)
+                    && !TeleportCompanionHandler.isBody((EntityPlayerSP) (Object) this)
+                    && keyBinding.isKeyDown();
         }
         SprintStateEvent event = new SprintStateEvent();
         baritone.getGameEventHandler().onPlayerSprintState(event);
@@ -97,7 +102,9 @@ public class MixinEntityPlayerSP {
             // hitting control shouldn't make all bots sprint
             return false;
         }
-        return !FreecamFeatureHandler.isBody((EntityPlayerSP) (Object) this) && keyBinding.isKeyDown();
+        return !FreecamFeatureHandler.isBody((EntityPlayerSP) (Object) this)
+                && !TeleportCompanionHandler.isBody((EntityPlayerSP) (Object) this)
+                && keyBinding.isKeyDown();
     }
 
     @Inject(method = "updateRidden", at = @At(value = "HEAD"))

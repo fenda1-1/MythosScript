@@ -29,55 +29,118 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class AutoUseItemHandler {
+
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        public final List<AutoUseItemRule> rules = new CopyOnWriteArrayList<>();
+        private final List<String> categories = new CopyOnWriteArrayList<>();
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) AutoUseItemHandler::loadConfig);
+            return config;
+        }
+    }
+
     public static final AutoUseItemHandler INSTANCE = new AutoUseItemHandler();
 
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    public static boolean globalEnabled = false;
-    public static final List<AutoUseItemRule> rules = new CopyOnWriteArrayList<>();
-    private static final List<String> categories = new CopyOnWriteArrayList<>();
     private static final String CATEGORY_DEFAULT = "默认";
-    private long nextCheckAtMs = 0L;
-    private boolean hotbarUseActionPending = false;
-    private int hotbarUseActionToken = 0;
-    private boolean hotbarUseRestorePending = false;
-    private int hotbarUseRestoreToken = 0;
+
+    private static final ConcurrentHashMap<String, RuntimeState> STATES = new ConcurrentHashMap<>();
+
+    private static RuntimeState rt() {
+        return STATES.computeIfAbsent(com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner(),
+                k -> new RuntimeState());
+    }
+
+    // Per-session runtime state. DelayScheduler pins scheduled tasks to the
+    // owner that scheduled them, so these flags never cross sessions.
+    private static final class RuntimeState {
+        private boolean globalEnabled = false;
+        private long nextCheckAtMs = 0L;
+        private boolean hotbarUseActionPending = false;
+        private int hotbarUseActionToken = 0;
+        private boolean hotbarUseRestorePending = false;
+        private int hotbarUseRestoreToken = 0;
+    }
 
     private AutoUseItemHandler() {
     }
 
+    // ------------------------------------------------------------------
+    // Runtime-switch accessors (boxed RuntimeState fields)
+    // ------------------------------------------------------------------
+
+    public static boolean globalEnabled() { return rt().globalEnabled; }
+
+    public static void setGlobalEnabledSilently(boolean value) { rt().globalEnabled = value; }
+
     private static Path getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("auto_use_item_rules.json");
+        return ProfileManager.currentConfigFile("auto_use_item_rules.json");
+    }
+
+    private static Path getRuntimeConfigFile() {
+        return ProfileManager.getCurrentRuntimeProfileDir().resolve("auto_use_item_rules.json");
     }
 
     public static synchronized void loadConfig() {
         Path configFile = getConfigFile();
-        categories.clear();
+        cfg().categories.clear();
         if (!Files.exists(configFile)) {
-            rules.clear();
+            cfg().rules.clear();
             ensureCategoriesSynced();
             return;
         }
 
         try (BufferedReader reader = Files.newBufferedReader(configFile, StandardCharsets.UTF_8)) {
             JsonObject root = new JsonParser().parse(reader).getAsJsonObject();
-            if (root.has("globalEnabled")) {
-                globalEnabled = root.get("globalEnabled").getAsBoolean();
+            Path runtimeFile = getRuntimeConfigFile();
+            if (Files.exists(runtimeFile)) {
+                try (BufferedReader rr = Files.newBufferedReader(runtimeFile, StandardCharsets.UTF_8)) {
+                    JsonObject rj = new JsonParser().parse(rr).getAsJsonObject();
+                    if (rj.has("globalEnabled")) {
+                        rt().globalEnabled = rj.get("globalEnabled").getAsBoolean();
+                    }
+                }
+            } else if (root.has("globalEnabled")) {
+                rt().globalEnabled = root.get("globalEnabled").getAsBoolean();
             }
 
             if (root.has("categories") && root.get("categories").isJsonArray()) {
                 for (com.google.gson.JsonElement element : root.getAsJsonArray("categories")) {
                     if (element != null && element.isJsonPrimitive()) {
-                        categories.add(element.getAsString());
+                        cfg().categories.add(element.getAsString());
                     }
                 }
             }
 
-            rules.clear();
+            cfg().rules.clear();
             if (root.has("rules")) {
                 Type listType = new TypeToken<ArrayList<AutoUseItemRule>>() {
                 }.getType();
@@ -101,13 +164,13 @@ public class AutoUseItemHandler {
                         rule.restoreDelayTicks = Math.max(0, rule.restoreDelayTicks);
                         rule.category = normalizeCategory(rule.category);
                         rule.lastUseAtMs = 0L;
-                        rules.add(rule);
+                        cfg().rules.add(rule);
                     }
                 }
             }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("无法加载静默使用物品配置", e);
-            rules.clear();
+            cfg().rules.clear();
         }
 
         ensureCategoriesSynced();
@@ -121,10 +184,16 @@ public class AutoUseItemHandler {
             Files.createDirectories(configFile.getParent());
             try (BufferedWriter writer = Files.newBufferedWriter(configFile, StandardCharsets.UTF_8)) {
                 JsonObject root = new JsonObject();
-                root.addProperty("globalEnabled", globalEnabled);
-                root.add("categories", GSON.toJsonTree(new ArrayList<>(categories)));
-                root.add("rules", GSON.toJsonTree(rules));
+                root.add("categories", GSON.toJsonTree(new ArrayList<>(cfg().categories)));
+                root.add("rules", GSON.toJsonTree(cfg().rules));
                 GSON.toJson(root, writer);
+            }
+            Path runtimeFile = getRuntimeConfigFile();
+            Files.createDirectories(runtimeFile.getParent());
+            JsonObject rjson = new JsonObject();
+            rjson.addProperty("globalEnabled", rt().globalEnabled);
+            try (BufferedWriter rw = Files.newBufferedWriter(runtimeFile, StandardCharsets.UTF_8)) {
+                GSON.toJson(rjson, rw);
             }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("无法保存静默使用物品配置", e);
@@ -138,10 +207,10 @@ public class AutoUseItemHandler {
 
     private static void ensureCategoriesSynced() {
         LinkedHashSet<String> normalized = new LinkedHashSet<>();
-        for (String category : categories) {
+        for (String category : cfg().categories) {
             normalized.add(normalizeCategory(category));
         }
-        for (AutoUseItemRule rule : rules) {
+        for (AutoUseItemRule rule : cfg().rules) {
             if (rule == null) {
                 continue;
             }
@@ -151,12 +220,12 @@ public class AutoUseItemHandler {
         if (normalized.isEmpty()) {
             normalized.add(CATEGORY_DEFAULT);
         }
-        categories.clear();
-        categories.addAll(normalized);
+        cfg().categories.clear();
+        cfg().categories.addAll(normalized);
     }
 
     private static boolean containsCategoryIgnoreCase(String category) {
-        for (String existing : categories) {
+        for (String existing : cfg().categories) {
             if (normalizeCategory(existing).equalsIgnoreCase(normalizeCategory(category))) {
                 return true;
             }
@@ -165,9 +234,9 @@ public class AutoUseItemHandler {
     }
 
     private static boolean removeCategoryIgnoreCase(String category) {
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
-                categories.remove(i);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
+                cfg().categories.remove(i);
                 return true;
             }
         }
@@ -176,7 +245,7 @@ public class AutoUseItemHandler {
 
     public static synchronized List<String> getCategoriesSnapshot() {
         ensureCategoriesSynced();
-        return new ArrayList<>(categories);
+        return new ArrayList<>(cfg().categories);
     }
 
     public static synchronized void replaceCategoryOrder(List<String> orderedCategories) {
@@ -187,11 +256,11 @@ public class AutoUseItemHandler {
                 normalized.add(normalizeCategory(category));
             }
         }
-        for (String category : categories) {
+        for (String category : cfg().categories) {
             normalized.add(normalizeCategory(category));
         }
-        categories.clear();
-        categories.addAll(normalized);
+        cfg().categories.clear();
+        cfg().categories.addAll(normalized);
         saveConfig();
     }
 
@@ -201,7 +270,7 @@ public class AutoUseItemHandler {
         if (containsCategoryIgnoreCase(normalized)) {
             return false;
         }
-        categories.add(normalized);
+        cfg().categories.add(normalized);
         saveConfig();
         return true;
     }
@@ -219,15 +288,15 @@ public class AutoUseItemHandler {
         }
 
         boolean changed = false;
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizedOld)) {
-                categories.set(i, normalizedNew);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizedOld)) {
+                cfg().categories.set(i, normalizedNew);
                 changed = true;
                 break;
             }
         }
 
-        for (AutoUseItemRule rule : rules) {
+        for (AutoUseItemRule rule : cfg().rules) {
             if (rule != null && normalizeCategory(rule.category).equalsIgnoreCase(normalizedOld)) {
                 rule.category = normalizedNew;
                 changed = true;
@@ -248,7 +317,7 @@ public class AutoUseItemHandler {
         ensureCategoriesSynced();
 
         boolean changed = removeCategoryIgnoreCase(normalized);
-        for (AutoUseItemRule rule : rules) {
+        for (AutoUseItemRule rule : cfg().rules) {
             if (rule != null && normalizeCategory(rule.category).equalsIgnoreCase(normalized)) {
                 rule.category = CATEGORY_DEFAULT;
                 changed = true;
@@ -265,21 +334,22 @@ public class AutoUseItemHandler {
     }
 
     public void tick() {
-        if (!globalEnabled || mc.player == null || mc.world == null || mc.player.connection == null) {
+        RuntimeState rt = rt();
+        if (!rt.globalEnabled || mc.player == null || mc.world == null || mc.player.connection == null) {
             return;
         }
 
         long now = System.currentTimeMillis();
-        if (isHotbarUseBusy()) {
-            nextCheckAtMs = now + 50L;
+        if (isHotbarUseBusy(rt)) {
+            rt.nextCheckAtMs = now + 50L;
             return;
         }
-        if (now < nextCheckAtMs) {
+        if (now < rt.nextCheckAtMs) {
             return;
         }
 
         int minWaitMs = Integer.MAX_VALUE;
-        for (AutoUseItemRule rule : rules) {
+        for (AutoUseItemRule rule : cfg().rules) {
             if (rule == null || !rule.enabled || rule.name == null || rule.name.trim().isEmpty()) {
                 continue;
             }
@@ -294,7 +364,7 @@ public class AutoUseItemHandler {
                 continue;
             }
 
-            int slot = findMatchedHotbarSlot(rule);
+            int slot = findMatchedHotbarSlot(rule, rt);
             if (slot < 0) {
                 if (interval < minWaitMs) {
                     minWaitMs = interval;
@@ -303,7 +373,7 @@ public class AutoUseItemHandler {
             }
 
             if (useHotbarItemSilently(mc.player, slot, rule.useMode, rule.changeLocalSlot,
-                    rule.switchItemDelayTicks, rule.switchDelayTicks, rule.restoreDelayTicks)) {
+                    rule.switchItemDelayTicks, rule.switchDelayTicks, rule.restoreDelayTicks, rt)) {
                 rule.lastUseAtMs = now;
                 if (interval < minWaitMs) {
                     minWaitMs = interval;
@@ -312,22 +382,23 @@ public class AutoUseItemHandler {
         }
 
         if (minWaitMs == Integer.MAX_VALUE) {
-            nextCheckAtMs = now + 100L;
+            rt.nextCheckAtMs = now + 100L;
         } else {
-            nextCheckAtMs = now + Math.max(10, minWaitMs);
+            rt.nextCheckAtMs = now + Math.max(10, minWaitMs);
         }
     }
 
     public void resetSchedule() {
-        nextCheckAtMs = 0L;
+        RuntimeState rt = rt();
+        rt.nextCheckAtMs = 0L;
         long now = System.currentTimeMillis();
-        for (AutoUseItemRule rule : rules) {
+        for (AutoUseItemRule rule : cfg().rules) {
             if (rule != null) {
                 rule.lastUseAtMs = Math.min(rule.lastUseAtMs, now);
             }
         }
-        clearPendingHotbarUseAction();
-        clearPendingHotbarUseRestore();
+        clearPendingHotbarUseAction(rt);
+        clearPendingHotbarUseRestore(rt);
     }
 
     public int findMatchedHotbarSlotByName(String itemName, AutoUseItemRule.MatchMode matchMode) {
@@ -390,7 +461,7 @@ public class AutoUseItemHandler {
                 ? AutoUseItemRule.UseMode.RIGHT_CLICK
                 : useMode;
         return useHotbarItemSilently(player, slot, safeUseMode,
-                changeLocalSlot, switchItemDelayTicks, switchDelayTicks, restoreDelayTicks);
+                changeLocalSlot, switchItemDelayTicks, switchDelayTicks, restoreDelayTicks, rt());
     }
 
     public boolean useMatchingHotbarItem(EntityPlayerSP player, String itemName,
@@ -400,7 +471,7 @@ public class AutoUseItemHandler {
                 switchItemDelayTicks, switchDelayTicks, restoreDelayTicks);
     }
 
-    private int findMatchedHotbarSlot(AutoUseItemRule rule) {
+    private int findMatchedHotbarSlot(AutoUseItemRule rule, RuntimeState rt) {
         String target = normalizeName(rule.name);
         if (target.isEmpty()) {
             return -1;
@@ -425,11 +496,12 @@ public class AutoUseItemHandler {
     }
 
     private boolean useHotbarItemSilently(EntityPlayerSP player, int targetSlot, AutoUseItemRule.UseMode useMode,
-            boolean changeLocalSlot, int switchItemDelayTicks, int switchDelayTicks, int restoreDelayTicks) {
+            boolean changeLocalSlot, int switchItemDelayTicks, int switchDelayTicks, int restoreDelayTicks,
+            RuntimeState rt) {
         if (player == null || player.connection == null || targetSlot < 0 || targetSlot >= 9) {
             return false;
         }
-        if (isHotbarUseBusy()) {
+        if (isHotbarUseBusy(rt)) {
             return false;
         }
 
@@ -449,7 +521,7 @@ public class AutoUseItemHandler {
 
             if (originalSlot != targetSlot && safeSwitchItemDelayTicks > 0) {
                 beginHotbarSlotSwitch(player, originalSlot, targetSlot, safeUseMode, changeLocalSlot,
-                        safeSwitchDelayTicks, safeRestoreDelayTicks, safeSwitchItemDelayTicks);
+                        safeSwitchDelayTicks, safeRestoreDelayTicks, safeSwitchItemDelayTicks, rt);
                 return true;
             }
 
@@ -462,50 +534,50 @@ public class AutoUseItemHandler {
 
             if (safeSwitchDelayTicks > 0) {
                 beginHotbarUseAction(player, originalSlot, targetSlot, safeUseMode, changeLocalSlot,
-                        safeSwitchDelayTicks, safeRestoreDelayTicks);
+                        safeSwitchDelayTicks, safeRestoreDelayTicks, rt);
                 return true;
             }
 
             return executeHotbarUseAction(player, originalSlot, targetSlot, safeUseMode, changeLocalSlot,
-                    safeRestoreDelayTicks);
+                    safeRestoreDelayTicks, rt);
         } catch (Exception e) {
             if (changeLocalSlot) {
                 player.inventory.currentItem = originalSlot;
             }
             mythosScriptMod.LOGGER.debug("静默使用物品发包失败: {}", e.getMessage());
-            clearPendingHotbarUseAction();
+            clearPendingHotbarUseAction(rt);
             return false;
         }
     }
 
     private void beginHotbarSlotSwitch(EntityPlayerSP player, int originalSlot, int targetSlot,
             AutoUseItemRule.UseMode useMode, boolean changeLocalSlot,
-            int switchDelayTicks, int restoreDelayTicks, int switchItemDelayTicks) {
-        this.hotbarUseActionPending = true;
-        final int token = ++this.hotbarUseActionToken;
+            int switchDelayTicks, int restoreDelayTicks, int switchItemDelayTicks, RuntimeState rt) {
+        rt.hotbarUseActionPending = true;
+        final int token = ++rt.hotbarUseActionToken;
 
         if (ModUtils.DelayScheduler.instance == null) {
             executeDelayedHotbarSlotSwitch(player, originalSlot, targetSlot, useMode, changeLocalSlot,
-                    switchDelayTicks, restoreDelayTicks, token);
+                    switchDelayTicks, restoreDelayTicks, token, rt);
             return;
         }
 
         ModUtils.DelayScheduler.instance.schedule(
                 () -> executeDelayedHotbarSlotSwitch(player, originalSlot, targetSlot, useMode, changeLocalSlot,
-                        switchDelayTicks, restoreDelayTicks, token),
+                        switchDelayTicks, restoreDelayTicks, token, rt),
                 switchItemDelayTicks);
     }
 
     private void executeDelayedHotbarSlotSwitch(EntityPlayerSP player, int originalSlot, int targetSlot,
             AutoUseItemRule.UseMode useMode, boolean changeLocalSlot,
-            int switchDelayTicks, int restoreDelayTicks, int token) {
-        if (!isHotbarUseActionTokenActive(token)) {
+            int switchDelayTicks, int restoreDelayTicks, int token, RuntimeState rt) {
+        if (!isHotbarUseActionTokenActive(token, rt)) {
             return;
         }
-        clearPendingHotbarUseAction();
+        clearPendingHotbarUseAction(rt);
 
         if (player == null || mc.player != player || player.connection == null) {
-            clearPendingHotbarUseRestore();
+            clearPendingHotbarUseRestore(rt);
             return;
         }
 
@@ -518,11 +590,12 @@ public class AutoUseItemHandler {
 
         if (switchDelayTicks > 0) {
             beginHotbarUseAction(player, originalSlot, targetSlot, useMode, changeLocalSlot,
-                    switchDelayTicks, restoreDelayTicks);
+                    switchDelayTicks, restoreDelayTicks, rt);
             return;
         }
 
-        if (!executeHotbarUseAction(player, originalSlot, targetSlot, useMode, changeLocalSlot, restoreDelayTicks)) {
+        if (!executeHotbarUseAction(player, originalSlot, targetSlot, useMode, changeLocalSlot, restoreDelayTicks,
+                rt)) {
             if (changeLocalSlot) {
                 player.inventory.currentItem = originalSlot;
             }
@@ -533,31 +606,33 @@ public class AutoUseItemHandler {
     }
 
     private void beginHotbarUseAction(EntityPlayerSP player, int originalSlot, int targetSlot,
-            AutoUseItemRule.UseMode useMode, boolean changeLocalSlot, int switchDelayTicks, int restoreDelayTicks) {
-        this.hotbarUseActionPending = true;
-        final int token = ++this.hotbarUseActionToken;
+            AutoUseItemRule.UseMode useMode, boolean changeLocalSlot, int switchDelayTicks, int restoreDelayTicks,
+            RuntimeState rt) {
+        rt.hotbarUseActionPending = true;
+        final int token = ++rt.hotbarUseActionToken;
 
         if (ModUtils.DelayScheduler.instance == null) {
             executeDelayedHotbarUseAction(player, originalSlot, targetSlot, useMode, changeLocalSlot,
-                    restoreDelayTicks, token);
+                    restoreDelayTicks, token, rt);
             return;
         }
 
         ModUtils.DelayScheduler.instance.schedule(
                 () -> executeDelayedHotbarUseAction(player, originalSlot, targetSlot, useMode, changeLocalSlot,
-                        restoreDelayTicks, token),
+                        restoreDelayTicks, token, rt),
                 switchDelayTicks);
     }
 
     private void executeDelayedHotbarUseAction(EntityPlayerSP player, int originalSlot, int targetSlot,
-            AutoUseItemRule.UseMode useMode, boolean changeLocalSlot, int restoreDelayTicks, int token) {
-        if (!isHotbarUseActionTokenActive(token)) {
+            AutoUseItemRule.UseMode useMode, boolean changeLocalSlot, int restoreDelayTicks, int token,
+            RuntimeState rt) {
+        if (!isHotbarUseActionTokenActive(token, rt)) {
             return;
         }
-        clearPendingHotbarUseAction();
+        clearPendingHotbarUseAction(rt);
 
         if (player == null || mc.player != player || player.connection == null) {
-            clearPendingHotbarUseRestore();
+            clearPendingHotbarUseRestore(rt);
             return;
         }
 
@@ -568,7 +643,8 @@ public class AutoUseItemHandler {
             player.connection.sendPacket(new CPacketHeldItemChange(targetSlot));
         }
 
-        if (!executeHotbarUseAction(player, originalSlot, targetSlot, useMode, changeLocalSlot, restoreDelayTicks)) {
+        if (!executeHotbarUseAction(player, originalSlot, targetSlot, useMode, changeLocalSlot, restoreDelayTicks,
+                rt)) {
             if (changeLocalSlot) {
                 player.inventory.currentItem = originalSlot;
             }
@@ -579,7 +655,7 @@ public class AutoUseItemHandler {
     }
 
     private boolean executeHotbarUseAction(EntityPlayerSP player, int originalSlot, int targetSlot,
-            AutoUseItemRule.UseMode useMode, boolean changeLocalSlot, int restoreDelayTicks) {
+            AutoUseItemRule.UseMode useMode, boolean changeLocalSlot, int restoreDelayTicks, RuntimeState rt) {
         ItemStack targetStack = player.inventory.getStackInSlot(targetSlot);
         if (targetStack == null || targetStack.isEmpty()) {
             return false;
@@ -594,7 +670,7 @@ public class AutoUseItemHandler {
                 player.swingArm(EnumHand.MAIN_HAND);
             }
             player.connection.sendPacket(new CPacketAnimation(EnumHand.MAIN_HAND));
-            restoreHotbarSlotNow(player, originalSlot, targetSlot, changeLocalSlot, 0);
+            restoreHotbarSlotNow(player, originalSlot, targetSlot, changeLocalSlot, 0, rt);
             return true;
         }
 
@@ -614,7 +690,7 @@ public class AutoUseItemHandler {
         }
 
         beginHotbarUseRestore(player, originalSlot, targetSlot, changeLocalSlot,
-                getHotbarUseRestoreTimeoutTicks(targetStack, safeUseMode, restoreDelayTicks));
+                getHotbarUseRestoreTimeoutTicks(targetStack, safeUseMode, restoreDelayTicks), rt);
         return true;
     }
 
@@ -640,48 +716,49 @@ public class AutoUseItemHandler {
     }
 
     private void beginHotbarUseRestore(EntityPlayerSP player, int originalSlot, int targetSlot,
-            boolean changeLocalSlot, int restoreTimeoutTicks) {
-        this.hotbarUseRestorePending = true;
-        final int token = ++this.hotbarUseRestoreToken;
+            boolean changeLocalSlot, int restoreTimeoutTicks, RuntimeState rt) {
+        rt.hotbarUseRestorePending = true;
+        final int token = ++rt.hotbarUseRestoreToken;
 
         if (ModUtils.DelayScheduler.instance == null) {
-            restoreHotbarSlotNow(player, originalSlot, targetSlot, changeLocalSlot, token);
+            restoreHotbarSlotNow(player, originalSlot, targetSlot, changeLocalSlot, token, rt);
             return;
         }
 
         scheduleHotbarRestorePoll(player, originalSlot, targetSlot, changeLocalSlot,
-                Math.max(0, restoreTimeoutTicks), token);
+                Math.max(0, restoreTimeoutTicks), token, rt);
     }
 
     private void scheduleHotbarRestorePoll(EntityPlayerSP player, int originalSlot, int targetSlot,
-            boolean changeLocalSlot, int remainingTicks, int token) {
+            boolean changeLocalSlot, int remainingTicks, int token, RuntimeState rt) {
         ModUtils.DelayScheduler.instance.schedule(
-                () -> pollHotbarRestore(player, originalSlot, targetSlot, changeLocalSlot, remainingTicks, token), 1);
+                () -> pollHotbarRestore(player, originalSlot, targetSlot, changeLocalSlot, remainingTicks, token, rt),
+                1);
     }
 
     private void pollHotbarRestore(EntityPlayerSP player, int originalSlot, int targetSlot,
-            boolean changeLocalSlot, int remainingTicks, int token) {
-        if (!isHotbarRestoreTokenActive(token)) {
+            boolean changeLocalSlot, int remainingTicks, int token, RuntimeState rt) {
+        if (!isHotbarRestoreTokenActive(token, rt)) {
             return;
         }
         if (player == null || mc.player != player || player.connection == null) {
-            clearPendingHotbarUseRestore();
+            clearPendingHotbarUseRestore(rt);
             return;
         }
 
         boolean stillUsing = player.isHandActive() && player.inventory.currentItem == targetSlot;
         if (stillUsing || remainingTicks > 0) {
             scheduleHotbarRestorePoll(player, originalSlot, targetSlot, changeLocalSlot,
-                    Math.max(0, remainingTicks - 1), token);
+                    Math.max(0, remainingTicks - 1), token, rt);
             return;
         }
 
-        restoreHotbarSlotNow(player, originalSlot, targetSlot, changeLocalSlot, token);
+        restoreHotbarSlotNow(player, originalSlot, targetSlot, changeLocalSlot, token, rt);
     }
 
     private void restoreHotbarSlotNow(EntityPlayerSP player, int originalSlot, int targetSlot,
-            boolean changeLocalSlot, int token) {
-        if (token != 0 && !isHotbarRestoreTokenActive(token)) {
+            boolean changeLocalSlot, int token, RuntimeState rt) {
+        if (token != 0 && !isHotbarRestoreTokenActive(token, rt)) {
             return;
         }
         if (player != null && originalSlot != targetSlot && player.connection != null) {
@@ -690,27 +767,27 @@ public class AutoUseItemHandler {
             }
             player.connection.sendPacket(new CPacketHeldItemChange(originalSlot));
         }
-        clearPendingHotbarUseRestore();
+        clearPendingHotbarUseRestore(rt);
     }
 
-    private boolean isHotbarRestoreTokenActive(int token) {
-        return this.hotbarUseRestorePending && token == this.hotbarUseRestoreToken;
+    private boolean isHotbarRestoreTokenActive(int token, RuntimeState rt) {
+        return rt.hotbarUseRestorePending && token == rt.hotbarUseRestoreToken;
     }
 
-    private boolean isHotbarUseActionTokenActive(int token) {
-        return this.hotbarUseActionPending && token == this.hotbarUseActionToken;
+    private boolean isHotbarUseActionTokenActive(int token, RuntimeState rt) {
+        return rt.hotbarUseActionPending && token == rt.hotbarUseActionToken;
     }
 
-    private boolean isHotbarUseBusy() {
-        return this.hotbarUseActionPending || this.hotbarUseRestorePending;
+    private boolean isHotbarUseBusy(RuntimeState rt) {
+        return rt.hotbarUseActionPending || rt.hotbarUseRestorePending;
     }
 
-    private void clearPendingHotbarUseAction() {
-        this.hotbarUseActionPending = false;
+    private void clearPendingHotbarUseAction(RuntimeState rt) {
+        rt.hotbarUseActionPending = false;
     }
 
-    private void clearPendingHotbarUseRestore() {
-        this.hotbarUseRestorePending = false;
+    private void clearPendingHotbarUseRestore(RuntimeState rt) {
+        rt.hotbarUseRestorePending = false;
     }
 
     private String normalizeName(String text) {

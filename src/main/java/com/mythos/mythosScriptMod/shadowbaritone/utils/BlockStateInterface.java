@@ -47,6 +47,7 @@ public class BlockStateInterface {
 
     private final Long2ObjectMap<Chunk> loadedChunks;
     private final WorldData worldData;
+    private final World liveWorld; // real-time fallback when loadedChunks snapshot is stale
     public final BlockPos.MutableBlockPos isPassableBlockPos;
     public final IBlockAccess access;
     public final BetterWorldBorder worldBorder;
@@ -72,6 +73,7 @@ public class BlockStateInterface {
         this.worldBorder=new BetterWorldBorder(border);
         this.worldData=null;
         this.loadedChunks=new Long2ObjectOpenHashMap<>();
+        this.liveWorld=null;
         this.useTheRealWorld=false;
         this.isPassableBlockPos=new BlockPos.MutableBlockPos();
     }
@@ -87,6 +89,7 @@ public class BlockStateInterface {
         } else {
             this.loadedChunks = worldLoaded; // this will only be used on the main thread
         }
+        this.liveWorld = world;
         this.useTheRealWorld = !Baritone.settings().pathThroughCachedOnly.value;
         if (!ctx.minecraft().isCallingFromMinecraftThread()) {
             throw new IllegalStateException();
@@ -168,6 +171,12 @@ public class BlockStateInterface {
             }
             Chunk chunk = loadedChunks.get(ChunkPos.asLong(x >> 4, z >> 4));
 
+            if (chunk == null && liveWorld != null) {
+                // stale snapshot miss — check live chunk provider
+                // (bot threads see chunks arriving after CalculationContext
+                // was created; Long2ObjectOpenHashMap.get is a benign read)
+                chunk = liveWorld.getChunkProvider().getLoadedChunk(x >> 4, z >> 4);
+            }
             if (chunk != null && chunk.isLoaded()) {
                 prev = chunk;
                 return chunk.getBlockState(x, y, z);
@@ -201,6 +210,10 @@ public class BlockStateInterface {
             return true;
         }
         prevChunk = loadedChunks.get(ChunkPos.asLong(x >> 4, z >> 4));
+        if (prevChunk == null && liveWorld != null) {
+            // stale snapshot miss — check live chunk provider
+            prevChunk = liveWorld.getChunkProvider().getLoadedChunk(x >> 4, z >> 4);
+        }
         if (prevChunk != null && prevChunk.isLoaded()) {
             prev = prevChunk;
             return true;

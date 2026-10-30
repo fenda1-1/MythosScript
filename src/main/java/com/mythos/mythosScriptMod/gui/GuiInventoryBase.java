@@ -50,14 +50,12 @@ abstract class GuiInventoryBase {
     protected static final int BASE_TOTAL_HEIGHT = 280;
     protected static final int BASE_GAP = 10;
     protected static final int BASE_PADDING = 5;
-    protected static final int BASE_CATEGORY_PANEL_WIDTH = 110;
     protected static final int BASE_CATEGORY_BUTTON_WIDTH = 96;
     protected static final int BASE_CATEGORY_BUTTON_HEIGHT = 22;
     protected static final int BASE_ITEM_BUTTON_WIDTH = 84;
     protected static final int BASE_ITEM_BUTTON_HEIGHT = 22;
     protected static final int BASE_TOP_BUTTON_WIDTH = 60;
     protected static final int BASE_TOP_BUTTON_HEIGHT = 16;
-    protected static final int BASE_CONTENT_X_OFFSET = 122;
     protected static final int CATEGORY_PANEL_MIN_BASE_WIDTH = 92;
     protected static final int CATEGORY_PANEL_MAX_BASE_WIDTH = 180;
     protected static final String UNCATEGORIZED_SECTION_TITLE = "gui.modern.invbase.u001";
@@ -123,17 +121,6 @@ abstract class GuiInventoryBase {
         return "";
     }
 
-    protected static List<String> buildOverlayHeaderLines() {
-        List<String> lines = new ArrayList<>();
-        if (otherFeaturesScreenActive) {
-            lines.add(I18n.format("gui.inventory.other_features.title"));
-            return lines;
-        }
-
-        lines.add(I18n.format("gui.inventory.profile", ProfileManager.getActiveProfileName()));
-        lines.add(I18n.format("gui.inventory.loop.progress", Math.max(0, loopCounter), formatLoopTargetForHeader()));
-        return lines;
-    }
 
     protected static String formatLoopTargetForHeader() {
         if (loopCount < 0) {
@@ -301,9 +288,6 @@ abstract class GuiInventoryBase {
             return !systemCategory;
         }
 
-        String getPageKey() {
-            return isSubCategory() ? category + "::" + subCategory : category;
-        }
     }
 
     protected static class SequenceCardRenderInfo {
@@ -555,14 +539,7 @@ abstract class GuiInventoryBase {
     protected static final Map<String, Boolean> customSectionExpanded = new HashMap<>();
     protected static String currentCustomSubCategory = "";
 
-    /** Shared category scope used by the modern dashboard and path editor. */
-    public static String getCurrentCategory() {
-        return currentCategory == null ? "" : currentCategory;
-    }
 
-    public static String getCurrentCustomSubCategory() {
-        return currentCustomSubCategory == null ? "" : currentCustomSubCategory;
-    }
 
     public static void setCurrentCategorySelection(String category, String subCategory) {
         if (category == null || category.trim().isEmpty()) {
@@ -578,24 +555,15 @@ abstract class GuiInventoryBase {
     public static int loopCounter = 0;
     public static boolean isLooping = false;
 
-    public static boolean lockGameInteraction = false;
 
     protected static boolean isDebugRecordingMenuVisible = false;
-    protected static int debugCategoryRightClickCounter = 0;
-    protected static long lastDebugCategoryRightClickTime = 0;
 
     protected static int categoryScrollOffset = 0;
     protected static int maxCategoryScroll = 0;
     public static boolean isDraggingCategoryScrollbar = false;
-    protected static int categoryScrollClickY = 0;
-    protected static int initialCategoryScrollOffset = 0;
     protected static boolean isDraggingCategoryRow = false;
     protected static CategoryTreeRow pressedCategoryRow = null;
     protected static Rectangle pressedCategoryRowRect = null;
-    protected static int pressedCategoryRowMouseX = 0;
-    protected static int pressedCategoryRowMouseY = 0;
-    protected static int draggingCategoryRowMouseX = 0;
-    protected static int draggingCategoryRowMouseY = 0;
     protected static CategoryTreeRow currentCategorySortDropTarget = null;
     protected static boolean currentCategorySortDropAfter = false;
     protected static boolean isDraggingCustomSequenceCard = false;
@@ -624,7 +592,6 @@ abstract class GuiInventoryBase {
     protected static Rectangle customSearchClearButtonBounds;
     protected static Rectangle customSearchToggleButtonBounds;
     protected static boolean isDraggingCategoryDivider = false;
-    protected static int categoryDividerMouseOffsetX = 0;
     protected static long customSequencePageTurnLockUntil = 0L;
     protected static Rectangle categoryDividerBounds;
     protected static Rectangle versionClickArea;
@@ -635,12 +602,9 @@ abstract class GuiInventoryBase {
     protected static final int BTN_ID_THEME_CONFIG = 1000;
     protected static final int BTN_ID_UPDATE = 1001;
     protected static final int BTN_ID_DONATE = 1006;
-    protected static final int BTN_ID_PERFORMANCE_MONITOR = 1008;
     // --- 新增结束 ---
 
     protected static boolean otherFeaturesScreenActive = false;
-    protected static int selectedOtherFeatureGroupIndex = -1;
-    protected static int otherFeatureGroupScrollOffset = 0;
     protected static int maxOtherFeatureGroupScroll = 0;
     protected static boolean isDraggingOtherFeatureGroupScrollbar = false;
     protected static int otherFeatureScreenPage = 0;
@@ -725,14 +689,6 @@ abstract class GuiInventoryBase {
         rebuildSideButtons();
     }
 
-    public static void openOverlayScreen() {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc == null) {
-            return;
-        }
-
-        GuiModernMainScreen.openMenu(mc);
-    }
 
     protected static void rebuildSideButtons() {
         sideButtons.clear();
@@ -743,82 +699,24 @@ abstract class GuiInventoryBase {
 
     }
 
-    protected static void updateButtonPositions(int screenWidth, int screenHeight) {
-        if (sideButtons.isEmpty()) {
-            return;
-        }
-
-        FontRenderer fontRenderer = Minecraft.getMinecraft().fontRenderer;
-        String title = buildOverlayTitle();
-        OverlayMetrics m = computeOverlayMetrics(screenWidth, screenHeight, fontRenderer, title);
-
-        int sideButtonCount = sideButtons.size();
-        int sidePanelX = m.x - m.sideButtonColumnWidth - m.gap;
-        int sidePanelY = m.y;
-
-        for (GuiButton button : sideButtons) {
-            button.width = m.sideButtonWidth;
-            button.height = m.sideButtonHeight;
-            button.x = sidePanelX + (m.sideButtonColumnWidth - button.width) / 2;
-        }
-
-        int topY = sidePanelY + m.padding;
-        int bottomY = sidePanelY + m.totalHeight - m.padding - m.sideButtonHeight;
-        for (int i = 0; i < sideButtonCount; i++) {
-            GuiButton button = sideButtons.get(i);
-            if (sideButtonCount == 1) {
-                button.y = topY;
-            } else {
-                float t = (float) i / (float) (sideButtonCount - 1);
-                button.y = Math.round(topY + t * (bottomY - topY));
-            }
-        }
-
-        // 更新版本和作者点击区域
-        int topInfoY = m.y - fontRenderer.FONT_HEIGHT - m.padding;
-        String versionText = I18n.format("gui.inventory.version", mythosScriptMod.VERSION, UpdateChecker.latestVersion);
-        int versionX = m.x;
-        versionClickArea = new Rectangle(versionX, topInfoY, fontRenderer.getStringWidth(versionText), 10);
-
-        String authorText = I18n.format("gui.inventory.author");
-        int authorX = m.x + m.totalWidth - fontRenderer.getStringWidth(authorText);
-        authorClickArea = new Rectangle(authorX, topInfoY, fontRenderer.getStringWidth(authorText), 10);
-    }
 
     protected static OverlayMetrics getCurrentOverlayMetrics(int screenWidth, int screenHeight) {
         return computeOverlayMetrics(screenWidth, screenHeight, Minecraft.getMinecraft().fontRenderer,
                 buildOverlayTitle());
     }
 
-    protected static int scaleRawMouseX(int rawMouseX, int screenWidth) {
-        return rawMouseX * screenWidth / Minecraft.getMinecraft().displayWidth;
-    }
 
-    protected static int scaleRawMouseY(int rawMouseY, int screenHeight) {
-        return screenHeight - rawMouseY * screenHeight / Minecraft.getMinecraft().displayHeight - 1;
-    }
 
     protected static boolean isMouseOver(int mouseX, int mouseY, int x, int y, int width, int height) {
         return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
     }
 
-    protected static Rectangle getMainRightPanelBounds(OverlayMetrics m) {
-        int x = m.contentPanelX;
-        int y = m.contentStartY;
-        int width = Math.max(0, m.contentPanelRight - m.contentPanelX);
-        int bottom = m.y + m.totalHeight - m.padding;
-        return new Rectangle(x, y, width, Math.max(0, bottom - y));
-    }
 
     public static boolean isAnyScrollbarDragging() {
         return isDraggingCategoryScrollbar || isDraggingOtherFeatureGroupScrollbar
                 || isDraggingCategoryDivider;
     }
 
-    public static boolean isAnyDragActive() {
-        return isAnyScrollbarDragging() || pressedCustomSequence != null || isDraggingCustomSequenceCard
-                || pressedCategoryRow != null || isDraggingCategoryRow;
-    }
 
     protected static String normalizeText(String value) {
         return value == null ? "" : value.trim();
@@ -981,23 +879,6 @@ abstract class GuiInventoryBase {
         }
     }
 
-    protected static int moveKeyboardMenuSelection(List<ContextMenuItem> items, int currentIndex, int step) {
-        if (items == null || items.isEmpty()) {
-            return -1;
-        }
-        int size = items.size();
-        int index = currentIndex < 0 ? findFirstEnabledMenuItem(items) : currentIndex;
-        if (index < 0) {
-            return -1;
-        }
-        for (int i = 0; i < size; i++) {
-            index = (index + step + size) % size;
-            if (items.get(index).enabled) {
-                return index;
-            }
-        }
-        return currentIndex;
-    }
 
     protected static void clearSelectedCustomSequences() {
         selectedCustomSequenceNames.clear();
@@ -1051,14 +932,6 @@ abstract class GuiInventoryBase {
                 && normalizeText(source.category).equals(normalizeText(target.category));
     }
 
-    protected static CategoryTreeRow findSortableCategoryRowAt(int mouseX, int mouseY, CategoryTreeRow source) {
-        for (CategoryTreeRow row : visibleCategoryRows) {
-            if (row.bounds != null && row.bounds.contains(mouseX, mouseY) && canReorderCategoryRows(source, row)) {
-                return row;
-            }
-        }
-        return null;
-    }
 
     protected static CustomButtonRenderInfo findCustomToolbarButtonAt(int mouseX, int mouseY) {
         for (CustomButtonRenderInfo info : visibleCustomToolbarButtons) {
@@ -1357,17 +1230,7 @@ abstract class GuiInventoryBase {
         contextMenuKeyboardSelectionPath.add(findFirstEnabledMenuItem(rootItems));
     }
 
-    protected static void reopenOverlayScreen() {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc == null) {
-            return;
-        }
-        GuiModernMainScreen.openMenu(mc);
-    }
 
-    protected static GuiScreen createModernReturnScreen() {
-        return GuiModernMainScreen.getPersistentScreen();
-    }
 
     protected static void openModernPathSequenceEditor(String sequenceName, boolean custom) {
         String name = normalizeText(sequenceName);
@@ -1476,14 +1339,6 @@ abstract class GuiInventoryBase {
         return rows;
     }
 
-    protected static CategoryTreeRow findCategoryRowAt(int mouseX, int mouseY) {
-        for (CategoryTreeRow row : visibleCategoryRows) {
-            if (row.bounds != null && row.bounds.contains(mouseX, mouseY)) {
-                return row;
-            }
-        }
-        return null;
-    }
 
     protected static SequenceCardRenderInfo findCustomSequenceCardAt(int mouseX, int mouseY) {
         for (SequenceCardRenderInfo card : visibleCustomSequenceCards) {
@@ -1519,23 +1374,6 @@ abstract class GuiInventoryBase {
         return null;
     }
 
-    protected static boolean shouldUseHorizontalCustomSequenceSplit(SequenceCardRenderInfo targetCard) {
-        if (targetCard == null || targetCard.bounds == null) {
-            return false;
-        }
-        for (SequenceCardRenderInfo other : visibleCustomSequenceCards) {
-            if (other == null || other == targetCard || other.bounds == null) {
-                continue;
-            }
-            if (!canReorderCustomSequenceCards(targetCard.sequence, other.sequence)) {
-                continue;
-            }
-            if (Math.abs(other.bounds.y - targetCard.bounds.y) <= Math.max(2, targetCard.bounds.height / 3)) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     protected static SequenceCardRenderInfo findVisibleCustomSequenceCardByName(String sequenceName) {
         String normalizedName = normalizeText(sequenceName);
@@ -1551,14 +1389,6 @@ abstract class GuiInventoryBase {
         return null;
     }
 
-    protected static CustomSequenceDropTarget findDroppableCategoryRowAt(int mouseX, int mouseY) {
-        for (CategoryTreeRow row : visibleCategoryRows) {
-            if (row.bounds != null && row.bounds.contains(mouseX, mouseY) && row.isDroppableTarget()) {
-                return new CustomSequenceDropTarget(row.category, row.subCategory, row.bounds);
-            }
-        }
-        return null;
-    }
 
     protected static CustomSequenceDropTarget findCustomSectionDropTargetAt(int mouseX, int mouseY,
             PathSequence source) {
@@ -1893,23 +1723,7 @@ abstract class GuiInventoryBase {
         Gui.drawRect(left, top, right, bottom, color);
     }
 
-    protected static void drawHorizontalLine(int startX, int endX, int y, int color) {
-        if (endX < startX) {
-            int i = startX;
-            startX = endX;
-            endX = i;
-        }
-        drawRect(startX, y, endX + 1, y + 1, color);
-    }
 
-    protected static void drawVerticalLine(int x, int startY, int endY, int color) {
-        if (endY < startY) {
-            int i = startY;
-            startY = endY;
-            endY = i;
-        }
-        drawRect(x, startY + 1, x + 1, endY, color);
-    }
 
     protected static void drawCenteredString(FontRenderer fontRenderer, String text, int x, int y, int color) {
         int resolved = GuiTheme.resolveTextColor(text, color);

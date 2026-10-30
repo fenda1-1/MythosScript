@@ -28,6 +28,8 @@ public final class ModernBlinkPathingSettingsTab {
                         integer("routeHeightRange"), 1, 100)
                 .decimal("gui.modern.blink_pathing.collision_margin", "gui.modern.blink_pathing.collision_margin.tip",
                         decimal("collisionMargin"), 0.0F, 10.0F)
+                .toggle("gui.modern.blink_pathing.debug_log", "gui.modern.blink_pathing.debug_log.tip",
+                        bool("blinkDebugLog"))
                 .build().compactHeader();
     }
 
@@ -127,6 +129,7 @@ public final class ModernBlinkPathingSettingsTab {
 
     private static final class State {
         private final boolean allowBlinkPathing;
+        private final boolean blinkDebugLog;
         private final double stepDistance;
         private final double maxHorizontalStep;
         private final double maxVerticalStep;
@@ -136,16 +139,18 @@ public final class ModernBlinkPathingSettingsTab {
 
         private State() {
             allowBlinkPathing = settings().allowBlinkPathing.value;
-            stepDistance = BlinkPathingConfig.stepDistance;
-            maxHorizontalStep = BlinkPathingConfig.maxHorizontalStep;
-            maxVerticalStep = BlinkPathingConfig.maxVerticalStep;
-            tickInterval = BlinkPathingConfig.tickInterval;
-            routeHeightRange = BlinkPathingConfig.routeHeightRange;
-            collisionMargin = BlinkPathingConfig.collisionMargin;
+            blinkDebugLog = settings().blinkDebugLog.value;
+            stepDistance = BlinkPathingConfig.cfg().stepDistance;
+            maxHorizontalStep = BlinkPathingConfig.cfg().maxHorizontalStep;
+            maxVerticalStep = BlinkPathingConfig.cfg().maxVerticalStep;
+            tickInterval = BlinkPathingConfig.cfg().tickInterval;
+            routeHeightRange = BlinkPathingConfig.cfg().routeHeightRange;
+            collisionMargin = BlinkPathingConfig.cfg().collisionMargin;
         }
 
         private State(State source) {
             allowBlinkPathing = source.allowBlinkPathing;
+            blinkDebugLog = source.blinkDebugLog;
             stepDistance = source.stepDistance;
             maxHorizontalStep = source.maxHorizontalStep;
             maxVerticalStep = source.maxVerticalStep;
@@ -154,9 +159,11 @@ public final class ModernBlinkPathingSettingsTab {
             collisionMargin = source.collisionMargin;
         }
 
-        private State(boolean allowBlinkPathing, double stepDistance, double maxHorizontalStep,
-                double maxVerticalStep, int tickInterval, int routeHeightRange, double collisionMargin) {
+        private State(boolean allowBlinkPathing, boolean blinkDebugLog, double stepDistance,
+                double maxHorizontalStep, double maxVerticalStep, int tickInterval,
+                int routeHeightRange, double collisionMargin) {
             this.allowBlinkPathing = allowBlinkPathing;
+            this.blinkDebugLog = blinkDebugLog;
             this.stepDistance = stepDistance;
             this.maxHorizontalStep = maxHorizontalStep;
             this.maxVerticalStep = maxVerticalStep;
@@ -166,26 +173,28 @@ public final class ModernBlinkPathingSettingsTab {
         }
 
         private static State defaults() {
-            return new State(settings().allowBlinkPathing.defaultValue, 5.0D, 8.0D, 6.0D, 1, 10, 2.0D);
+            return new State(settings().allowBlinkPathing.defaultValue, false, 5.0D, 8.0D, 6.0D, 1, 10, 2.0D);
         }
 
         private void apply() {
             Settings settings = settings();
             settings.allowBlinkPathing.value = allowBlinkPathing;
+            settings.blinkDebugLog.value = blinkDebugLog;
             if (allowBlinkPathing) {
                 settings.allowFlightPathing.value = false;
             }
-            BlinkPathingConfig.stepDistance = stepDistance;
-            BlinkPathingConfig.maxHorizontalStep = maxHorizontalStep;
-            BlinkPathingConfig.maxVerticalStep = maxVerticalStep;
-            BlinkPathingConfig.tickInterval = tickInterval;
-            BlinkPathingConfig.routeHeightRange = routeHeightRange;
-            BlinkPathingConfig.collisionMargin = collisionMargin;
+            BlinkPathingConfig.cfg().stepDistance = stepDistance;
+            BlinkPathingConfig.cfg().maxHorizontalStep = maxHorizontalStep;
+            BlinkPathingConfig.cfg().maxVerticalStep = maxVerticalStep;
+            BlinkPathingConfig.cfg().tickInterval = tickInterval;
+            BlinkPathingConfig.cfg().routeHeightRange = routeHeightRange;
+            BlinkPathingConfig.cfg().collisionMargin = collisionMargin;
             BlinkPathingConfig.normalize();
         }
 
         private static boolean getBoolean(String key) {
             if ("allowBlinkPathing".equals(key)) return settings().allowBlinkPathing.value;
+            if ("blinkDebugLog".equals(key)) return settings().blinkDebugLog.value;
             return false;
         }
 
@@ -196,34 +205,36 @@ public final class ModernBlinkPathingSettingsTab {
                 if (value) {
                     settings.allowFlightPathing.value = false;
                 }
+            } else if ("blinkDebugLog".equals(key)) {
+                settings.blinkDebugLog.value = value;
             }
         }
 
         private static int getInt(String key) {
-            if ("tickInterval".equals(key)) return BlinkPathingConfig.tickInterval;
-            if ("routeHeightRange".equals(key)) return BlinkPathingConfig.routeHeightRange;
+            if ("tickInterval".equals(key)) return BlinkPathingConfig.cfg().tickInterval;
+            if ("routeHeightRange".equals(key)) return BlinkPathingConfig.cfg().routeHeightRange;
             return 0;
         }
 
         private static void setInt(String key, int value) {
-            if ("tickInterval".equals(key)) BlinkPathingConfig.tickInterval = value;
-            if ("routeHeightRange".equals(key)) BlinkPathingConfig.routeHeightRange = value;
+            if ("tickInterval".equals(key)) BlinkPathingConfig.cfg().tickInterval = value;
+            if ("routeHeightRange".equals(key)) BlinkPathingConfig.cfg().routeHeightRange = value;
             BlinkPathingConfig.normalize();
         }
 
         private static float getFloat(String key) {
-            if ("stepDistance".equals(key)) return (float) BlinkPathingConfig.stepDistance;
-            if ("maxHorizontalStep".equals(key)) return (float) BlinkPathingConfig.maxHorizontalStep;
-            if ("maxVerticalStep".equals(key)) return (float) BlinkPathingConfig.maxVerticalStep;
-            if ("collisionMargin".equals(key)) return (float) BlinkPathingConfig.collisionMargin;
+            if ("stepDistance".equals(key)) return (float) BlinkPathingConfig.cfg().stepDistance;
+            if ("maxHorizontalStep".equals(key)) return (float) BlinkPathingConfig.cfg().maxHorizontalStep;
+            if ("maxVerticalStep".equals(key)) return (float) BlinkPathingConfig.cfg().maxVerticalStep;
+            if ("collisionMargin".equals(key)) return (float) BlinkPathingConfig.cfg().collisionMargin;
             return 0.0F;
         }
 
         private static void setFloat(String key, float value) {
-            if ("stepDistance".equals(key)) BlinkPathingConfig.stepDistance = value;
-            else if ("maxHorizontalStep".equals(key)) BlinkPathingConfig.maxHorizontalStep = value;
-            else if ("maxVerticalStep".equals(key)) BlinkPathingConfig.maxVerticalStep = value;
-            else if ("collisionMargin".equals(key)) BlinkPathingConfig.collisionMargin = value;
+            if ("stepDistance".equals(key)) BlinkPathingConfig.cfg().stepDistance = value;
+            else if ("maxHorizontalStep".equals(key)) BlinkPathingConfig.cfg().maxHorizontalStep = value;
+            else if ("maxVerticalStep".equals(key)) BlinkPathingConfig.cfg().maxVerticalStep = value;
+            else if ("collisionMargin".equals(key)) BlinkPathingConfig.cfg().collisionMargin = value;
             BlinkPathingConfig.normalize();
         }
     }

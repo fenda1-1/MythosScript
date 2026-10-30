@@ -1,11 +1,12 @@
 package com.mythos.mythosScriptMod.mcp;
 
 import com.google.gson.*;
+import com.mythos.mythosScriptMod.utils.JsonCopy;
 
 public final class McpJson {
     public static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private McpJson() {}
-    public static JsonObject copy(JsonObject value) { return new JsonParser().parse(value.toString()).getAsJsonObject(); }
+    public static JsonObject copy(JsonObject value) { return value == null ? null : JsonCopy.deepCopyObject(value); }
     public static JsonObject object(Object... entries) {
         JsonObject result = new JsonObject();
         for (int i = 0; i < entries.length; i += 2)

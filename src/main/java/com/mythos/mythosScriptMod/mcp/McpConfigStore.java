@@ -1,6 +1,7 @@
 package com.mythos.mythosScriptMod.mcp;
 
 import com.google.gson.*;
+import com.mythos.mythosScriptMod.utils.JsonCopy;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -95,7 +96,7 @@ public final class McpConfigStore {
     /** RFC 6902 add/remove/replace/test with RFC 6901 pointers; no partial file writes. */
     public static JsonElement patch(JsonElement source, JsonArray operations) {
         if (operations == null) throw new IllegalArgumentException("patch array required");
-        JsonElement tree = new JsonParser().parse(source.toString());
+        JsonElement tree = source == null ? JsonNull.INSTANCE : JsonCopy.deepCopy(source);
         for (JsonElement entry : operations) {
             JsonObject op = entry.getAsJsonObject();
             String action = string(op, "op"), path = string(op, "path");

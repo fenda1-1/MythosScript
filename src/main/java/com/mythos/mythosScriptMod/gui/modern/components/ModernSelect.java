@@ -31,7 +31,6 @@ public final class ModernSelect implements ModernComponent {
     public String value() { return dropdown.value(); }
     public void setValue(String value) { dropdown.setValue(value); lastValue = dropdown.value(); }
     public boolean isOpen() { return dropdown.isOpen(); }
-    public ModernSelect setHostBounds(ModernMainLayout.Rect hostBounds) { this.hostBounds = hostBounds; return this; }
     public ModernSelect setOnChanged(Consumer<String> onChanged) { this.onChanged = onChanged; return this; }
 
     @Override public void layout(ModernMainLayout.Rect bounds) { this.bounds = bounds; }

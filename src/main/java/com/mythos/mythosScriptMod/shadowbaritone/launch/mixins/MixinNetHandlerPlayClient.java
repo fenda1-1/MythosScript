@@ -60,7 +60,7 @@ public class MixinNetHandlerPlayClient {
         @Redirect(method = "handleEntityVelocity", at = @At(value = "INVOKE",
                 target = "Lnet/minecraft/entity/Entity;setVelocity(DDD)V"), require = 1)
         private void mythos$filterVelocity(Entity entity, double x, double y, double z) {
-                double resistance = entity == Minecraft.getMinecraft().player
+                double resistance = entity == com.mythos.mythosScriptMod.mixin.SessionFieldAccess.getPlayer(Minecraft.getMinecraft())
                         ? MovementFeatureManager.getKnockbackResistance() : 0.0D;
                 if (resistance >= 1.0D) return;
                 double keep = 1.0D - resistance;
@@ -170,11 +170,14 @@ public class MixinNetHandlerPlayClient {
         @Inject(method = "handleEntityHeadLook", at = @At("HEAD"), cancellable = true)
         private void guardNullEntityHeadLook(SPacketEntityHeadLook packetIn, CallbackInfo ci) {
                 Minecraft mc = Minecraft.getMinecraft();
-                if (mc == null || mc.world == null || packetIn == null) {
+                // This handler runs on the bot's own thread for background sessions.
+                net.minecraft.world.World world = mc == null ? null
+                        : com.mythos.mythosScriptMod.mixin.SessionFieldAccess.getWorld(mc);
+                if (world == null || packetIn == null) {
                         ci.cancel();
                         return;
                 }
-                Entity entity = packetIn.getEntity(mc.world);
+                Entity entity = packetIn.getEntity(world);
                 if (entity == null) {
                         ci.cancel();
                 }
@@ -183,11 +186,13 @@ public class MixinNetHandlerPlayClient {
         @Inject(method = "handleEntityVelocity", at = @At("HEAD"), cancellable = true)
         private void guardNullEntityVelocity(SPacketEntityVelocity packetIn, CallbackInfo ci) {
                 Minecraft mc = Minecraft.getMinecraft();
-                if (mc == null || mc.world == null || packetIn == null) {
+                net.minecraft.world.World world = mc == null ? null
+                        : com.mythos.mythosScriptMod.mixin.SessionFieldAccess.getWorld(mc);
+                if (world == null || packetIn == null) {
                         ci.cancel();
                         return;
                 }
-                Entity entity = mc.world.getEntityByID(packetIn.getEntityID());
+                Entity entity = world.getEntityByID(packetIn.getEntityID());
                 if (entity == null) {
                         ci.cancel();
                 }

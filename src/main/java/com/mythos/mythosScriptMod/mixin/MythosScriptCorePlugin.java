@@ -209,7 +209,9 @@ public class MythosScriptCorePlugin implements IFMLLoadingPlugin {
     @Override
     public String[] getASMTransformerClass() {
         return new String[] {
-                "com.mythos.mythosScriptMod.mixin.WweCompatibilityTransformer"
+                "com.mythos.mythosScriptMod.mixin.WweCompatibilityTransformer",
+                // Mythos-Nexus bot threads must never see the mounted player/world.
+                "com.mythos.mythosScriptMod.mixin.SessionFieldTransformer"
         };
     }
 

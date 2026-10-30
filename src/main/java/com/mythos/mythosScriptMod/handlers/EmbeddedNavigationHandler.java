@@ -6,6 +6,7 @@ import com.mythos.mythosScriptMod.config.ModConfig;
 import com.mythos.mythosScriptMod.shadowbaritone.api.BaritoneAPI;
 import com.mythos.mythosScriptMod.shadowbaritone.api.IBaritone;
 import com.mythos.mythosScriptMod.shadowbaritone.api.pathing.goals.Goal;
+import com.mythos.mythosScriptMod.shadowbaritone.api.pathing.goals.GoalBlock;
 import com.mythos.mythosScriptMod.shadowbaritone.api.pathing.goals.GoalFlightExact;
 import com.mythos.mythosScriptMod.shadowbaritone.api.pathing.goals.GoalXZ;
 import com.mythos.mythosScriptMod.mythosScriptMod;
@@ -73,12 +74,21 @@ public class EmbeddedNavigationHandler {
     private static final long STOP_COMMAND_MIN_INTERVAL_MS = 350L;
     private static final long GOTO_COMMAND_MIN_INTERVAL_MS = 1000L;
 
-    private long lastAnyCommandAt = 0L;
-    private long lastStopCommandAt = 0L;
-    private long lastGotoCommandAt = 0L;
-    private String lastCommandSent = "";
-    private volatile NavigationDispatchTrace lastDispatchTrace = new NavigationDispatchTrace(false, "", "",
-            "never_dispatched", false, BaritoneSettingsConfig.isUseBuiltinBaritone());
+    /**
+     * Per-session throttle state. A single shared INSTANCE previously kept one
+     * global lastGotoCommandAt, so bot A's goto within GOTO_COMMAND_MIN_INTERVAL
+     * of bot B's was throttled as a "duplicate" and sendChatCommand fell back to
+     * mc.player.sendChatMessage — leaking the bot's goto into the foreground
+     * (human) chat box. Keyed by the bound session's username.
+     */
+    private static final class ThrottleState {
+        long lastAnyCommandAt = 0L;
+        long lastStopCommandAt = 0L;
+        long lastGotoCommandAt = 0L;
+        String lastCommandSent = "";
+    }
+
+    private final java.util.Map<String, ThrottleState> throttles = new java.util.HashMap<>();
 
     private EmbeddedNavigationHandler() {
     }
@@ -108,21 +118,20 @@ public class EmbeddedNavigationHandler {
                 || lower.startsWith(".goto ");
     }
 
-    public NavigationDispatchTrace getLastDispatchTrace() {
-        return lastDispatchTrace;
-    }
-
     private NavigationDispatchTrace dispatchNavigationCommand(String rawCommand, boolean bypassGotoThrottle) {
         String normalized = normalizeCommand(rawCommand);
         boolean directBuiltinMode = BaritoneSettingsConfig.isUseBuiltinBaritone();
-        if (mc.player == null || mc.player.isSpectator()) {
-            return recordDispatchTrace(false, rawCommand, normalized, "player_null_or_spectator", bypassGotoThrottle,
-                    directBuiltinMode);
+        net.minecraft.client.entity.EntityPlayerSP actingPlayer =
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        if (actingPlayer == null || actingPlayer.isSpectator()) {
+            return recordDispatchTrace(sessionKey(), false, rawCommand, normalized,
+                    "player_null_or_spectator", bypassGotoThrottle, directBuiltinMode);
         }
 
-        String blockReason = getThrottleReason(normalized, bypassGotoThrottle);
+        String key = sessionKey();
+        String blockReason = getThrottleReason(key, normalized, bypassGotoThrottle);
         if (!blockReason.isEmpty()) {
-            return recordDispatchTrace(false, rawCommand, normalized, blockReason, bypassGotoThrottle,
+            return recordDispatchTrace(key, false, rawCommand, normalized, blockReason, bypassGotoThrottle,
                     directBuiltinMode);
         }
 
@@ -130,17 +139,17 @@ public class EmbeddedNavigationHandler {
                 ? executeBuiltinNavigationCommand(rawCommand, bypassGotoThrottle)
                 : InternalBaritoneBridge.executeRawChatLikeCommand(rawCommand);
         if (!executed) {
-            return recordDispatchTrace(false, rawCommand, normalized,
+            return recordDispatchTrace(key, false, rawCommand, normalized,
                     directBuiltinMode ? "builtin_execute_failed" : "bridge_execute_failed",
                     bypassGotoThrottle, directBuiltinMode);
         }
 
-        rememberCommand(rawCommand);
-        NavigationDispatchTrace trace = recordDispatchTrace(true, rawCommand, normalized, "dispatched",
+        rememberCommand(key, rawCommand);
+        NavigationDispatchTrace trace = recordDispatchTrace(key, true, rawCommand, normalized, "dispatched",
                 bypassGotoThrottle, directBuiltinMode);
-        if (ModConfig.isDebugModeEnabled && mc.player != null) {
+        if (ModConfig.isDebugModeEnabled && actingPlayer != null) {
             String route = directBuiltinMode ? "内置直调" : "命令桥接";
-            mc.player.sendMessage(new TextComponentString("§d[DEBUG] §7发送导航命令(" + route + "): §f" + rawCommand));
+            actingPlayer.sendMessage(new TextComponentString("§d[DEBUG] §7发送导航命令(" + route + "): §f" + rawCommand));
         }
         return trace;
     }
@@ -213,18 +222,54 @@ public class EmbeddedNavigationHandler {
 
     private boolean executeBuiltinGoto(double x, double y, double z, boolean forceRestart) {
         IBaritone baritone = getPrimaryBaritone();
+        nav$dbg("goto x=%.1f y=%.1f z=%.1f baritone=%s bound=%s", x, y, z,
+                baritone == null ? "null" : baritone.getClass().getSimpleName(),
+                com.mythos.mythosScriptMod.mcp.NexusSessions.currentUsername());
+        if (baritone == null) {
+            return false;
+        }
+        // Only use a flight goal when the player actually enabled flight/blink
+        // pathing. A 3-arg goto issued while flight is off should be a normal
+        // ground GoalBlock, not a GoalFlightExact that routes through the far
+        // more expensive flight pathing branch.
+        boolean flightPathing = BaritoneAPI.getSettings().allowFlightPathing.value
+                || BaritoneAPI.getSettings().allowBlinkPathing.value;
         Goal goal = Double.isNaN(y)
                 ? new GoalXZ(MathHelper.floor(x), MathHelper.floor(z))
-                : new GoalFlightExact(x, y, z);
+                : (flightPathing
+                        ? new GoalFlightExact(x, y, z)
+                        : new GoalBlock(MathHelper.floor(x), MathHelper.floor(y), MathHelper.floor(z)));
         if (forceRestart && baritone.getPathingBehavior() != null) {
             baritone.getPathingBehavior().cancelEverything();
             if (shouldLogDispatchDebug()) {
                 mythosScriptMod.LOGGER.info("[navigation] 强制 goto 前已清理旧路径状态: goal={}", goal);
             }
         }
-        baritone.getCustomGoalProcess().setGoalAndPath(goal);
+        try {
+            baritone.getCustomGoalProcess().setGoalAndPath(goal);
+            nav$dbg("setGoalAndPath ok goal=%s", goal);
+        } catch (Throwable t) {
+            nav$dbg("setGoalAndPath fail goal=%s err=%s", goal, t);
+            throw t;
+        }
         return true;
     }
+
+    private static void nav$dbg(String fmt, Object... a) {
+        try {
+            if (!navLogTried) {
+                navLogTried = true;
+                navLogBaritoneM = Class.forName("com.mythos.nexus.core.NexusLog")
+                        .getMethod("baritone", String.class, Object[].class);
+            }
+            if (navLogBaritoneM != null) {
+                navLogBaritoneM.invoke(null, "[nav] " + String.format(fmt, a), new Object[0]);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static boolean navLogTried;
+    private static java.lang.reflect.Method navLogBaritoneM;
 
     private boolean executeBuiltinFollowEntities() {
         IBaritone baritone = getPrimaryBaritone();
@@ -233,52 +278,101 @@ public class EmbeddedNavigationHandler {
     }
 
     private boolean shouldFollowEntity(Entity entity) {
-        return entity != null && entity != mc.player && entity.isEntityAlive();
+        return entity != null && entity != com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer()
+                && entity.isEntityAlive();
     }
 
     private boolean executeBuiltinStop() {
+        // Also stop any active path sequence so its step-idle retry doesn't re-fire "!goto".
+        try {
+            // Only the mounted session's runners — the shared "" foreground when
+            // human is mounted, or the mounted bot's own runner. A blind
+            // stopAllBackgroundRunners() was killing every bot on a "stop
+            // foreground" click.
+            String mounted = com.mythos.mythosScriptMod.mcp.NexusSessions.mountedBotUsername();
+            String owner = mounted == null ? "" : mounted;
+            com.mythos.mythosScriptMod.path.PathSequenceEventListener
+                    .stopForegroundSequenceByActionForOwner(owner);
+            com.mythos.mythosScriptMod.path.PathSequenceEventListener
+                    .stopBackgroundRunnersForOwner(owner);
+        } catch (Throwable ignored) {
+        }
         IBaritone baritone = getPrimaryBaritone();
         baritone.getPathingBehavior().cancelEverything();
         return true;
     }
 
     private IBaritone getPrimaryBaritone() {
+        // On a bound bot tick thread this is NOT the mounted player — this
+        // class is outside FIELD_CTX_CLASSES, so mc.player would resolve the
+        // mounted session's baritone and goto would drive the wrong bot.
+        // boundPlayer() returns the thread-bound session's own player (and
+        // falls back to mc.player when unbound).
+        net.minecraft.client.entity.EntityPlayerSP p =
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        if (p != null) {
+            IBaritone b = BaritoneAPI.getProvider().getBaritoneForPlayer(p);
+            if (b != null) return b;
+        }
         return BaritoneAPI.getProvider().getPrimaryBaritone();
     }
 
-    private String getThrottleReason(String normalizedCommand, boolean bypassGotoThrottle) {
-        long now = System.currentTimeMillis();
-        boolean gotoCommand = isGotoCommand(normalizedCommand);
-        boolean bypassSameCommandThrottle = bypassGotoThrottle && gotoCommand;
-
-        if (!bypassSameCommandThrottle
-                && normalizedCommand.equals(lastCommandSent)
-                && (now - lastAnyCommandAt) < SAME_COMMAND_MIN_INTERVAL_MS) {
-            return "same_command_throttle";
-        }
-
-        if (normalizedCommand.endsWith(" stop") && (now - lastStopCommandAt) < STOP_COMMAND_MIN_INTERVAL_MS) {
-            return "stop_command_throttle";
-        }
-
-        if (gotoCommand && !bypassGotoThrottle && (now - lastGotoCommandAt) < GOTO_COMMAND_MIN_INTERVAL_MS) {
-            return "goto_cooldown_throttle";
-        }
-
-        return "";
+    /** Stable key for the thread-bound session; empty = foreground/unbound. */
+    private String sessionKey() {
+        String u = com.mythos.mythosScriptMod.mcp.NexusSessions.currentUsername();
+        return u == null ? "" : u;
     }
 
-    private void rememberCommand(String cmd) {
-        long now = System.currentTimeMillis();
-        String normalized = normalizeCommand(cmd);
-        lastCommandSent = normalized;
-        lastAnyCommandAt = now;
-
-        if (normalized.endsWith(" stop")) {
-            lastStopCommandAt = now;
+    private ThrottleState throttleFor(String key) {
+        synchronized (throttles) {
+            ThrottleState t = throttles.get(key);
+            if (t == null) {
+                t = new ThrottleState();
+                throttles.put(key, t);
+            }
+            return t;
         }
-        if (normalized.contains(" goto ")) {
-            lastGotoCommandAt = now;
+    }
+
+    private String getThrottleReason(String key, String normalizedCommand, boolean bypassGotoThrottle) {
+        ThrottleState t = throttleFor(key);
+        synchronized (t) {
+            long now = System.currentTimeMillis();
+            boolean gotoCommand = isGotoCommand(normalizedCommand);
+            boolean bypassSameCommandThrottle = bypassGotoThrottle && gotoCommand;
+
+            if (!bypassSameCommandThrottle
+                    && normalizedCommand.equals(t.lastCommandSent)
+                    && (now - t.lastAnyCommandAt) < SAME_COMMAND_MIN_INTERVAL_MS) {
+                return "same_command_throttle";
+            }
+
+            if (normalizedCommand.endsWith(" stop") && (now - t.lastStopCommandAt) < STOP_COMMAND_MIN_INTERVAL_MS) {
+                return "stop_command_throttle";
+            }
+
+            if (gotoCommand && !bypassGotoThrottle && (now - t.lastGotoCommandAt) < GOTO_COMMAND_MIN_INTERVAL_MS) {
+                return "goto_cooldown_throttle";
+            }
+
+            return "";
+        }
+    }
+
+    private void rememberCommand(String key, String cmd) {
+        ThrottleState t = throttleFor(key);
+        synchronized (t) {
+            long now = System.currentTimeMillis();
+            String normalized = normalizeCommand(cmd);
+            t.lastCommandSent = normalized;
+            t.lastAnyCommandAt = now;
+
+            if (normalized.endsWith(" stop")) {
+                t.lastStopCommandAt = now;
+            }
+            if (normalized.contains(" goto ")) {
+                t.lastGotoCommandAt = now;
+            }
         }
     }
 
@@ -290,7 +384,8 @@ public class EmbeddedNavigationHandler {
         return normalizedCommand.startsWith("!goto ") || normalizedCommand.startsWith(".goto ");
     }
 
-    private NavigationDispatchTrace recordDispatchTrace(boolean dispatched, String command, String normalizedCommand,
+    private NavigationDispatchTrace recordDispatchTrace(String key, boolean dispatched, String command,
+            String normalizedCommand,
             String reasonKey, boolean bypassGotoThrottle, boolean directBuiltinMode) {
         NavigationDispatchTrace trace = new NavigationDispatchTrace(dispatched,
                 command == null ? "" : command.trim(),
@@ -298,10 +393,10 @@ public class EmbeddedNavigationHandler {
                 reasonKey == null || reasonKey.trim().isEmpty() ? "unknown" : reasonKey.trim(),
                 bypassGotoThrottle,
                 directBuiltinMode);
-        lastDispatchTrace = trace;
         if (!dispatched && shouldLogDispatchDebug()) {
             mythosScriptMod.LOGGER.info(
-                    "[navigation] 命令未发送: reason={}, command={}, bypassGotoThrottle={}, route={}",
+                    "[navigation] 命令未发送: session={}, reason={}, command={}, bypassGotoThrottle={}, route={}",
+                    key,
                     trace.getReasonKey(),
                     trace.getCommand(),
                     trace.isBypassGotoThrottle(),
@@ -366,6 +461,31 @@ public class EmbeddedNavigationHandler {
                     || baritone.getPathingBehavior().getInProgress().isPresent()
                     || baritone.getPathingBehavior().isFlightWaitingForContinuation()
                     || baritone.getPathingBehavior().isFlightTerminalReached();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * Cancel baritone pathing ONLY — must NOT touch the running path sequence.
+     * {@link #stop()} routes through {@code executeBuiltinStop} which, in
+     * builtin-baritone mode, also calls
+     * {@code PathSequenceEventListener.stopForegroundSequenceByAction()} /
+     * {@code stopAllBackgroundRunners()}. That coupling is correct for a
+     * user-facing "!stop" but deadly for callers that use "stop navigation" as
+     * a tactical cancel inside a still-running action — the hunt action calls
+     * {@code stopHuntNavigation()} every time it re-solves or drops a target,
+     * so a single "stop" was silently killing the whole sequence one tick
+     * after it started (the "打了两下就停" report).
+     */
+    public boolean cancelPathingOnly() {
+        try {
+            IBaritone baritone = getPrimaryBaritone();
+            if (baritone == null || baritone.getPathingBehavior() == null) {
+                return false;
+            }
+            baritone.getPathingBehavior().cancelEverything();
+            return true;
         } catch (Throwable t) {
             return false;
         }

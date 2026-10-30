@@ -249,15 +249,6 @@ public final class PlayerEquipmentWorkbenchTab implements ModernSettingsTab {
         return false;
     }
 
-    private void updateCompactScroll(int mouseY) {
-        if (compactScrollbarBounds == null || compactScrollbarThumbBounds == null || compactMaxScroll <= 0) {
-            return;
-        }
-        int travel = Math.max(1, compactScrollbarBounds.height - compactScrollbarThumbBounds.height);
-        int target = Math.max(0, Math.min(travel,
-                mouseY - compactScrollbarBounds.y - compactScrollbarThumbBounds.height / 2));
-        compactScroll = Math.max(0, Math.min(compactMaxScroll, Math.round(target * (float) compactMaxScroll / travel)));
-    }
 
     ItemStack selectedStack() {
         if (selectedSlot < 0 || selectedSlot >= copiedInventory().getSizeInventory()) return ItemStack.EMPTY;

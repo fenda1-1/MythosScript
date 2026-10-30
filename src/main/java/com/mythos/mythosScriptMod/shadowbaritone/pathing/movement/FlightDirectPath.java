@@ -75,7 +75,7 @@ public final class FlightDirectPath extends PathBase {
         if (baritone == null || start == null || goal == null) {
             return PlanResult.failure(PlanStatus.UNSUPPORTED_GOAL);
         }
-        if (!baritone.getPlayerContext().player().capabilities.allowFlying && !FlyHandler.enabled) {
+        if (!baritone.getPlayerContext().player().capabilities.allowFlying && !FlyHandler.enabled()) {
             return PlanResult.failure(PlanStatus.NO_FLIGHT_CAPABILITY);
         }
         BlockPos target = resolveTarget(goal, start);
@@ -97,7 +97,7 @@ public final class FlightDirectPath extends PathBase {
         if (baritone == null || goal == null || start == null) {
             return PlanResult.failure(PlanStatus.UNSUPPORTED_GOAL);
         }
-        if (!baritone.getPlayerContext().player().capabilities.allowFlying && !FlyHandler.enabled) {
+        if (!baritone.getPlayerContext().player().capabilities.allowFlying && !FlyHandler.enabled()) {
             return PlanResult.failure(PlanStatus.NO_FLIGHT_CAPABILITY);
         }
         CalculationContext context = new CalculationContext(baritone, false);
@@ -397,7 +397,7 @@ public final class FlightDirectPath extends PathBase {
             return null;
         }
         int horizontalRadius = goal instanceof GoalFlightLanding
-                ? Math.max(0, com.mythos.mythosScriptMod.config.FlightPathingConfig.arrivalRange) : 4;
+                ? Math.max(0, com.mythos.mythosScriptMod.config.FlightPathingConfig.cfg().arrivalRange) : 4;
         BlockPos best = null;
         double bestDistance = Double.POSITIVE_INFINITY;
         for (int xOffset = -horizontalRadius; xOffset <= horizontalRadius; xOffset++) {
@@ -525,7 +525,7 @@ public final class FlightDirectPath extends PathBase {
             lastLoadedStep = step;
         }
         int speedMargin = (int) Math.ceil(Math.max(16.0D,
-                FlyHandler.horizontalSpeed * 3.0D));
+                FlyHandler.cfg().horizontalSpeed * 3.0D));
         int boundaryMargin = Math.min(speedMargin, Math.max(8, lastLoadedStep / 2));
         int relayStep = lastLoadedStep - boundaryMargin;
         if (relayStep < 2) {

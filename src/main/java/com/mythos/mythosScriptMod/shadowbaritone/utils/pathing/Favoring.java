@@ -92,7 +92,7 @@ public final class Favoring {
             previous.positions().forEach(pos -> favorings.put(BetterBlockPos.longHash(pos), coeff));
         }
 
-        HumanLikeMovementConfig config = HumanLikeMovementConfig.INSTANCE;
+        HumanLikeMovementConfig config = HumanLikeMovementConfig.instance();
         boolean enabled = config != null && config.enabled && !context.parkourMode;
         this.enableHumanLikeRouteFavoring = enabled;
         this.humanLikeRouteSeed = ThreadLocalRandom.current().nextLong();

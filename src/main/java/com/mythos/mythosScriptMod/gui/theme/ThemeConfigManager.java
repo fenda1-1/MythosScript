@@ -261,15 +261,6 @@ public final class ThemeConfigManager {
         applyActiveProfile();
     }
 
-    private static ThemeProfile buildPreset(String name, int border, int top, int bottom, int titleL, int titleR) {
-        ThemeProfile p = ThemeProfile.fromCurrent(name);
-        p.panelBorder = border;
-        p.panelBgTop = top;
-        p.panelBgBottom = bottom;
-        p.titleLeft = titleL;
-        p.titleRight = titleR;
-        return p;
-    }
 
     // Loaded lazily so the JSON codec and manager do not create an initialization cycle.
     private static final class BuiltInDefaults {
@@ -306,41 +297,6 @@ public final class ThemeConfigManager {
         return result;
     }
 
-    private static ThemeProfile buildPresetFromRgb(String name, int r, int g, int b) {
-        int base = 0xFF000000 | ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
-        int dark = darken(base, 42);
-        int mid = darken(base, 20);
-
-        ThemeProfile p = ThemeProfile.fromCurrent(name);
-        p.panelBorder = base;
-        p.panelBgTop = withAlpha(mid, 0xD0);
-        p.panelBgBottom = withAlpha(dark, 0xD0);
-        p.titleLeft = base;
-        p.titleRight = lighten(base, 26);
-
-        p.buttonBgNormal = mid;
-        p.buttonBgHover = lighten(mid, 20);
-        p.buttonBgPressed = darken(mid, 24);
-        p.buttonBorderNormal = lighten(mid, 18);
-        p.buttonBorderHover = lighten(mid, 44);
-
-        p.inputBg = darken(base, 52);
-        p.inputBorder = darken(base, 16);
-        p.inputBorderHover = lighten(base, 28);
-
-        int luminance = (r * 299 + g * 587 + b * 114) / 1000;
-        if (luminance > 170) {
-            p.titleText = 0xFF1E242D;
-            p.labelText = 0xFF1E242D;
-            p.subText = 0xFF4A5563;
-        } else {
-            p.titleText = 0xFFF2F8FF;
-            p.labelText = 0xFFE6EEF8;
-            p.subText = 0xFF9FB2C8;
-        }
-
-        return p;
-    }
 
     private static boolean isLegacyPresetPack(List<ThemeProfile> list) {
         if (list.isEmpty()) {
@@ -413,13 +369,6 @@ public final class ThemeConfigManager {
         GuiTheme.applyProfile(p);
     }
 
-    public static ThemeProfile addRandomTheme(String name) {
-        ThemeProfile p = createRandomProfile(name);
-        PROFILES.add(p);
-        activeIndex = PROFILES.size() - 1;
-        applyActiveProfile();
-        return p;
-    }
 
     public static ThemeProfile createRandomProfile(String name) {
         ThemeProfile p = ThemeProfile.fromCurrent(name);
@@ -519,23 +468,8 @@ public final class ThemeConfigManager {
         ensureDefaultPresets();
     }
 
-    private static int lighten(int color, int delta) {
-        int r = Math.min(255, ((color >> 16) & 0xFF) + delta);
-        int g = Math.min(255, ((color >> 8) & 0xFF) + delta);
-        int b = Math.min(255, (color & 0xFF) + delta);
-        return 0xFF000000 | (r << 16) | (g << 8) | b;
-    }
 
-    private static int darken(int color, int delta) {
-        int r = Math.max(0, ((color >> 16) & 0xFF) - delta);
-        int g = Math.max(0, ((color >> 8) & 0xFF) - delta);
-        int b = Math.max(0, (color & 0xFF) - delta);
-        return 0xFF000000 | (r << 16) | (g << 8) | b;
-    }
 
-    private static int withAlpha(int color, int alpha) {
-        return ((alpha & 0xFF) << 24) | (color & 0x00FFFFFF);
-    }
 
     public static boolean isBuiltInProfile(ThemeProfile profile) {
         if (profile == null) {

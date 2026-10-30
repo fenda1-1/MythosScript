@@ -79,9 +79,6 @@ public final class AutoFollowAreaPicker {
         begin(null, false, null, null, callback, prompt);
     }
 
-    public static void startPoint(Consumer<BlockPos> callback) {
-        begin((first, second) -> callback.accept(first), true);
-    }
 
     public static boolean isNavigationActive() {
         return active != null && active.navigation;
@@ -203,7 +200,14 @@ public final class AutoFollowAreaPicker {
                 messageKey("gui.point_picker.error.look_at_block");
                 return;
             }
-            IBaritone baritone = BaritoneAPI.getProvider().getPrimaryBaritone();
+            // The mouse handler above pins this click to the captured player.
+            // Nexus ticks that player's session Baritone; the primary instance
+            // receives no ticks, so a goal submitted there never starts.
+            IBaritone baritone = BaritoneAPI.getProvider().getBaritoneForPlayer(mc.player);
+            if (baritone == null) {
+                messageKey("gui.point_picker.navigation.error.no_baritone");
+                return;
+            }
             GoalBlock goal = GoalTargetNormalizer.normalizeGoalBlock(baritone, new GoalBlock(pos));
             baritone.getCustomGoalProcess().setGoalAndPath(goal);
             first = goal.getGoalPos();

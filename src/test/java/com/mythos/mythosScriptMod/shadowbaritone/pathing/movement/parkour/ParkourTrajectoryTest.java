@@ -66,6 +66,16 @@ public class ParkourTrajectoryTest {
         return boxes;
     }
 
+    private static java.util.List<String> liveLines(String name) throws java.io.IOException {
+        java.io.InputStream in = ParkourTrajectoryTest.class.getResourceAsStream("/parkour/live-search/" + name);
+        if (in == null) throw new java.io.FileNotFoundException("test resource /parkour/live-search/" + name);
+        try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8))) {
+            java.util.List<String> out = new java.util.ArrayList<>();
+            for (String s; (s = br.readLine()) != null; ) out.add(s);
+            return out;
+        }
+    }
+
     private static ParkourTrajectory.Frame standing(double x, double y, double z) {
         ParkourTrajectory.Frame frame = new ParkourTrajectory.Frame();
         frame.x = x; frame.y = y; frame.z = z;
@@ -140,9 +150,7 @@ public class ParkourTrajectoryTest {
     }
 
     @Test public void liveCapturedLavaGapReachesTheWestLedge() throws Exception {
-        java.nio.file.Path file = java.nio.file.Paths.get(
-                "E:/我的世界脚本/MythosTests/instances/1.12.2/inject/game/logs/parkour/live-search-195_-37613-to-125_-37585.txt");
-        java.util.List<String> lines = java.nio.file.Files.readAllLines(file);
+        java.util.List<String> lines = liveLines("live-search-195_-37613-to-125_-37585.txt");
         String[] head = lines.get(0).split(" ");
         double sx = Double.parseDouble(head[0]), sy = Double.parseDouble(head[1]), sz = Double.parseDouble(head[2]);
         List<AxisAlignedBB> boxes = new java.util.ArrayList<>();
@@ -163,9 +171,7 @@ public class ParkourTrajectoryTest {
     // with real block states, automatic routes and twenty-tick settled landings.
 
     @Test public void liveLevel70RejectsALandingInsideTheWall() throws Exception {
-        java.nio.file.Path file = java.nio.file.Paths.get(
-                "E:/我的世界脚本/MythosTests/instances/1.12.2/inject/game/logs/parkour/live-search-290_-37538-to-315_-37535.txt");
-        java.util.List<String> lines = java.nio.file.Files.readAllLines(file);
+        java.util.List<String> lines = liveLines("live-search-290_-37538-to-315_-37535.txt");
         String[] s = lines.get(0).split(" ");
         double sx = Double.parseDouble(s[0]), sy = Double.parseDouble(s[1]), sz = Double.parseDouble(s[2]);
         List<AxisAlignedBB> boxes = new java.util.ArrayList<>();
@@ -183,9 +189,7 @@ public class ParkourTrajectoryTest {
     }
 
     @Test public void liveCapturedFenceSearchReachesTheLedge() throws Exception {
-        java.nio.file.Path file = java.nio.file.Paths.get(
-                "E:/我的世界脚本/MythosTests/instances/1.12.2/inject/game/logs/parkour/live-search-55_-37151-to-85_-37151.txt");
-        java.util.List<String> lines = java.nio.file.Files.readAllLines(file);
+        java.util.List<String> lines = liveLines("live-search-55_-37151-to-85_-37151.txt");
         String[] head = lines.get(0).split(" ");
         double sx = Double.parseDouble(head[0]), sy = Double.parseDouble(head[1]), sz = Double.parseDouble(head[2]);
         double gx = Double.parseDouble(head[head.length-3]), gy = Double.parseDouble(head[head.length-2]), gz = Double.parseDouble(head[head.length-1]);

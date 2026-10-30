@@ -309,9 +309,12 @@ public final class ModernActionEditorSchema {
             text(result, "gui.modern.path.schema.u191", "delayTicks", "gui.modern.path.schema.u215", "", "0");
         } else if ("send_packet".equals(t)) {
             choice(result, "gui.modern.path.schema.u216", "direction", "gui.modern.path.schema.u217", "", "C2S", "S2C");
+            choice(result, "gui.modern.path.schema.u216", "targetType", "gui.modern.path.schema.u316", "", "packetId", "channel");
             text(result, "gui.modern.path.schema.u216", "channel", "gui.modern.path.schema.u218", "", "");
-            text(result, "gui.modern.path.schema.u216", "packetId", "gui.modern.path.schema.u219", "", "");
+            text(result, "gui.modern.path.schema.u216", "packetId", "gui.modern.path.schema.u317", "gui.modern.path.schema.u318", "");
             text(result, "gui.modern.path.schema.u216", "hex", "gui.modern.path.schema.u220", "", "");
+            result.add(new Field("gui.modern.path.schema.u216", "__pickPacket", "gui.modern.path.schema.u314",
+                    "gui.modern.path.schema.u315", null, Kind.INFO, null));
         } else if ("run_sequence".equals(t)) {
             text(result, "gui.modern.path.schema.u221", "sequenceName", "gui.modern.path.schema.u222", "", "");
             choice(result, "gui.modern.path.schema.u221", "executeMode", "gui.modern.path.schema.u223", "", "always", "interval");

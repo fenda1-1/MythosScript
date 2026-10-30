@@ -40,6 +40,38 @@ import java.util.Map;
 import java.util.Set;
 
 public class ItemFilterHandler {
+
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        public List<String> blacklistFilters = new ArrayList<>();
+        public List<String> whitelistFilters = new ArrayList<>();
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) ItemFilterHandler::loadFilterConfig);
+            return config;
+        }
+    }
+
     public static final File FILTER_CONFIG_FILE = new File(ModConfig.CONFIG_DIR, "filter_config.json");
     private static final int DEFAULT_MOVE_TO_CHEST_DELAY_TICKS = 2;
     private static final String DEFAULT_MOVE_CHEST_CLICK_TYPE = "PICKUP";
@@ -96,11 +128,18 @@ public class ItemFilterHandler {
         volatile String failReason = "";
         volatile int clicksThisTick;
         volatile int lastTick = Integer.MIN_VALUE;
+        /** Owning session name ("" = foreground). Bots must distinguish "my
+         *  transfer is running" from "another bot's transfer is running" —
+         *  otherwise a bot that got its start dropped under the shared flag
+         *  would spin in the async-poll branch forever on another bot's task. */
+        final String owner;
 
         MoveChestTask(int windowId, int generation, int pending) {
             this.windowId = windowId;
             this.generation = generation;
             this.pending = pending;
+            String o = com.mythos.mythosScriptMod.mcp.NexusSessions.currentUsername();
+            this.owner = o == null ? "" : o;
         }
     }
 
@@ -116,15 +155,13 @@ public class ItemFilterHandler {
         }
     }
 
-    public static List<String> blacklistFilters = new ArrayList<>();
-    public static List<String> whitelistFilters = new ArrayList<>();
 
     static {
         loadFilterConfig();
     }
 
     private static File getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("filter_config.json").toFile();
+        return ProfileManager.currentConfigFile("filter_config.json").toFile();
     }
 
     /**
@@ -134,8 +171,8 @@ public class ItemFilterHandler {
         try {
             File configFile = getConfigFile();
             JsonObject json = new JsonObject();
-            json.add("blacklist", new Gson().toJsonTree(blacklistFilters));
-            json.add("whitelist", new Gson().toJsonTree(whitelistFilters));
+            json.add("blacklist", new Gson().toJsonTree(cfg().blacklistFilters));
+            json.add("whitelist", new Gson().toJsonTree(cfg().whitelistFilters));
 
             // 确保父目录存在
             if (!configFile.getParentFile().exists()) {
@@ -160,10 +197,10 @@ public class ItemFilterHandler {
                         StandardCharsets.UTF_8);
                 JsonObject json = new JsonParser().parse(jsonContent).getAsJsonObject();
 
-                blacklistFilters = new Gson().fromJson(
+                cfg().blacklistFilters = new Gson().fromJson(
                         json.get("blacklist"), new TypeToken<List<String>>() {
                         }.getType());
-                whitelistFilters = new Gson().fromJson(
+                cfg().whitelistFilters = new Gson().fromJson(
                         json.get("whitelist"), new TypeToken<List<String>>() {
                         }.getType());
             }
@@ -176,7 +213,7 @@ public class ItemFilterHandler {
      * 根据名称过滤丢弃物品（黑名单+白名单机制）
      */
     public static void dropItemsByNameFilter() {
-        EntityPlayerSP player = Minecraft.getMinecraft().player;
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
         if (player == null)
             return;
 
@@ -217,14 +254,14 @@ public class ItemFilterHandler {
                         continue;
                     }
 
-                    boolean shouldDrop = blacklistFilters.stream().anyMatch(itemName::contains);
-                    boolean shouldKeep = whitelistFilters.stream().anyMatch(itemName::contains);
+                    boolean shouldDrop = cfg().blacklistFilters.stream().anyMatch(itemName::contains);
+                    boolean shouldKeep = cfg().whitelistFilters.stream().anyMatch(itemName::contains);
 
                     if (shouldDrop && !shouldKeep) {
                         slotsToDrop.add(i);
                         if (ModConfig.isDebugFlagEnabled(DebugModule.ITEM_FILTER)
-                                && Minecraft.getMinecraft().player != null) {
-                            Minecraft.getMinecraft().player.sendMessage(new TextComponentString(
+                                && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
                                     String.format("§d[调试] §7物品 [%s] 被标记为待丢弃 (黑名单匹配)。", itemName)));
                         }
                     }
@@ -258,10 +295,10 @@ public class ItemFilterHandler {
                 final int currentBatch = batch;
                 new ModUtils.DelayAction(batch * 3, () -> {
                     // 在每个延迟批次执行前再次检查容器状态
-                    if (Minecraft.getMinecraft().player == null)
+                    if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null)
                         return;
-                    if (Minecraft.getMinecraft().player.openContainer == null
-                            || Minecraft.getMinecraft().player.openContainer.windowId != initialWindowId) {
+                    if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer == null
+                            || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer.windowId != initialWindowId) {
                         System.err.println("警告: 容器在延迟操作中途更改或关闭，取消剩余丢弃操作。");
                         return; // 如果容器已更改或关闭，则中止剩余操作
                     }
@@ -284,11 +321,11 @@ public class ItemFilterHandler {
                         }
 
                         // 执行丢弃流程
-                        Minecraft.getMinecraft().playerController.windowClick(
+                        com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(
                                 player.openContainer.windowId,
                                 containerSlot, 0, ClickType.PICKUP, player);
                         // 丢弃到地面（点击容器外）
-                        Minecraft.getMinecraft().playerController.windowClick(
+                        com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(
                                 player.openContainer.windowId,
                                 -999, 0, ClickType.PICKUP, player);
                     }
@@ -301,7 +338,7 @@ public class ItemFilterHandler {
      * 根据名称过滤点击物品（黑名单+白名单机制）
      */
     public static void ClickItemsByNameFilter() {
-        EntityPlayerSP player = Minecraft.getMinecraft().player;
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
         if (player == null)
             return;
 
@@ -341,7 +378,7 @@ public class ItemFilterHandler {
                 }
 
                 String itemName = slot.getStack().getDisplayName().trim();
-                boolean shouldKeep = whitelistFilters.stream().anyMatch(itemName::contains);
+                boolean shouldKeep = cfg().whitelistFilters.stream().anyMatch(itemName::contains);
 
                 if (shouldKeep) {
                     slotsToKeep.add(i);
@@ -380,8 +417,8 @@ public class ItemFilterHandler {
             for (int batch = 0; batch < slotsToKeep.size(); batch += batchSize) {
                 final int currentBatch = batch;
                 new ModUtils.DelayAction(batch * 3, () -> {
-                    if (Minecraft.getMinecraft().player == null || Minecraft.getMinecraft().player.openContainer == null
-                            || Minecraft.getMinecraft().player.openContainer.windowId != initialWindowId) {
+                    if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer == null
+                            || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer.windowId != initialWindowId) {
                         return;
                     }
                     for (int i = 0; i < batchSize; i++) {
@@ -391,7 +428,7 @@ public class ItemFilterHandler {
                         }
                         int containerSlot = slotsToKeep.get(globalIndex);
                         if (containerSlot >= 0 && containerSlot < player.openContainer.inventorySlots.size()) {
-                            Minecraft.getMinecraft().playerController.windowClick(
+                            com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(
                                     player.openContainer.windowId,
                                     containerSlot, 0, ClickType.PICKUP, player);
                         }
@@ -407,6 +444,17 @@ public class ItemFilterHandler {
             return true;
         }
         return warehouseTransferInProgress;
+    }
+
+    /** True only when the CURRENT tick owner's own transfer is live. The
+     *  sequence runner polls this after dispatching an async move; if another
+     *  bot's transfer is still running it should retry the dispatch, not spin
+     *  on a foreign task's completion. */
+    public static boolean isWarehouseTransferInProgressForCurrentOwner() {
+        String self = com.mythos.mythosScriptMod.mcp.NexusSessions.currentUsername();
+        if (self == null) self = "";
+        MoveChestTask task = currentMoveChestTask;
+        return task != null && !task.cancelled && task.pending > 0 && self.equals(task.owner);
     }
 
     public static void cancelMoveChestTransfer() {
@@ -433,7 +481,7 @@ public class ItemFilterHandler {
     }
 
     public static int[] livePhysicalSlotCounts() {
-        EntityPlayerSP player = Minecraft.getMinecraft().player;
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
         if (player == null || player.openContainer == null) {
             return new int[] { 0, 0 };
         }
@@ -488,15 +536,32 @@ public class ItemFilterHandler {
     }
 
     public static void moveInventoryItemsToChestSlots(JsonObject params) {
-        EntityPlayerSP player = Minecraft.getMinecraft().player;
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
         if (player == null) {
             return;
         }
 
+        // Another session's transfer is live — reschedule ourselves on our own
+        // tick thread so the runner's async-poll branch keeps returning true
+        // (owner check below) until we actually get to run.
         if (warehouseTransferInProgress) {
-            if (ModConfig.isDebugFlagEnabled(DebugModule.ITEM_FILTER)) {
-                player.sendMessage(new TextComponentString("§d[调试] §e物品槽位转移仍在进行中，本次请求已忽略。"));
+            String self = com.mythos.mythosScriptMod.mcp.NexusSessions.currentUsername();
+            if (self == null) self = "";
+            MoveChestTask t = currentMoveChestTask;
+            boolean mine = t != null && !t.cancelled && t.pending > 0 && self.equals(t.owner);
+            if (!mine) {
+                final JsonObject retry = params;
+                final String ownerName = self;
+                if (ModUtils.DelayScheduler.instance != null) {
+                    ModUtils.DelayScheduler.instance.schedule(() -> {
+                        // Re-dispatch on our own thread context; boundPlayer()
+                        // will resolve us via the tick-owner binding.
+                        moveInventoryItemsToChestSlots(retry);
+                    }, 2, MOVE_CHEST_TASK_TAG + "-retry-" + ownerName);
+                }
+                return;
             }
+            // Own task still running — drop the duplicate call silently.
             return;
         }
 
@@ -504,7 +569,7 @@ public class ItemFilterHandler {
         pendingWarehouseTransferClicks = 0;
 
         Container container = player.openContainer;
-        if (Minecraft.getMinecraft().currentScreen == null || container == null) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen() == null || container == null) {
             if (ModConfig.isDebugFlagEnabled(DebugModule.ITEM_FILTER)) {
                 player.sendMessage(new TextComponentString("§d[调试] §c错误: 未检测到已打开的容器界面，槽位转移取消。"));
             }
@@ -645,8 +710,8 @@ public class ItemFilterHandler {
                 if (task.cancelled || currentMoveChestTask != task) {
                     return;
                 }
-                EntityPlayerSP player = Minecraft.getMinecraft().player;
-                if (player == null || Minecraft.getMinecraft().currentScreen == null
+                EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+                if (player == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen() == null
                         || player.openContainer == null || player.openContainer.windowId != task.windowId) {
                     task.failReason = "window-changed";
                     cancelMoveChestTransfer();
@@ -673,7 +738,7 @@ public class ItemFilterHandler {
                 ItemStack beforeSlot = slot == null || !slot.getHasStack() ? ItemStack.EMPTY : slot.getStack().copy();
                 ItemStack beforeCursor = player.inventory.getItemStack() == null ? ItemStack.EMPTY
                         : player.inventory.getItemStack().copy();
-                Minecraft.getMinecraft().playerController.windowClick(task.windowId, click.slot, click.button,
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(task.windowId, click.slot, click.button,
                         click.type, player);
                 task.clicksThisTick++;
                 ItemStack afterSlot = slot == null || !slot.getHasStack() ? ItemStack.EMPTY : slot.getStack();
@@ -1053,7 +1118,7 @@ public class ItemFilterHandler {
         }
 
         try {
-            List<String> tooltip = stack.getTooltip(Minecraft.getMinecraft().player, ITooltipFlag.TooltipFlags.NORMAL);
+            List<String> tooltip = stack.getTooltip(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer(), ITooltipFlag.TooltipFlags.NORMAL);
             for (String line : tooltip) {
                 appendMoveChestMatchText(builder, line);
             }

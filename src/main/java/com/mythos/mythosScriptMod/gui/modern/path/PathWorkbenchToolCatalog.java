@@ -101,6 +101,8 @@ public final class PathWorkbenchToolCatalog {
         RECORDING_UNDO(Zone.RECORDING_CONTROL, "undo", "gui.modern.path.record.undo", "Ctrl+Z", true, false, false),
         RECORDING_REDO(Zone.RECORDING_CONTROL, "redo", "gui.modern.path.record.redo", "Ctrl+Y", true, false, false),
         RECORDING_CLEAR(Zone.RECORDING_CONTROL, "clear", "gui.modern.path.record.clear", "", true, true, false),
+        RECORDING_PACKET_CAPTURE(Zone.RECORDING_CONTROL, "packet_capture",
+                "gui.modern.path.record.packet_capture", "", true, false, false),
 
         HEADER_VALIDATE(Zone.HEADER, "validate", "gui.modern.path.tool.u026", "gui.modern.path.tool.u027",
                 "gui.modern.path.tool.u028", "", true, false, false),

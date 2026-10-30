@@ -607,37 +607,6 @@ final class PacketCapturedIdPanel extends PacketPanelBase {
     private static String safe(String value, String fallback) { return value == null || value.trim().isEmpty() ? fallback : value; }
     private static int clamp(int value, int min, int max) { return Math.max(min, Math.min(max, value)); }
 
-    private void openCapturedIdContext(int x, int y) {
-        List<PacketContextMenu.Item> items = new ArrayList<PacketContextMenu.Item>();
-        String category = selectTreeContextHit(x, y);
-        if (category != null && !ALL.equals(category) && !UNGROUPED.equals(category)) {
-            final String target = category;
-            items.add(new PacketContextMenu.Item("gui.modern.pktid.u031", () -> prompt("gui.modern.pktid.u031", "gui.modern.pktid.u032", target, value -> {
-                if (CapturedIdRuleManager.renameCategory(target, value)) { selectedCategory = value.trim(); refresh(); }
-                else owner.status("分组重命名失败");
-            })));
-            items.add(new PacketContextMenu.Item("gui.modern.pktid.u006", () -> {
-                if (CapturedIdRuleManager.deleteCategory(target)) { selectedCategory = ALL; refresh(); }
-                else owner.status("分组删除失败");
-            }));
-        }
-        items.add(new PacketContextMenu.Item("gui.modern.pktid.u036", () -> prompt("gui.modern.pktid.u036", "gui.modern.pktid.u037", "", value -> {
-            if (CapturedIdRuleManager.addCategory(value)) { selectedCategory = value.trim(); refresh(); }
-            else owner.status("分组创建失败");
-        })));
-        items.add(new PacketContextMenu.Item("gui.modern.pktid.u005", () -> beginNewRule()));
-        if (selected >= 0) {
-            items.add(new PacketContextMenu.Item("gui.modern.pktid.u006", () -> {
-                if (selected < cards.size() && CapturedIdRuleManager.deleteRule(cards.get(selected).index)) { refresh(); selected = -1; }
-            }));
-            if (category != null && !ALL.equals(category) && selected < cards.size()) {
-                items.add(new PacketContextMenu.Item("移动到分类", () -> navigationActions.choose(
-                        "移动到分类", categories, cards.get(selected).model.category,
-                        value -> CapturedIdRuleManager.moveRuleToCategory(cards.get(selected).index, value))));
-            }
-        }
-        openContextMenu(x, y, items);
-    }
     private String selectTreeContextHit(int x, int y) {
         if (treeBounds == null || !treeBounds.contains(x, y)) return null;
         for (TreeHit hit : treeHits) if (hit.bounds.contains(x, y)) {

@@ -1,6 +1,7 @@
 package com.mythos.mythosScriptMod.otherfeatures.handler.movement;
 
 import com.mojang.authlib.GameProfile;
+import com.mythos.mythosScriptMod.mcp.NexusSessions;
 import com.mythos.mythosScriptMod.mythosScriptMod;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityOtherPlayerMP;
@@ -22,6 +23,7 @@ public final class FreecamFeatureHandler {
     private FreecamFeatureHandler() { }
 
     public static boolean isActive() {
+        if (NexusSessions.boundSession() != null) return false;
         Minecraft mc = Minecraft.getMinecraft();
         return camera != null && body == mc.player && camera.world == mc.world
                 && body.isEntityAlive() && MovementFeatureManager.isEnabled("freecam");
@@ -32,6 +34,9 @@ public final class FreecamFeatureHandler {
     }
 
     public static void stop() {
+        // Freecam owns the one visible camera. A background session's toggle,
+        // disconnect or tick must not clear that camera's shared lifecycle.
+        if (NexusSessions.boundSession() != null) return;
         Minecraft mc = Minecraft.getMinecraft();
         if (camera != null) {
             if (mc.getRenderViewEntity() == camera) {
@@ -52,14 +57,17 @@ public final class FreecamFeatureHandler {
     }
 
     public static void tick() {
+        // Nexus also dispatches START ticks on bot threads and makes its
+        // isCallingFromMinecraftThread() return true there. Check the actual
+        // thread binding before reading any per-owner toggle or camera state.
+        if (NexusSessions.boundSession() != null) return;
         Minecraft mc = Minecraft.getMinecraft();
         if (!MovementFeatureManager.isEnabled("freecam")) {
             stop();
             return;
         }
         if (camera != null && (body != mc.player || camera.world != mc.world
-                || body == null || !body.isEntityAlive() || body.isRiding()
-                || mc.getRenderViewEntity() != camera)) {
+                || body == null || !body.isEntityAlive() || body.isRiding())) {
             stop();
             MovementFeatureManager.setEnabled("freecam", false);
             return;
@@ -74,6 +82,12 @@ public final class FreecamFeatureHandler {
             camera = new GhostCamera(mc.world);
             camera.setLocationAndAngles(body.posX, body.posY, body.posZ, body.rotationYaw, body.rotationPitch);
             syncPreviousPosition();
+            mc.setRenderViewEntity(camera);
+        } else if (mc.getRenderViewEntity() != camera) {
+            // Nexus mount/context swaps and other camera features can
+            // transiently restore the body's view entity. That is not a
+            // Freecam failure: reassert the GhostCamera instead of disabling
+            // the feature and pulling the view back to the player.
             mc.setRenderViewEntity(camera);
         }
         mc.gameSettings.thirdPersonView = 0;

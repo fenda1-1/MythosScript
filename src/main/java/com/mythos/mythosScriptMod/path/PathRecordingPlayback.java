@@ -16,7 +16,7 @@ public final class PathRecordingPlayback {
 
     public static boolean start(PathSequence draft, int startStepIndex) {
         if (draft == null || startStepIndex < 0 || startStepIndex >= draft.getSteps().size()
-                || Minecraft.getMinecraft().player == null) {
+                || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null) {
             return false;
         }
         PathSequence copy = new PathSequence(draft, false);
@@ -24,7 +24,7 @@ public final class PathRecordingPlayback {
         if (PathRecordingManager.isRecording() && !PathRecordingManager.isPaused()) {
             PathRecordingManager.togglePaused();
         }
-        PathSequenceEventListener runner = PathSequenceEventListener.instance;
+        PathSequenceEventListener runner = PathSequenceEventListener.foregroundRunner();
         runner.stopTracking();
         EmbeddedNavigationHandler.INSTANCE.stop();
         PathSequenceManager.clearRunSequenceCallStack();
@@ -43,8 +43,8 @@ public final class PathRecordingPlayback {
     }
 
     public static boolean isRunning() {
-        return snapshot != null && PathSequenceEventListener.instance.isTracking()
-                && (PathSequenceEventListener.instance.currentSequence == snapshot
+        return snapshot != null && PathSequenceEventListener.foregroundRunner().isTracking()
+                && (PathSequenceEventListener.foregroundRunner().currentSequence == snapshot
                         || PathSequenceManager.hasPendingCaller(snapshot));
     }
 
@@ -53,18 +53,18 @@ public final class PathRecordingPlayback {
     }
 
     public static boolean isPaused() {
-        return isRunning() && PathSequenceEventListener.instance.isPaused();
+        return isRunning() && PathSequenceEventListener.foregroundRunner().isPaused();
     }
 
     public static void togglePaused() {
         if (!isRunning()) return;
-        if (isPaused()) PathSequenceEventListener.instance.resume();
-        else PathSequenceEventListener.instance.pause();
+        if (isPaused()) PathSequenceEventListener.foregroundRunner().resume();
+        else PathSequenceEventListener.foregroundRunner().pause();
     }
 
     public static void stop() {
         if (!isRunning()) return;
-        PathSequenceEventListener.instance.stopTracking();
+        PathSequenceEventListener.foregroundRunner().stopTracking();
         EmbeddedNavigationHandler.INSTANCE.stop();
         snapshot = null;
     }

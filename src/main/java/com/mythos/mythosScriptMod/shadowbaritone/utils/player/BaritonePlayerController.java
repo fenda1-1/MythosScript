@@ -95,7 +95,12 @@ public final class BaritonePlayerController implements IPlayerController {
 
     @Override
     public GameType getGameType() {
-        return mc.playerController.getCurrentGameType();
+        PlayerControllerMP controller = mc.playerController;
+        // Bot tick threads can race the login handshake — playerController is
+        // still null for a few ticks after connect. Return SURVIVAL as the
+        // safe default (baritone only uses this for reach distance).
+        if (controller == null) return GameType.SURVIVAL;
+        return controller.getCurrentGameType();
     }
 
     @Override

@@ -346,13 +346,20 @@ public final class GuiElementInspector {
                 String path = "screen/" + simpleName + "/" + pathPrefix + "[" + i + "]"
                         + "/slot[" + i + "]";
                 String text = slot.getHasStack() ? stripFormatting(slot.getStack().getDisplayName()) : "";
-                elements.add(new GuiElementInfo(ElementType.SLOT, path, text,
-                        guiLeft + slot.xPos,
-                        guiTop + slot.yPos,
+                int slotX = guiLeft + slot.xPos;
+                int slotY = guiTop + slot.yPos;
+                GuiElementInfo element = new GuiElementInfo(ElementType.SLOT, path, text,
+                        slotX,
+                        slotY,
                         16,
                         16,
                         Integer.MIN_VALUE,
-                        i));
+                        i);
+                // GuiContainerCreative uses -2000/-2000 for slots hidden by
+                // the active creative tab. Keep them in the snapshot for
+                // semantic lookup, but do not treat them as visible layout.
+                elements.add(element.withVisibility(intersectsScreen(slotX, slotY, 16, 16, screen.width,
+                        screen.height)));
             }
         }
 
@@ -908,6 +915,10 @@ public final class GuiElementInspector {
             }
         }
         return container == null || container.inventorySlots == null ? 0 : container.inventorySlots.size();
+    }
+
+    private static boolean intersectsScreen(int x, int y, int width, int height, int screenWidth, int screenHeight) {
+        return x < screenWidth && y < screenHeight && x + width > 0 && y + height > 0;
     }
 
     private static boolean isAllowed(ElementType type, ElementType... allowedTypes) {

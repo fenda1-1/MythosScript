@@ -199,6 +199,35 @@ public final class ModernOtherFeatureSettingsTab {
                     .integer(text("gui.other_feature.entity_display_distance", "最大显示距离"),
                             text("gui.other_feature.entity_display_distance_tip", "范围 1–100 格，默认 10 格。"), access.entityDistanceValue(),
                             RenderFeatureManager.ENTITY_DISTANCE_MIN, RenderFeatureManager.ENTITY_DISTANCE_MAX);
+        } else if (access.kind == Kind.RENDER && "entity_visual".equals(access.id)) {
+            builder.section(text("gui.other_feature.entity_visual_filters", "实体筛选"),
+                    text("gui.other_feature.entity_visual_filters_tip", "选择哪些实体显示高亮轮廓；总开关在页面标题右侧。"))
+                    .toggle(text("gui.other_feature.entity_visual_players", "玩家"),
+                            text("gui.other_feature.entity_visual_players_tip", "显示玩家的高亮轮廓。"),
+                            renderToggle(() -> RenderFeatureManager.cfg().entityVisualPlayers,
+                                    v -> RenderFeatureManager.cfg().entityVisualPlayers = v))
+                    .toggle(text("gui.other_feature.entity_visual_monsters", "怪物"),
+                            text("gui.other_feature.entity_visual_monsters_tip", "显示敌对生物的高亮轮廓。"),
+                            renderToggle(() -> RenderFeatureManager.cfg().entityVisualMonsters,
+                                    v -> RenderFeatureManager.cfg().entityVisualMonsters = v))
+                    .toggle(text("gui.other_feature.entity_visual_animals", "动物与 NPC"),
+                            text("gui.other_feature.entity_visual_animals_tip", "显示动物、村民和其他 NPC 的高亮轮廓。"),
+                            renderToggle(() -> RenderFeatureManager.cfg().entityVisualAnimals,
+                                    v -> RenderFeatureManager.cfg().entityVisualAnimals = v));
+            builder.section(text("gui.other_feature.entity_visual_render", "渲染效果"),
+                    text("gui.other_feature.entity_visual_render_tip", "控制轮廓的显示方式与最大距离。"))
+                    .toggle(text("gui.other_feature.entity_visual_through_walls", "穿墙显示"),
+                            text("gui.other_feature.entity_visual_through_walls_tip", "关闭后仅当实体可见时才绘制轮廓。"),
+                            renderToggle(() -> RenderFeatureManager.cfg().entityVisualThroughWalls,
+                                    v -> RenderFeatureManager.cfg().entityVisualThroughWalls = v))
+                    .toggle(text("gui.other_feature.entity_visual_filled_box", "填充方框"),
+                            text("gui.other_feature.entity_visual_filled_box_tip", "以填充方框高亮实体；关闭则只画描边。"),
+                            renderToggle(() -> RenderFeatureManager.cfg().entityVisualFilledBox,
+                                    v -> RenderFeatureManager.cfg().entityVisualFilledBox = v))
+                    .decimal(text("gui.other_feature.entity_visual_max_distance", "最大距离"),
+                            text("gui.other_feature.entity_visual_max_distance_tip", "范围 1–100 格，默认 48 格。"),
+                            radarFloat(() -> RenderFeatureManager.cfg().entityVisualMaxDistance,
+                                    v -> RenderFeatureManager.cfg().entityVisualMaxDistance = v), 1.0F, 100.0F);
         } else if (access.kind == Kind.RENDER && "entity_info".equals(access.id)) {
             builder.section(text("gui.other_feature.entity_display_range", "实体显示范围"),
                     text("gui.other_feature.entity_display_range_tip", "设置实体信息面板的最大显示距离，范围 1–100 格。"))
@@ -326,7 +355,7 @@ public final class ModernOtherFeatureSettingsTab {
 
         private boolean enabled() {
             switch (kind) {
-            case SPEED: return SpeedHandler.enabled;
+            case SPEED: return SpeedHandler.INSTANCE.isEnabledNow();
             case MOVEMENT: return MovementFeatureManager.isEnabled(id);
             case BLOCK: return BlockFeatureManager.isEnabled(id);
             case RENDER: return RenderFeatureManager.isEnabled(id);
@@ -349,7 +378,7 @@ public final class ModernOtherFeatureSettingsTab {
         }
 
         private boolean hud() {
-            if (kind == Kind.SPEED) return SpeedHandler.showStatusHud;
+            if (kind == Kind.SPEED) return SpeedHandler.cfg().showStatusHud;
             if (kind == Kind.MOVEMENT) return MovementFeatureManager.isFeatureStatusHudEnabled(id);
             if (kind == Kind.BLOCK) return BlockFeatureManager.isFeatureStatusHudEnabled(id);
             if (kind == Kind.WORLD) return WorldFeatureManager.isFeatureStatusHudEnabled(id);
@@ -359,7 +388,7 @@ public final class ModernOtherFeatureSettingsTab {
         }
 
         private void setHud(boolean value) {
-            if (kind == Kind.SPEED) { SpeedHandler.showStatusHud = value; return; }
+            if (kind == Kind.SPEED) { SpeedHandler.cfg().showStatusHud = value; return; }
             if (kind == Kind.MOVEMENT) { MovementFeatureManager.setFeatureStatusHudEnabled(id, value); return; }
             if (kind == Kind.BLOCK) { BlockFeatureManager.setFeatureStatusHudEnabled(id, value); return; }
             if (kind == Kind.WORLD) { WorldFeatureManager.setFeatureStatusHudEnabled(id, value); return; }
@@ -424,7 +453,7 @@ public final class ModernOtherFeatureSettingsTab {
         }
 
         private void reset() {
-            if (kind == Kind.SPEED) { SpeedHandler.applyPreset(SpeedHandler.PRESET_BALANCED); SpeedHandler.showStatusHud = true; return; }
+            if (kind == Kind.SPEED) { SpeedHandler.applyPreset(SpeedHandler.PRESET_BALANCED); SpeedHandler.cfg().showStatusHud = true; return; }
             if (kind == Kind.MOVEMENT) MovementFeatureManager.resetFeature(id);
             else if (kind == Kind.BLOCK) BlockFeatureManager.resetFeature(id);
             else if (kind == Kind.RENDER) RenderFeatureManager.resetFeature(id);
@@ -440,26 +469,26 @@ public final class ModernOtherFeatureSettingsTab {
 
         private ModernFormSettingsTab.ChoiceValue<String> speedModeValue() {
             return new ModernFormSettingsTab.ChoiceValue<String>() {
-                @Override public String get() { return SpeedHandler.speedMode; }
-                @Override public void set(String value) { SpeedHandler.speedMode = value; SpeedHandler.markCustomPreset(); }
+                @Override public String get() { return SpeedHandler.cfg().speedMode; }
+                @Override public void set(String value) { SpeedHandler.cfg().speedMode = value; SpeedHandler.markCustomPreset(); }
             };
         }
         private ModernFormSettingsTab.ChoiceValue<String> speedPresetValue() {
             return new ModernFormSettingsTab.ChoiceValue<String>() {
-                @Override public String get() { return SpeedHandler.presetId; }
+                @Override public String get() { return SpeedHandler.cfg().presetId; }
                 @Override public void set(String value) { SpeedHandler.applyPreset(value); }
             };
         }
         private ModernFormSettingsTab.BooleanValue speedTimerValue() {
             return new ModernFormSettingsTab.BooleanValue() {
-                @Override public boolean get() { return SpeedHandler.useTimerBoost; }
-                @Override public void set(boolean value) { SpeedHandler.useTimerBoost = value; SpeedHandler.markCustomPreset(); }
+                @Override public boolean get() { return SpeedHandler.cfg().useTimerBoost; }
+                @Override public void set(boolean value) { SpeedHandler.cfg().useTimerBoost = value; SpeedHandler.markCustomPreset(); }
             };
         }
         private ModernFormSettingsTab.BooleanValue speedHudValue() {
             return new ModernFormSettingsTab.BooleanValue() {
-                @Override public boolean get() { return SpeedHandler.showStatusHud; }
-                @Override public void set(boolean value) { SpeedHandler.showStatusHud = value; }
+                @Override public boolean get() { return SpeedHandler.cfg().showStatusHud; }
+                @Override public void set(boolean value) { SpeedHandler.cfg().showStatusHud = value; }
             };
         }
         private ModernFormSettingsTab.FloatValue speedTimerSpeedValue() { return speedFloat(0); }
@@ -467,8 +496,8 @@ public final class ModernOtherFeatureSettingsTab {
         private ModernFormSettingsTab.FloatValue speedJumpValue() { return speedFloat(2); }
         private ModernFormSettingsTab.FloatValue speedFloat(final int which) {
             return new ModernFormSettingsTab.FloatValue() {
-                @Override public float get() { return which == 0 ? SpeedHandler.timerSpeed : which == 1 ? SpeedHandler.vanillaSpeed : SpeedHandler.jumpHeight; }
-                @Override public void set(float value) { if (which == 0) SpeedHandler.timerSpeed = value; else if (which == 1) SpeedHandler.vanillaSpeed = value; else SpeedHandler.jumpHeight = value; SpeedHandler.markCustomPreset(); }
+                @Override public float get() { return which == 0 ? SpeedHandler.cfg().timerSpeed : which == 1 ? SpeedHandler.cfg().vanillaSpeed : SpeedHandler.cfg().jumpHeight; }
+                @Override public void set(float value) { if (which == 0) SpeedHandler.cfg().timerSpeed = value; else if (which == 1) SpeedHandler.cfg().vanillaSpeed = value; else SpeedHandler.cfg().jumpHeight = value; SpeedHandler.markCustomPreset(); }
             };
         }
         private ModernFormSettingsTab.BooleanValue lavaWaterValue() { return lavaBool(0); }
@@ -508,15 +537,15 @@ public final class ModernOtherFeatureSettingsTab {
         private ModernFormSettingsTab.BooleanValue entityTagFilterValue(final int which) {
             return new ModernFormSettingsTab.BooleanValue() {
                 @Override public boolean get() {
-                    return which == 0 ? RenderFeatureManager.entityTagPlayers
-                            : which == 1 ? RenderFeatureManager.entityTagMonsters
-                            : RenderFeatureManager.entityTagAnimals;
+                    return which == 0 ? RenderFeatureManager.cfg().entityTagPlayers
+                            : which == 1 ? RenderFeatureManager.cfg().entityTagMonsters
+                            : RenderFeatureManager.cfg().entityTagAnimals;
                 }
 
                 @Override public void set(boolean value) {
-                    if (which == 0) RenderFeatureManager.entityTagPlayers = value;
-                    else if (which == 1) RenderFeatureManager.entityTagMonsters = value;
-                    else RenderFeatureManager.entityTagAnimals = value;
+                    if (which == 0) RenderFeatureManager.cfg().entityTagPlayers = value;
+                    else if (which == 1) RenderFeatureManager.cfg().entityTagMonsters = value;
+                    else RenderFeatureManager.cfg().entityTagAnimals = value;
                 }
             };
         }
@@ -524,15 +553,15 @@ public final class ModernOtherFeatureSettingsTab {
         private ModernFormSettingsTab.BooleanValue entityTagContentValue(final int which) {
             return new ModernFormSettingsTab.BooleanValue() {
                 @Override public boolean get() {
-                    return which == 0 ? RenderFeatureManager.entityTagShowHealth
-                            : which == 1 ? RenderFeatureManager.entityTagShowDistance
-                            : RenderFeatureManager.entityTagShowHeldItem;
+                    return which == 0 ? RenderFeatureManager.cfg().entityTagShowHealth
+                            : which == 1 ? RenderFeatureManager.cfg().entityTagShowDistance
+                            : RenderFeatureManager.cfg().entityTagShowHeldItem;
                 }
 
                 @Override public void set(boolean value) {
-                    if (which == 0) RenderFeatureManager.entityTagShowHealth = value;
-                    else if (which == 1) RenderFeatureManager.entityTagShowDistance = value;
-                    else RenderFeatureManager.entityTagShowHeldItem = value;
+                    if (which == 0) RenderFeatureManager.cfg().entityTagShowHealth = value;
+                    else if (which == 1) RenderFeatureManager.cfg().entityTagShowDistance = value;
+                    else RenderFeatureManager.cfg().entityTagShowHeldItem = value;
                 }
             };
         }
@@ -629,24 +658,24 @@ public final class ModernOtherFeatureSettingsTab {
                 text("gui.other_feature.radar_filters_tip", "选择雷达上显示的实体类型。"))
                 .toggle(text("gui.other_feature.radar_players", "玩家"),
                         text("gui.other_feature.radar_players_tip", "在雷达上显示玩家。"),
-                        renderToggle(() -> RenderFeatureManager.radarPlayers, v -> RenderFeatureManager.radarPlayers = v))
+                        renderToggle(() -> RenderFeatureManager.cfg().radarPlayers, v -> RenderFeatureManager.cfg().radarPlayers = v))
                 .toggle(text("gui.other_feature.radar_monsters", "怪物"),
                         text("gui.other_feature.radar_monsters_tip", "在雷达上显示敌对生物。"),
-                        renderToggle(() -> RenderFeatureManager.radarMonsters, v -> RenderFeatureManager.radarMonsters = v))
+                        renderToggle(() -> RenderFeatureManager.cfg().radarMonsters, v -> RenderFeatureManager.cfg().radarMonsters = v))
                 .toggle(text("gui.other_feature.radar_animals", "动物与 NPC"),
                         text("gui.other_feature.radar_animals_tip", "在雷达上显示动物、村民和铁傀儡。"),
-                        renderToggle(() -> RenderFeatureManager.radarAnimals, v -> RenderFeatureManager.radarAnimals = v))
+                        renderToggle(() -> RenderFeatureManager.cfg().radarAnimals, v -> RenderFeatureManager.cfg().radarAnimals = v))
                 .toggle(text("gui.other_feature.radar_rotate_with_view", "跟随视角旋转"),
                         text("gui.other_feature.radar_rotate_with_view_tip", "雷达朝向随玩家视角旋转。"),
-                        renderToggle(() -> RenderFeatureManager.radarRotateWithView, v -> RenderFeatureManager.radarRotateWithView = v));
+                        renderToggle(() -> RenderFeatureManager.cfg().radarRotateWithView, v -> RenderFeatureManager.cfg().radarRotateWithView = v));
         builder.section(text("gui.other_feature.radar_display", "雷达显示"),
                 text("gui.other_feature.radar_display_tip", "调整雷达扫描范围和画面尺寸。"))
                 .decimal(text("gui.other_feature.radar_max_distance", "扫描范围"),
                         text("gui.other_feature.radar_max_distance_tip", "范围 8–128 格，默认 48 格。"),
-                        radarFloat(() -> RenderFeatureManager.radarMaxDistance, v -> RenderFeatureManager.radarMaxDistance = v), 8.0F, 128.0F)
+                        radarFloat(() -> RenderFeatureManager.cfg().radarMaxDistance, v -> RenderFeatureManager.cfg().radarMaxDistance = v), 8.0F, 128.0F)
                 .integer(text("gui.other_feature.radar_size", "雷达尺寸"),
                         text("gui.other_feature.radar_size_tip", "范围 48–180 像素，默认 90。"),
-                        radarInt(() -> RenderFeatureManager.radarSize, v -> RenderFeatureManager.radarSize = v), 48, 180);
+                        radarInt(() -> RenderFeatureManager.cfg().radarSize, v -> RenderFeatureManager.cfg().radarSize = v), 48, 180);
     }
 
     private static ModernFormSettingsTab.BooleanValue renderToggle(java.util.function.BooleanSupplier getter,

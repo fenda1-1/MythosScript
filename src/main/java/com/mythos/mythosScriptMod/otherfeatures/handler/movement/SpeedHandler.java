@@ -26,8 +26,46 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class SpeedHandler {
+
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        public String speedMode = MODE_BHOP;
+        public String presetId = PRESET_BALANCED;
+        public boolean useTimerBoost = true;
+        public boolean showStatusHud = true;
+        public float timerSpeed = 1.08F;
+        public float jumpHeight = 0.41F;
+        public float vanillaSpeed = 0.90F;
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) SpeedHandler::loadConfig);
+            return config;
+        }
+    }
+
 
     public static final SpeedHandler INSTANCE = new SpeedHandler();
 
@@ -42,22 +80,12 @@ public class SpeedHandler {
     public static final String PRESET_BALANCED = "BALANCED";
     public static final String PRESET_AGGRESSIVE = "AGGRESSIVE";
 
-    public static boolean enabled = false;
-    public static String speedMode = MODE_BHOP;
-    public static String presetId = PRESET_BALANCED;
-    public static boolean useTimerBoost = true;
-    public static boolean showStatusHud = true;
-    public static float timerSpeed = 1.08F;
-    public static float jumpHeight = 0.41F;
-    public static float vanillaSpeed = 0.90F;
+    /** Enabled is per-owner runtime state — keep it in RuntimeState so one
+     *  bot's toggle can't stomp another's. Legacy: use rt().enabled. */
+    private static boolean isEnabled() { return rt().enabled; }
+    private static void setEnabledInternal(boolean v) { rt().enabled = v; }
+    public boolean isEnabledNow() { return rt().enabled; }
 
-    private boolean slowDown = false;
-    private double playerSpeed = 0.2873D;
-    private int airTicks = 0;
-    private int groundTicks = 0;
-    private double lastOrbitDirectionX = Double.NaN;
-    private double lastOrbitDirectionZ = Double.NaN;
-    private int orbitDirectionGraceTicks = 0;
     private static Field timerTickLengthField;
     private static final int ORBIT_DIRECTION_GRACE_TICKS = 3;
     private static final double ORBIT_PATH_LOCK_MAX_LATERAL_RATIO = 0.035D;
@@ -66,25 +94,48 @@ public class SpeedHandler {
     private static final double ORBIT_PATH_LOCK_MIN_PARALLEL_STEP = 0.055D;
     private static final double ORBIT_PATH_RECOVERY_REFERENCE = 0.18D;
     private static final double ORBIT_PATH_RECOVERY_MAX_PENALTY = 0.72D;
-    private PathingSpeedController.MotionPlan activePathingMotionPlan;
+
+    private static final ConcurrentHashMap<String, RuntimeState> STATES = new ConcurrentHashMap<>();
+
+    private static RuntimeState rt() {
+        return STATES.computeIfAbsent(
+                com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner(),
+                k -> new RuntimeState());
+    }
+
+    private static final class RuntimeState {
+        private boolean enabled = false;
+        private boolean slowDown = false;
+        private double playerSpeed = 0.2873D;
+        private int airTicks = 0;
+        private int groundTicks = 0;
+        private double lastOrbitDirectionX = Double.NaN;
+        private double lastOrbitDirectionZ = Double.NaN;
+        private int orbitDirectionGraceTicks = 0;
+        private PathingSpeedController.MotionPlan activePathingMotionPlan;
+    }
 
     private SpeedHandler() {
     }
 
     static {
         applyPresetInternal(PRESET_BALANCED, true);
-        enabled = false;
+        setEnabledInternal(false);
         loadConfig();
     }
 
     private static File getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("keycommand_speed.json").toFile();
+        return ProfileManager.currentConfigFile("keycommand_speed.json").toFile();
+    }
+
+    private static File getRuntimeConfigFile() {
+        return ProfileManager.getCurrentRuntimeProfileDir().resolve("keycommand_speed.json").toFile();
     }
 
     public static void loadConfig() {
-        enabled = false;
+        setEnabledInternal(false);
         applyPresetInternal(PRESET_BALANCED, true);
-        showStatusHud = true;
+        cfg().showStatusHud = true;
 
         try {
             File configFile = getConfigFile();
@@ -100,29 +151,37 @@ public class SpeedHandler {
                 json = new JsonParser().parse(reader).getAsJsonObject();
 
             }
-            if (json.has("enabled")) {
-                enabled = json.get("enabled").getAsBoolean();
+            File runtimeFile = getRuntimeConfigFile();
+            if (runtimeFile.exists()) {
+                try (FileReader rr = new FileReader(runtimeFile)) {
+                    JsonObject rj = new JsonParser().parse(rr).getAsJsonObject();
+                    if (rj.has("enabled")) {
+                        setEnabledInternal(rj.get("enabled").getAsBoolean());
+                    }
+                }
+            } else if (json.has("enabled")) {
+                setEnabledInternal(json.get("enabled").getAsBoolean());
             }
             if (json.has("speedMode")) {
-                speedMode = json.get("speedMode").getAsString();
+                cfg().speedMode = json.get("speedMode").getAsString();
             }
             if (json.has("presetId")) {
-                presetId = json.get("presetId").getAsString();
+                cfg().presetId = json.get("presetId").getAsString();
             }
             if (json.has("useTimerBoost")) {
-                useTimerBoost = json.get("useTimerBoost").getAsBoolean();
+                cfg().useTimerBoost = json.get("useTimerBoost").getAsBoolean();
             }
             if (json.has("showStatusHud")) {
-                showStatusHud = json.get("showStatusHud").getAsBoolean();
+                cfg().showStatusHud = json.get("showStatusHud").getAsBoolean();
             }
             if (json.has("timerSpeed")) {
-                timerSpeed = json.get("timerSpeed").getAsFloat();
+                cfg().timerSpeed = json.get("timerSpeed").getAsFloat();
             }
             if (json.has("jumpHeight")) {
-                jumpHeight = json.get("jumpHeight").getAsFloat();
+                cfg().jumpHeight = json.get("jumpHeight").getAsFloat();
             }
             if (json.has("vanillaSpeed")) {
-                vanillaSpeed = json.get("vanillaSpeed").getAsFloat();
+                cfg().vanillaSpeed = json.get("vanillaSpeed").getAsFloat();
             }
 
             normalizeConfig();
@@ -140,17 +199,26 @@ public class SpeedHandler {
             }
 
             JsonObject json = new JsonObject();
-            json.addProperty("enabled", enabled);
-            json.addProperty("speedMode", speedMode);
-            json.addProperty("presetId", presetId);
-            json.addProperty("useTimerBoost", useTimerBoost);
-            json.addProperty("showStatusHud", showStatusHud);
-            json.addProperty("timerSpeed", timerSpeed);
-            json.addProperty("jumpHeight", jumpHeight);
-            json.addProperty("vanillaSpeed", vanillaSpeed);
+            json.addProperty("speedMode", cfg().speedMode);
+            json.addProperty("presetId", cfg().presetId);
+            json.addProperty("useTimerBoost", cfg().useTimerBoost);
+            json.addProperty("showStatusHud", cfg().showStatusHud);
+            json.addProperty("timerSpeed", cfg().timerSpeed);
+            json.addProperty("jumpHeight", cfg().jumpHeight);
+            json.addProperty("vanillaSpeed", cfg().vanillaSpeed);
 
             try (FileWriter writer = new FileWriter(configFile)) {
                 writer.write(json.toString());
+            }
+
+            File runtimeFile = getRuntimeConfigFile();
+            if (!runtimeFile.getParentFile().exists()) {
+                runtimeFile.getParentFile().mkdirs();
+            }
+            JsonObject rjson = new JsonObject();
+            rjson.addProperty("enabled", isEnabled());
+            try (FileWriter rw = new FileWriter(runtimeFile)) {
+                rw.write(rjson.toString());
             }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("保存加速配置失败", e);
@@ -163,38 +231,38 @@ public class SpeedHandler {
     }
 
     public static void markCustomPreset() {
-        presetId = PRESET_CUSTOM;
+        cfg().presetId = PRESET_CUSTOM;
         normalizeConfig();
     }
 
     public void toggleEnabled() {
-        setEnabled(!enabled);
+        setEnabled(!isEnabled());
     }
 
     public void setEnabled(boolean targetEnabled) {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (enabled == targetEnabled) {
+        if (isEnabled() == targetEnabled) {
             saveConfig();
             return;
         }
 
-        enabled = targetEnabled;
-        resetRuntimeState(mc.player);
+        setEnabledInternal(targetEnabled);
+        resetRuntimeState(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer());
 
-        if (!enabled) {
+        if (!isEnabled()) {
             resetTimer();
         }
 
         saveConfig();
-        if (mc.player != null) {
-            mc.player.sendMessage(new TextComponentString(enabled
+        EntityPlayerSP bp = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        if (bp != null) {
+            bp.sendMessage(new TextComponentString(isEnabled()
                     ? "§a[移动] 加速已开启"
                     : "§c[移动] 加速已关闭"));
         }
     }
 
     public void onClientDisconnect() {
-        resetRuntimeState(Minecraft.getMinecraft().player);
+        resetRuntimeState(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer());
         resetTimer();
     }
 
@@ -204,13 +272,12 @@ public class SpeedHandler {
             return;
         }
 
-        Minecraft mc = Minecraft.getMinecraft();
-        EntityPlayerSP player = mc.player;
-        if (player == null || mc.world == null) {
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        if (player == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null) {
             return;
         }
 
-        if (!enabled) {
+        if (!isEnabled()) {
             return;
         }
 
@@ -235,12 +302,12 @@ public class SpeedHandler {
         }
 
         updateGroundAirState(player);
-        this.activePathingMotionPlan = PathingSpeedController.plan(player, getRawConfiguredHorizontalSpeed(player));
-        if (this.activePathingMotionPlan.isBraking()) {
+        rt().activePathingMotionPlan = PathingSpeedController.plan(player, getRawConfiguredHorizontalSpeed(player));
+        if (rt().activePathingMotionPlan.isBraking()) {
             applyPathingControlledSpeed(player);
             return;
         }
-        switch (speedMode) {
+        switch (cfg().speedMode) {
         case MODE_GROUND:
             applyGroundSpeed(player);
             break;
@@ -264,17 +331,18 @@ public class SpeedHandler {
         applyTimerState();
         double baseSpeed = getBaseMoveSpeed(player);
         double targetSpeed = getConfiguredHorizontalSpeed(player);
+        RuntimeState rt = rt();
         if (player.onGround) {
             if (player.movementInput != null && !player.movementInput.jump && player.motionY < 0.0D) {
                 player.motionY = 0.0D;
             }
-            playerSpeed = targetSpeed;
+            rt.playerSpeed = targetSpeed;
             setHorizontalSpeed(player, targetSpeed);
             return;
         }
 
         double carrySpeed = Math.max(baseSpeed, Math.min(getHorizontalSpeed(player), targetSpeed * 0.98D));
-        playerSpeed = carrySpeed;
+        rt.playerSpeed = carrySpeed;
         if (player.motionY < 0.0D) {
             player.motionY *= 0.98D;
         }
@@ -287,49 +355,51 @@ public class SpeedHandler {
         double targetSpeed = getConfiguredHorizontalSpeed(player);
         double jumpBoost = Math.max(0.30D, getEffectiveJumpHeight(player) * 0.85D);
 
+        RuntimeState rt = rt();
         if (player.onGround) {
             player.motionY = jumpBoost;
             player.velocityChanged = true;
-            playerSpeed = Math.max(targetSpeed * 0.98D, baseSpeed * 1.10D);
-            setHorizontalSpeed(player, playerSpeed);
+            rt.playerSpeed = Math.max(targetSpeed * 0.98D, baseSpeed * 1.10D);
+            setHorizontalSpeed(player, rt.playerSpeed);
             return;
         }
 
-        double currentSpeed = Math.max(getHorizontalSpeed(player), playerSpeed);
-        double accelerationScale = 0.018D + Math.min(airTicks, 10) * 0.002D;
+        double currentSpeed = Math.max(getHorizontalSpeed(player), rt.playerSpeed);
+        double accelerationScale = 0.018D + Math.min(rt.airTicks, 10) * 0.002D;
         double acceleration = Math.max(baseSpeed * 0.04D, targetSpeed * accelerationScale);
         double cap = Math.max(targetSpeed * 1.45D, baseSpeed * 1.40D);
-        playerSpeed = Math.min(cap, currentSpeed + acceleration);
+        rt.playerSpeed = Math.min(cap, currentSpeed + acceleration);
         if (player.motionY < 0.0D) {
             player.motionY *= 0.985D;
         }
-        setHorizontalSpeed(player, playerSpeed);
+        setHorizontalSpeed(player, rt.playerSpeed);
     }
 
     private void applyBhopSpeed(EntityPlayerSP player) {
         applyTimerState();
         double baseSpeed = getBaseMoveSpeed(player);
         double targetSpeed = getConfiguredHorizontalSpeed(player);
+        RuntimeState rt = rt();
         if (player.onGround) {
             player.motionY = getEffectiveJumpHeight(player);
             player.velocityChanged = true;
-            playerSpeed = Math.max(targetSpeed * 1.12D, baseSpeed * 1.85D);
-            slowDown = true;
+            rt.playerSpeed = Math.max(targetSpeed * 1.12D, baseSpeed * 1.85D);
+            rt.slowDown = true;
         } else {
             if (player.collidedHorizontally) {
-                playerSpeed = targetSpeed;
-                slowDown = false;
-            } else if (slowDown) {
-                playerSpeed = Math.max(targetSpeed, playerSpeed * 0.84D);
-                slowDown = false;
+                rt.playerSpeed = targetSpeed;
+                rt.slowDown = false;
+            } else if (rt.slowDown) {
+                rt.playerSpeed = Math.max(targetSpeed, rt.playerSpeed * 0.84D);
+                rt.slowDown = false;
             } else {
-                playerSpeed = Math.max(targetSpeed, playerSpeed - playerSpeed / 159.0D);
+                rt.playerSpeed = Math.max(targetSpeed, rt.playerSpeed - rt.playerSpeed / 159.0D);
             }
         }
 
         double cap = Math.max(targetSpeed * 1.28D, baseSpeed * 2.05D);
-        playerSpeed = MathHelper.clamp(playerSpeed, targetSpeed, cap);
-        setHorizontalSpeed(player, playerSpeed);
+        rt.playerSpeed = MathHelper.clamp(rt.playerSpeed, targetSpeed, cap);
+        setHorizontalSpeed(player, rt.playerSpeed);
     }
 
     private void applyLowHopSpeed(EntityPlayerSP player) {
@@ -338,29 +408,30 @@ public class SpeedHandler {
         double targetSpeed = getConfiguredHorizontalSpeed(player);
         double lowHopHeight = MathHelper.clamp(getEffectiveJumpHeight(player) * 0.58D, 0.12D, 0.24D);
 
+        RuntimeState rt = rt();
         if (player.onGround) {
             player.motionY = lowHopHeight;
             player.velocityChanged = true;
-            playerSpeed = Math.max(targetSpeed * 1.08D, baseSpeed * 1.35D);
-            slowDown = true;
+            rt.playerSpeed = Math.max(targetSpeed * 1.08D, baseSpeed * 1.35D);
+            rt.slowDown = true;
         } else {
             if (player.collidedHorizontally) {
-                playerSpeed = targetSpeed;
-                slowDown = false;
+                rt.playerSpeed = targetSpeed;
+                rt.slowDown = false;
             } else if (player.motionY < 0.0D) {
                 player.motionY *= 0.92D;
-                playerSpeed = Math.max(targetSpeed, playerSpeed * 0.992D);
-            } else if (slowDown) {
-                playerSpeed = Math.max(targetSpeed, playerSpeed * 0.88D);
-                slowDown = false;
+                rt.playerSpeed = Math.max(targetSpeed, rt.playerSpeed * 0.992D);
+            } else if (rt.slowDown) {
+                rt.playerSpeed = Math.max(targetSpeed, rt.playerSpeed * 0.88D);
+                rt.slowDown = false;
             } else {
-                playerSpeed = Math.max(targetSpeed, playerSpeed - playerSpeed / 220.0D);
+                rt.playerSpeed = Math.max(targetSpeed, rt.playerSpeed - rt.playerSpeed / 220.0D);
             }
         }
 
         double cap = Math.max(targetSpeed * 1.18D, baseSpeed * 1.65D);
-        playerSpeed = MathHelper.clamp(playerSpeed, targetSpeed, cap);
-        setHorizontalSpeed(player, playerSpeed);
+        rt.playerSpeed = MathHelper.clamp(rt.playerSpeed, targetSpeed, cap);
+        setHorizontalSpeed(player, rt.playerSpeed);
     }
 
     private void applyOnGroundSpeed(EntityPlayerSP player) {
@@ -377,137 +448,62 @@ public class SpeedHandler {
             player.fallDistance = 0.0F;
         }
 
-        double onGroundMultiplier = groundTicks > 1 ? 1.05D : 1.03D;
-        playerSpeed = Math.max(targetSpeed * onGroundMultiplier, baseSpeed * 1.10D);
-        setHorizontalSpeed(player, playerSpeed);
+        RuntimeState rt = rt();
+        double onGroundMultiplier = rt.groundTicks > 1 ? 1.05D : 1.03D;
+        rt.playerSpeed = Math.max(targetSpeed * onGroundMultiplier, baseSpeed * 1.10D);
+        setHorizontalSpeed(player, rt.playerSpeed);
     }
 
-    private void applyOrbitRouteSpeed(EntityPlayerSP player) {
-        resetTimer();
-        slowDown = false;
 
-        double baseSpeed = getBaseMoveSpeed(player);
-        double targetSpeed = Math.max(baseSpeed, getConfiguredHorizontalSpeed(player));
-        double currentSpeed = getHorizontalSpeed(player);
-        double currentOrTrackedSpeed = Math.max(currentSpeed, playerSpeed > 1.0E-4D ? playerSpeed : baseSpeed);
-        double[] orbitDirection = resolveOrbitDirection(player, currentSpeed);
-        if (orbitDirection == null) {
-            playerSpeed = Math.max(baseSpeed, Math.min(currentOrTrackedSpeed, targetSpeed));
-            return;
-        }
-
-        double accelerationStep = player.onGround
-                ? Math.max(0.035D, Math.min(0.160D, targetSpeed * 0.090D))
-                : Math.max(0.026D, Math.min(0.120D, targetSpeed * 0.065D));
-        double decelerationStep = player.onGround
-                ? Math.max(0.045D, Math.min(0.200D, targetSpeed * 0.120D))
-                : Math.max(0.032D, Math.min(0.145D, targetSpeed * 0.080D));
-
-        double step = targetSpeed >= currentOrTrackedSpeed ? accelerationStep : decelerationStep;
-        playerSpeed = approachDouble(currentOrTrackedSpeed, targetSpeed, step);
-
-        if (player.collidedHorizontally) {
-            playerSpeed = Math.max(baseSpeed, playerSpeed * 0.82D);
-        }
-        if (player.onGround && player.movementInput != null && !player.movementInput.jump && player.motionY < 0.0D) {
-            player.motionY = 0.0D;
-        }
-        if (!player.onGround && player.motionY < -0.08D) {
-            player.motionY = Math.max(player.motionY, -0.08D);
-        }
-
-        setPathLockedHorizontalSpeed(player, orbitDirection[0], orbitDirection[1], playerSpeed);
-    }
-
-    private double[] resolveOrbitDirection(EntityPlayerSP player, double currentSpeed) {
-        double[] inputDirection = normalizeDirection(forward(player, 1.0D));
-        if (inputDirection != null) {
-            rememberOrbitDirection(inputDirection);
-            return inputDirection;
-        }
-
-        double[] steeringDirection = getOrbitSteeringDirection();
-        if (steeringDirection != null) {
-            rememberOrbitDirection(steeringDirection);
-            return steeringDirection;
-        }
-
-        if (currentSpeed > 0.08D) {
-            double[] motionDirection = normalizeDirection(new double[] { player.motionX, player.motionZ });
-            if (motionDirection != null) {
-                rememberOrbitDirection(motionDirection);
-                return motionDirection;
-            }
-        }
-
-        if (orbitDirectionGraceTicks > 0 && !Double.isNaN(lastOrbitDirectionX) && !Double.isNaN(lastOrbitDirectionZ)) {
-            orbitDirectionGraceTicks--;
-            return new double[] { lastOrbitDirectionX, lastOrbitDirectionZ };
-        }
-        return null;
-    }
 
     private void rememberOrbitDirection(double[] direction) {
         if (direction == null) {
             return;
         }
-        lastOrbitDirectionX = direction[0];
-        lastOrbitDirectionZ = direction[1];
-        orbitDirectionGraceTicks = ORBIT_DIRECTION_GRACE_TICKS;
+        RuntimeState rt = rt();
+        rt.lastOrbitDirectionX = direction[0];
+        rt.lastOrbitDirectionZ = direction[1];
+        rt.orbitDirectionGraceTicks = ORBIT_DIRECTION_GRACE_TICKS;
     }
 
-    private double[] getOrbitSteeringDirection() {
-        try {
-            Object primary = BaritoneAPI.getProvider().getPrimaryBaritone();
-            if (!(primary instanceof Baritone)) {
-                return null;
-            }
-            Rotation rotation = ((Baritone) primary).getLookBehavior().getEffectiveRotation().orElse(null);
-            if (rotation == null) {
-                return null;
-            }
-            double yawRad = Math.toRadians(rotation.getYaw());
-            return normalizeDirection(new double[] { -Math.sin(yawRad), Math.cos(yawRad) });
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
 
     private double getConfiguredHorizontalSpeed(EntityPlayerSP player) {
         double baseSpeed = getBaseMoveSpeed(player);
         double configuredSpeed = getRawConfiguredHorizontalSpeed(player);
-        if (this.activePathingMotionPlan != null && this.activePathingMotionPlan.isActive()) {
-            configuredSpeed = Math.min(configuredSpeed, this.activePathingMotionPlan.getTargetSpeed());
+        RuntimeState rt = rt();
+        if (rt.activePathingMotionPlan != null && rt.activePathingMotionPlan.isActive()) {
+            configuredSpeed = Math.min(configuredSpeed, rt.activePathingMotionPlan.getTargetSpeed());
         }
-        double minimumSpeed = this.activePathingMotionPlan != null && this.activePathingMotionPlan.isBraking()
+        double minimumSpeed = rt.activePathingMotionPlan != null && rt.activePathingMotionPlan.isBraking()
                 ? baseSpeed * 0.20D
                 : baseSpeed;
         return Math.max(minimumSpeed, configuredSpeed);
     }
 
     private double getRawConfiguredHorizontalSpeed(EntityPlayerSP player) {
-        double configuredSpeed = vanillaSpeed;
+        double configuredSpeed = cfg().vanillaSpeed;
         return Math.max(getBaseMoveSpeed(player), configuredSpeed);
     }
 
     private void applyPathingControlledSpeed(EntityPlayerSP player) {
         resetTimer();
-        slowDown = false;
+        RuntimeState rt = rt();
+        rt.slowDown = false;
 
         double baseSpeed = getBaseMoveSpeed(player);
         double targetSpeed = getConfiguredHorizontalSpeed(player);
         double currentSpeed = getHorizontalSpeed(player);
-        double trackedSpeed = Math.max(currentSpeed, playerSpeed > 1.0E-4D ? playerSpeed : baseSpeed);
-        double deceleration = this.activePathingMotionPlan != null && this.activePathingMotionPlan.isHardBrake()
+        double trackedSpeed = Math.max(currentSpeed, rt.playerSpeed > 1.0E-4D ? rt.playerSpeed : baseSpeed);
+        double deceleration = rt.activePathingMotionPlan != null && rt.activePathingMotionPlan.isHardBrake()
                 ? Math.max(0.10D, trackedSpeed * 0.42D)
                 : Math.max(0.06D, trackedSpeed * 0.24D);
-        playerSpeed = approachDouble(trackedSpeed, targetSpeed, deceleration);
+        rt.playerSpeed = approachDouble(trackedSpeed, targetSpeed, deceleration);
 
         if (player.onGround && player.movementInput != null && !player.movementInput.jump && player.motionY < 0.0D) {
             player.motionY = 0.0D;
         }
         player.setSprinting(false);
-        setHorizontalSpeed(player, playerSpeed);
+        setHorizontalSpeed(player, rt.playerSpeed);
     }
 
     private void setHorizontalSpeed(EntityPlayerSP player, double speed) {
@@ -533,27 +529,14 @@ public class SpeedHandler {
         player.velocityChanged = true;
     }
 
-    private void setPathLockedHorizontalSpeed(EntityPlayerSP player, double directionX, double directionZ, double speed) {
-        if (player == null) {
-            return;
-        }
-        double magnitude = Math.sqrt(directionX * directionX + directionZ * directionZ);
-        if (magnitude < 1.0E-4D) {
-            return;
-        }
-        double desiredMotionX = directionX / magnitude * speed;
-        double desiredMotionZ = directionZ / magnitude * speed;
-        applyPathLockedHorizontalMotion(player, desiredMotionX, desiredMotionZ, speed);
-        player.velocityChanged = true;
-    }
 
     private void applyTimerState() {
-        if (this.activePathingMotionPlan != null && this.activePathingMotionPlan.isBraking()) {
+        if (rt().activePathingMotionPlan != null && rt().activePathingMotionPlan.isBraking()) {
             resetTimer();
             return;
         }
-        if (useTimerBoost) {
-            setTimer(timerSpeed);
+        if (cfg().useTimerBoost) {
+            setTimer(cfg().timerSpeed);
         } else {
             resetTimer();
         }
@@ -599,7 +582,8 @@ public class SpeedHandler {
             turnSlowdown *= 0.60D;
         }
 
-        double minimumTargetSpeed = this.activePathingMotionPlan != null && this.activePathingMotionPlan.isBraking()
+        RuntimeState rt = rt();
+        double minimumTargetSpeed = rt.activePathingMotionPlan != null && rt.activePathingMotionPlan.isBraking()
                 ? baseSpeed * 0.20D
                 : baseSpeed * 0.85D;
         double stabilizedTargetSpeed = Math.max(minimumTargetSpeed, targetSpeed * turnSlowdown);
@@ -636,47 +620,6 @@ public class SpeedHandler {
         player.motionZ = nextMotionZ;
     }
 
-    private void applyPathLockedHorizontalMotion(EntityPlayerSP player, double desiredMotionX, double desiredMotionZ,
-            double targetSpeed) {
-        if (player == null) {
-            return;
-        }
-
-        double desiredMagnitude = Math.sqrt(desiredMotionX * desiredMotionX + desiredMotionZ * desiredMotionZ);
-        if (desiredMagnitude < 1.0E-4D) {
-            player.motionX = 0.0D;
-            player.motionZ = 0.0D;
-            return;
-        }
-
-        double dirX = desiredMotionX / desiredMagnitude;
-        double dirZ = desiredMotionZ / desiredMagnitude;
-        double sideX = -dirZ;
-        double sideZ = dirX;
-
-        double currentX = player.motionX;
-        double currentZ = player.motionZ;
-        double currentParallel = currentX * dirX + currentZ * dirZ;
-        double currentPerpendicular = currentX * sideX + currentZ * sideZ;
-
-        double baseSpeed = getBaseMoveSpeed(player);
-        double desiredParallelSpeed = Math.max(baseSpeed * 0.92D, targetSpeed);
-        double pathRecoveryPenalty = MathHelper.clamp((float) (Math.abs(currentPerpendicular) / ORBIT_PATH_RECOVERY_REFERENCE),
-                0.0F, (float) ORBIT_PATH_RECOVERY_MAX_PENALTY);
-        double recoveredParallelSpeed = Math.max(baseSpeed * 0.70D,
-                desiredParallelSpeed * (1.0D - pathRecoveryPenalty));
-        double maxParallelStep = Math.max(ORBIT_PATH_LOCK_MIN_PARALLEL_STEP,
-                recoveredParallelSpeed * ORBIT_PATH_LOCK_PARALLEL_STEP_RATIO * (1.0D - pathRecoveryPenalty * 0.55D));
-        double nextParallel = approachDouble(currentParallel, recoveredParallelSpeed, maxParallelStep);
-
-        double maxPerpendicularStep = Math.max(0.08D, desiredParallelSpeed * ORBIT_PATH_LOCK_MAX_LATERAL_STEP);
-        double nextPerpendicular = approachDouble(currentPerpendicular, 0.0D, maxPerpendicularStep);
-        double maxAllowedPerpendicular = Math.max(0.012D, desiredParallelSpeed * ORBIT_PATH_LOCK_MAX_LATERAL_RATIO);
-        nextPerpendicular = MathHelper.clamp(nextPerpendicular, -maxAllowedPerpendicular, maxAllowedPerpendicular);
-
-        player.motionX = dirX * nextParallel + sideX * nextPerpendicular;
-        player.motionZ = dirZ * nextParallel + sideZ * nextPerpendicular;
-    }
 
     private static double getBaseMoveSpeed(EntityPlayerSP player) {
         double baseSpeed = 0.2873D;
@@ -698,7 +641,7 @@ public class SpeedHandler {
     }
 
     private double getEffectiveJumpHeight(EntityPlayerSP player) {
-        double value = jumpHeight;
+        double value = cfg().jumpHeight;
         if (player != null && player.isPotionActive(MobEffects.JUMP_BOOST)) {
             PotionEffect effect = player.getActivePotionEffect(MobEffects.JUMP_BOOST);
             if (effect != null) {
@@ -767,24 +710,6 @@ public class SpeedHandler {
         return new double[] { motionX, motionZ };
     }
 
-    private static double getDirectionRadians(EntityPlayerSP player) {
-        if (player == null) {
-            return 0.0D;
-        }
-
-        float forward = player.movementInput == null ? 0.0F : player.movementInput.moveForward;
-        float strafe = player.movementInput == null ? 0.0F : player.movementInput.moveStrafe;
-        if (Math.abs(forward) < 1.0E-4F && Math.abs(strafe) < 1.0E-4F) {
-            return Math.toRadians(player.rotationYaw);
-        }
-
-        double yawRad = Math.toRadians(player.rotationYaw);
-        double sin = Math.sin(yawRad);
-        double cos = Math.cos(yawRad);
-        double worldX = -sin * forward + cos * strafe;
-        double worldZ = cos * forward + sin * strafe;
-        return Math.atan2(-worldX, worldZ);
-    }
 
     public static List<String> getStatusLines() {
         return getStatusLines(false);
@@ -797,9 +722,9 @@ public class SpeedHandler {
         }
 
         lines.add("§b[加速] §f" + getModeDisplayName() + "  §7| 预设: §f" + getPresetDisplayName());
-        String timerText = useTimerBoost ? ("§a开 §f" + formatFloat(timerSpeed) + "x") : "§c关";
-        lines.add("§7Timer: " + timerText + "  §7| 跳高: §f" + formatFloat(jumpHeight) + "  §7| 速度: §f"
-                + formatFloat(vanillaSpeed));
+        String timerText = cfg().useTimerBoost ? ("§a开 §f" + formatFloat(cfg().timerSpeed) + "x") : "§c关";
+        lines.add("§7Timer: " + timerText + "  §7| 跳高: §f" + formatFloat(cfg().jumpHeight) + "  §7| 速度: §f"
+                + formatFloat(cfg().vanillaSpeed));
         return lines;
     }
 
@@ -808,24 +733,24 @@ public class SpeedHandler {
     }
 
     public static boolean shouldRenderStatusHud(boolean forcePreview) {
-        return enabled && showStatusHud && (forcePreview || MovementFeatureManager.isMasterStatusHudEnabled());
+        return isEnabled() && cfg().showStatusHud && (forcePreview || MovementFeatureManager.isMasterStatusHudEnabled());
     }
 
     public static String getPresetDisplayName() {
-        if (PRESET_SAFE.equalsIgnoreCase(presetId)) {
+        if (PRESET_SAFE.equalsIgnoreCase(cfg().presetId)) {
             return "稳妥";
         }
-        if (PRESET_AGGRESSIVE.equalsIgnoreCase(presetId)) {
+        if (PRESET_AGGRESSIVE.equalsIgnoreCase(cfg().presetId)) {
             return "激进";
         }
-        if (PRESET_CUSTOM.equalsIgnoreCase(presetId)) {
+        if (PRESET_CUSTOM.equalsIgnoreCase(cfg().presetId)) {
             return "自定义";
         }
         return "平衡";
     }
 
     public static String getModeDisplayName() {
-        switch (normalizeSpeedMode(speedMode)) {
+        switch (normalizeSpeedMode(cfg().speedMode)) {
         case MODE_GROUND:
             return "Ground";
         case MODE_AIR:
@@ -841,7 +766,7 @@ public class SpeedHandler {
     }
 
     public static boolean usesJumpHeight() {
-        return usesJumpHeight(speedMode);
+        return usesJumpHeight(cfg().speedMode);
     }
 
     public static boolean usesJumpHeight(String mode) {
@@ -854,12 +779,12 @@ public class SpeedHandler {
     }
 
     public static boolean isTimerManagedBySpeed() {
-        return enabled && useTimerBoost;
+        return isEnabled() && cfg().useTimerBoost;
     }
 
     public static float getCurrentTimerSpeedMultiplier() {
-        if (enabled && useTimerBoost) {
-            return Math.max(1.0F, timerSpeed);
+        if (isEnabled() && cfg().useTimerBoost) {
+            return Math.max(1.0F, cfg().timerSpeed);
         }
         if (MovementFeatureManager.isEnabled("timer_accel")) {
             return Math.max(1.0F,
@@ -958,52 +883,54 @@ public class SpeedHandler {
 
     private static void applyPresetInternal(String preset, boolean keepCustomValuesForCustom) {
         String normalizedPreset = normalizePresetId(preset);
-        presetId = normalizedPreset;
+        cfg().presetId = normalizedPreset;
         if (PRESET_CUSTOM.equals(normalizedPreset) && keepCustomValuesForCustom) {
             return;
         }
 
         if (PRESET_SAFE.equals(normalizedPreset)) {
-            useTimerBoost = false;
-            timerSpeed = 1.00F;
-            jumpHeight = 0.40F;
-            vanillaSpeed = 0.72F;
+            cfg().useTimerBoost = false;
+            cfg().timerSpeed = 1.00F;
+            cfg().jumpHeight = 0.40F;
+            cfg().vanillaSpeed = 0.72F;
             return;
         }
         if (PRESET_AGGRESSIVE.equals(normalizedPreset)) {
-            useTimerBoost = true;
-            timerSpeed = 1.16F;
-            jumpHeight = 0.42F;
-            vanillaSpeed = 1.05F;
+            cfg().useTimerBoost = true;
+            cfg().timerSpeed = 1.16F;
+            cfg().jumpHeight = 0.42F;
+            cfg().vanillaSpeed = 1.05F;
             return;
         }
         if (PRESET_BALANCED.equals(normalizedPreset)) {
-            useTimerBoost = true;
-            timerSpeed = 1.08F;
-            jumpHeight = 0.41F;
-            vanillaSpeed = 0.90F;
+            cfg().useTimerBoost = true;
+            cfg().timerSpeed = 1.08F;
+            cfg().jumpHeight = 0.41F;
+            cfg().vanillaSpeed = 0.90F;
             return;
         }
     }
 
     private void resetRuntimeState(EntityPlayerSP player) {
-        slowDown = false;
-        airTicks = 0;
-        groundTicks = 0;
-        playerSpeed = getBaseMoveSpeed(player);
-        lastOrbitDirectionX = Double.NaN;
-        lastOrbitDirectionZ = Double.NaN;
-        orbitDirectionGraceTicks = 0;
-        activePathingMotionPlan = null;
+        RuntimeState rt = rt();
+        rt.slowDown = false;
+        rt.airTicks = 0;
+        rt.groundTicks = 0;
+        rt.playerSpeed = getBaseMoveSpeed(player);
+        rt.lastOrbitDirectionX = Double.NaN;
+        rt.lastOrbitDirectionZ = Double.NaN;
+        rt.orbitDirectionGraceTicks = 0;
+        rt.activePathingMotionPlan = null;
     }
 
     private void updateGroundAirState(EntityPlayerSP player) {
+        RuntimeState rt = rt();
         if (player != null && player.onGround) {
-            groundTicks++;
-            airTicks = 0;
+            rt.groundTicks++;
+            rt.airTicks = 0;
         } else {
-            airTicks++;
-            groundTicks = 0;
+            rt.airTicks++;
+            rt.groundTicks = 0;
         }
     }
 
@@ -1046,11 +973,11 @@ public class SpeedHandler {
     }
 
     private static void normalizeConfig() {
-        speedMode = normalizeSpeedMode(speedMode);
-        presetId = normalizePresetId(presetId);
-        timerSpeed = MathHelper.clamp(timerSpeed, 1.00F, 15.00F);
-        jumpHeight = MathHelper.clamp(jumpHeight, 0.00F, 1.00F);
-        vanillaSpeed = MathHelper.clamp(vanillaSpeed, 0.10F, 15.00F);
+        cfg().speedMode = normalizeSpeedMode(cfg().speedMode);
+        cfg().presetId = normalizePresetId(cfg().presetId);
+        cfg().timerSpeed = MathHelper.clamp(cfg().timerSpeed, 1.00F, 15.00F);
+        cfg().jumpHeight = MathHelper.clamp(cfg().jumpHeight, 0.00F, 1.00F);
+        cfg().vanillaSpeed = MathHelper.clamp(cfg().vanillaSpeed, 0.10F, 15.00F);
     }
 }
 

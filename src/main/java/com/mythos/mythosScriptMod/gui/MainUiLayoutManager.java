@@ -25,6 +25,7 @@ import com.mythos.mythosScriptMod.path.PathSequenceManager;
 import com.mythos.mythosScriptMod.path.PathSequenceManager.PathSequence;
 import com.mythos.mythosScriptMod.system.ProfileManager;
 import com.mythos.mythosScriptMod.mythosScriptMod;
+import com.mythos.mythosScriptMod.utils.JsonCopy;
 
 public final class MainUiLayoutManager {
 
@@ -816,72 +817,21 @@ public final class MainUiLayoutManager {
         save();
     }
 
-    public static synchronized void setCollapsedForCategories(Iterable<String> categories, boolean collapsed) {
-        ensureLoaded();
-        boolean changed = false;
-        if (categories == null) {
-            return;
-        }
-        for (String category : categories) {
-            String normalized = normalize(category);
-            if (normalized.isEmpty()) {
-                continue;
-            }
-            GroupMeta meta = getMutableGroupMeta(normalized);
-            if (meta.collapsed != collapsed) {
-                meta.collapsed = collapsed;
-                changed = true;
-            }
-        }
-        if (changed) {
-            save();
-        }
-    }
 
     public static synchronized String getSortMode(String category) {
         return getGroupMeta(category).sortMode;
     }
 
-    public static synchronized void setSortMode(String category, String sortMode) {
-        if (!isSupportedSortMode(sortMode)) {
-            return;
-        }
-        GroupMeta meta = getMutableGroupMeta(category);
-        if (!sortMode.equals(meta.sortMode)) {
-            meta.sortMode = sortMode;
-            save();
-        }
-    }
 
     public static synchronized String getLayoutMode(String category) {
         return getGroupMeta(category).layoutMode;
     }
 
-    public static synchronized void setLayoutMode(String category, String layoutMode) {
-        if (!isSupportedLayoutMode(layoutMode)) {
-            return;
-        }
-        GroupMeta meta = getMutableGroupMeta(category);
-        if (!layoutMode.equals(meta.layoutMode)) {
-            meta.layoutMode = layoutMode;
-            save();
-        }
-    }
 
     public static synchronized String getIconSize(String category) {
         return getGroupMeta(category).iconSize;
     }
 
-    public static synchronized void setIconSize(String category, String iconSize) {
-        if (!isSupportedIconSize(iconSize)) {
-            return;
-        }
-        GroupMeta meta = getMutableGroupMeta(category);
-        if (!iconSize.equals(meta.iconSize)) {
-            meta.iconSize = iconSize;
-            save();
-        }
-    }
 
     public static synchronized boolean isModernAutoFocus() {
         ensureLoaded();
@@ -949,10 +899,6 @@ public final class MainUiLayoutManager {
         }
     }
 
-    public static synchronized boolean isModernDashboardGrouping() {
-        ensureLoaded();
-        return data.modernDashboardGrouping;
-    }
 
     public static synchronized void setModernDashboardGrouping(boolean enabled) {
         ensureLoaded();
@@ -962,11 +908,6 @@ public final class MainUiLayoutManager {
         }
     }
 
-    public static synchronized String getModernDashboardSortMode() {
-        ensureLoaded();
-        sanitizeModernDashboardPreferences();
-        return data.modernDashboardSortMode;
-    }
 
     public static synchronized void setModernDashboardSortMode(String sortMode) {
         ensureLoaded();
@@ -978,11 +919,6 @@ public final class MainUiLayoutManager {
         save();
     }
 
-    public static synchronized String getModernDashboardIconSize() {
-        ensureLoaded();
-        sanitizeModernDashboardPreferences();
-        return data.modernDashboardIconSize;
-    }
 
     public static synchronized void setModernDashboardIconSize(String iconSize) {
         ensureLoaded();
@@ -993,10 +929,6 @@ public final class MainUiLayoutManager {
         save();
     }
 
-    public static synchronized boolean isModernDashboardShowIcons() {
-        ensureLoaded();
-        return data.modernDashboardShowIcons;
-    }
 
     public static synchronized void setModernDashboardShowIcons(boolean enabled) {
         ensureLoaded();
@@ -1006,11 +938,6 @@ public final class MainUiLayoutManager {
         }
     }
 
-    public static synchronized int getModernDashboardCardWidth() {
-        ensureLoaded();
-        sanitizeModernDashboardPreferences();
-        return data.modernDashboardCardWidth;
-    }
 
     public static synchronized void setModernDashboardCardWidth(int width) {
         ensureLoaded();
@@ -1021,11 +948,6 @@ public final class MainUiLayoutManager {
         }
     }
 
-    public static synchronized int getModernDashboardCardHeight() {
-        ensureLoaded();
-        sanitizeModernDashboardPreferences();
-        return data.modernDashboardCardHeight;
-    }
 
     public static synchronized void setModernDashboardCardHeight(int height) {
         ensureLoaded();
@@ -1036,11 +958,6 @@ public final class MainUiLayoutManager {
         }
     }
 
-    public static synchronized int getModernDashboardTextScalePercent() {
-        ensureLoaded();
-        sanitizeModernDashboardPreferences();
-        return data.modernDashboardTextScalePercent;
-    }
 
     public static synchronized void setModernDashboardTextScalePercent(int percent) {
         ensureLoaded();
@@ -1051,11 +968,6 @@ public final class MainUiLayoutManager {
         }
     }
 
-    public static synchronized String getModernDashboardTextAlign() {
-        ensureLoaded();
-        sanitizeModernDashboardPreferences();
-        return data.modernDashboardTextAlign;
-    }
 
     public static synchronized void setModernDashboardTextAlign(String align) {
         ensureLoaded();
@@ -1066,11 +978,6 @@ public final class MainUiLayoutManager {
         save();
     }
 
-    public static synchronized String getModernDashboardTextVerticalAlign() {
-        ensureLoaded();
-        sanitizeModernDashboardPreferences();
-        return data.modernDashboardTextVerticalAlign;
-    }
 
     public static synchronized void setModernDashboardTextVerticalAlign(String align) {
         ensureLoaded();
@@ -1082,11 +989,6 @@ public final class MainUiLayoutManager {
         save();
     }
 
-    public static synchronized String getModernDashboardInfoMode() {
-        ensureLoaded();
-        sanitizeModernDashboardPreferences();
-        return data.modernDashboardInfoMode;
-    }
 
     public static synchronized void setModernDashboardInfoMode(String infoMode) {
         ensureLoaded();
@@ -1128,11 +1030,6 @@ public final class MainUiLayoutManager {
         }
     }
 
-    public static synchronized int getModernDashboardColumns() {
-        ensureLoaded();
-        sanitizeModernDashboardPreferences();
-        return data.modernDashboardColumns;
-    }
 
     public static synchronized void setModernDashboardColumns(int columns) {
         ensureLoaded();
@@ -1143,11 +1040,6 @@ public final class MainUiLayoutManager {
         }
     }
 
-    public static synchronized String getModernDashboardFlowMode() {
-        ensureLoaded();
-        sanitizeModernDashboardPreferences();
-        return data.modernDashboardFlowMode;
-    }
 
     public static synchronized void setModernDashboardFlowMode(String flowMode) {
         ensureLoaded();
@@ -1695,24 +1587,12 @@ public final class MainUiLayoutManager {
         }
     }
 
-    public static synchronized Set<String> getKnownCategories() {
-        ensureLoaded();
-        return new LinkedHashSet<>(data.groupMeta.keySet());
-    }
 
     public static synchronized int getCategoryPanelBaseWidth() {
         ensureLoaded();
         return data.categoryPanelBaseWidth;
     }
 
-    public static synchronized void setCategoryPanelBaseWidth(int width) {
-        ensureLoaded();
-        int normalized = width <= 0 ? -1 : width;
-        if (data.categoryPanelBaseWidth != normalized) {
-            data.categoryPanelBaseWidth = normalized;
-            save();
-        }
-    }
 
     public static synchronized int getModernSidebarWidth() {
         ensureLoaded();
@@ -1892,17 +1772,6 @@ public final class MainUiLayoutManager {
         return !normalized.isEmpty() && data.modernPinnedTools.contains(normalized);
     }
 
-    public static synchronized void setModernToolPinned(String action, boolean pinned) {
-        ensureLoaded();
-        String normalized = normalize(action);
-        if (normalized.isEmpty()) {
-            return;
-        }
-        boolean changed = pinned ? data.modernPinnedTools.add(normalized) : data.modernPinnedTools.remove(normalized);
-        if (changed) {
-            save();
-        }
-    }
 
     public static synchronized void toggleModernToolPinned(String action) {
         ensureLoaded();
@@ -2004,7 +1873,7 @@ public final class MainUiLayoutManager {
     }
 
     private static JsonObject copyJsonObject(JsonObject value) {
-        return value == null ? null : new JsonParser().parse(value.toString()).getAsJsonObject();
+        return value == null ? null : JsonCopy.deepCopyObject(value);
     }
 
     private static double clampModernSplitRatio(double ratio) {

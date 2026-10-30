@@ -24,15 +24,7 @@ public final class ModernScrollBar implements ModernComponent {
         scrollbar = new ModernHoverScrollbar(axis);
     }
 
-    public ModernScrollBar setMetrics(int scroll, int maxScroll, int visibleExtent, int totalExtent) {
-        this.scroll = Math.max(0, Math.min(Math.max(0, maxScroll), scroll));
-        this.maxScroll = Math.max(0, maxScroll);
-        this.visibleExtent = Math.max(1, visibleExtent);
-        this.totalExtent = Math.max(this.visibleExtent, totalExtent);
-        return this;
-    }
 
-    public ModernScrollBar setOnScroll(IntConsumer onScroll) { this.onScroll = onScroll; return this; }
     public int scroll() { return scroll; }
     public boolean isDragging() { return scrollbar.isDragging(); }
 

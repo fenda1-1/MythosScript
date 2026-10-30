@@ -184,9 +184,6 @@ final class ModernFormRenderer {
         }
     }
 
-    ModernFormDefinition<?> getDefinition() {
-        return definition;
-    }
 
     /**
      * Exports the controls that were actually laid out in the current form
@@ -539,17 +536,11 @@ final class ModernFormRenderer {
         statusVersion++;
     }
 
-    boolean hasVisibleStatus() {
-        return statusIsVisible();
-    }
 
     long getStatusVersion() {
         return statusVersion;
     }
 
-    ModernMainLayout.Rect getScrollbarTrackBounds() {
-        return scrollbarTrackBounds;
-    }
 
     boolean scrollbarContains(int mouseX, int mouseY) {
         return scrollbar.contains(mouseX, mouseY);
@@ -571,10 +562,6 @@ final class ModernFormRenderer {
         scrollbar.beginDrag(contentClipBounds == null ? 0 : contentClipBounds.right() - 2, mouseY);
     }
 
-    void scrollTo(int mouseY) {
-        scrollbar.beginDrag(contentClipBounds == null ? 0 : contentClipBounds.right() - 2, mouseY);
-        scrollbar.endDrag();
-    }
 
     void markInvalid(ModernFormDefinition.Item item, boolean invalid) {
         if (item == null) {

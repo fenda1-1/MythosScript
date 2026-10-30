@@ -16,7 +16,6 @@ public final class FlowActionLibraryGroup {
                 ActionLibraryNode.group("group_flow_control",
                         I18n.format("gui.path.action_editor.group.flow.control"),
                         itemFactory.apply("delay"),
-                        itemFactory.apply("runlastsequence"),
                         itemFactory.apply("set_var"),
                         itemFactory.apply("label"),
                         itemFactory.apply("goto_action"),

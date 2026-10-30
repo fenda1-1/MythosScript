@@ -344,8 +344,8 @@ public final class ExpressionEditorPreview {
 
     private static Map<String, Object> liveValues(PathSequence sequence) {
         Map<String, Object> live = new LinkedHashMap<String, Object>();
-        Map<String, Object> snapshot = PathSequenceEventListener.instance.getLiveVariableSnapshot();
-        boolean tracking = PathSequenceEventListener.instance.isTrackingSequence(sequence == null ? "" : sequence.getName());
+        Map<String, Object> snapshot = PathSequenceEventListener.foregroundRunner().getLiveVariableSnapshot();
+        boolean tracking = PathSequenceEventListener.foregroundRunner().isTrackingSequence(sequence == null ? "" : sequence.getName());
         if (snapshot != null) {
             for (Map.Entry<String, Object> entry : snapshot.entrySet()) {
                 if (entry == null || entry.getKey() == null) {

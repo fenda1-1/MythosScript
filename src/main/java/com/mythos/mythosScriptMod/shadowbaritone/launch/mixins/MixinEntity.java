@@ -18,6 +18,7 @@
 package com.mythos.mythosScriptMod.shadowbaritone.launch.mixins;
 
 import com.mythos.mythosScriptMod.gui.DetachedSwingWindowManager;
+import com.mythos.mythosScriptMod.handlers.TeleportCompanionHandler;
 import com.mythos.mythosScriptMod.otherfeatures.handler.movement.FreecamFeatureHandler;
 import com.mythos.mythosScriptMod.otherfeatures.handler.movement.MovementFeatureManager;
 import com.mythos.mythosScriptMod.mythosScriptMod;
@@ -54,7 +55,8 @@ public class MixinEntity {
             ci.cancel();
             return;
         }
-        if (FreecamFeatureHandler.turn((Entity) (Object) this, yaw, pitch)) {
+        if (FreecamFeatureHandler.turn((Entity) (Object) this, yaw, pitch)
+                || TeleportCompanionHandler.turn((Entity) (Object) this, yaw, pitch)) {
             ci.cancel();
         }
     }

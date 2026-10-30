@@ -271,12 +271,6 @@ public class PerformanceMonitor {
         return new ConcurrentHashMap<>(featureStates);
     }
 
-    /**
-     * Get all performance statistics
-     */
-    public static Map<String, PerformanceStats> getAllPerformanceStats() {
-        return new ConcurrentHashMap<>(performanceStats);
-    }
 
     /**
      * Returns the short explanation shown by the modern performance cards.
@@ -365,7 +359,11 @@ public class PerformanceMonitor {
      * Start a performance timer for a feature
      */
     public static PerformanceTimer startTimer(String featureName) {
-        performanceStats.computeIfAbsent(featureName, key -> new PerformanceStats());
+        PerformanceStats stats = performanceStats.get(featureName);
+        if (stats == null) {
+            performanceStats.putIfAbsent(featureName, stats = new PerformanceStats());
+            stats = performanceStats.get(featureName);
+        }
         PerformanceTimer timer = new PerformanceTimer(featureName, isFeatureEnabled(featureName));
         timer.start();
         return timer;
@@ -493,9 +491,6 @@ public class PerformanceMonitor {
             return totalTime.get();
         }
 
-        public long getWindowTotalTimeNanos() {
-            return windowTotalTime.get();
-        }
 
         public long getMeasurementCount() {
             return measurementCount.get();

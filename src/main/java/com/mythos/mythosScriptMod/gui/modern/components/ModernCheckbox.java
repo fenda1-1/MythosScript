@@ -24,7 +24,6 @@ public final class ModernCheckbox implements ModernComponent {
     }
 
     public boolean checked() { return checked; }
-    public void setChecked(boolean checked) { this.checked = checked; }
     public ModernCheckbox setOnChanged(Consumer<Boolean> onChanged) { this.onChanged = onChanged; return this; }
 
     @Override public void layout(ModernMainLayout.Rect bounds) { this.bounds = bounds; }

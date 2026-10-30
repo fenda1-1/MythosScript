@@ -185,3 +185,23 @@ __pycache__/
 
 # 临时修复/调试产物
 doc/
+
+# 手绘 Excalidraw 场景源文件与渲染图：纯本地设计产物，不进仓库
+.exc/
+
+# 本地验证脚本与探测产物：只在开发机上跑，别人克隆后用不到
+verification/
+
+# 环境变量/变量未展开时误建的目录（%SystemDrive% / undefined），纯垃圾
+%SystemDrive%/
+undefined/
+
+# AgentTeams 运行时状态目录，不跟踪
+.agent-teams/
+
+# 临时草稿/一次性探测产物
+.tmp-*
+.tmp*
+
+# 一次性交接笔记
+HANDOFF-*.md

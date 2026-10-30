@@ -42,7 +42,7 @@ public final class MovementFly extends Movement {
         // skips the flight-capability and cruise-altitude gates; collision
         // checks still apply. Plain distance keeps routes flat near ground.
         boolean blink = Baritone.settings().allowBlinkPathing.value;
-        if (!blink && !FlyHandler.enabled
+        if (!blink && !FlyHandler.enabled()
                 && !context.getBaritone().getPlayerContext().player().capabilities.allowFlying) {
             // The script's movement fly feature supplies flight by controlling motion;
             // it does not grant Minecraft's creative-mode allowFlying capability.
@@ -89,10 +89,11 @@ public final class MovementFly extends Movement {
     /**
      * Highest collision-box top inside this column the player's feet can rest
      * on. A node is a feet CELL, but the actual feet Y is the top of a thin
-     * floor: carpet 0.0625, half slab 0.5, snow layers, soul sand 0.875, and
-     * a fence/wall post reaching up from the cell below (top dy+0.5 when the
-     * feet cell sits above the post). Any collision top above dy+1 belongs to
-     * a wall occupying this cell, not a floor. Returned Y is in [dy, dy+1].
+     * floor: carpet 0.0625, half slab 0.5, snow layers, soul sand 0.875, grass
+     * path 0.9375 (top just under the cell boundary), and a fence/wall post
+     * reaching up from the cell below (top dy+0.5 when the feet cell sits
+     * above the post). Any collision top above dy+1 belongs to a wall
+     * occupying this cell, not a floor. Returned Y is in [dy-0.3, dy+1].
      */
     public static double blinkSurfaceY(CalculationContext context, int dx, int dy, int dz) {
         return blinkSurfaceY(context == null ? null : context.world, context, dx, dy, dz);
@@ -112,9 +113,17 @@ public final class MovementFly extends Movement {
     private static double blinkSurfaceY(World world, CalculationContext context, int dx, int dy, int dz) {
         // Query only this column's own cells: the box the node produces is
         // centred in the cell (0.201..0.799), so support outside the column
-        // can't carry it anyway.
-        AxisAlignedBB foot = new AxisAlignedBB(dx + 0.2, dy, dz + 0.2, dx + 0.8, dy + 0.05, dz + 0.8);
-        double surface = dy;
+        // can't carry it anyway. The foot reaches 0.3 into the cell below so
+        // nearly-full floors that top just under the cell boundary still count
+        // — grass path (dy-0.0625), soul sand (dy-0.125), chest (dy-0.125),
+        // enchanting table (dy-0.25). Without it a node emitted one cell above
+        // such a floor lands feet at dy and hovers 1/16 up, which gravity +
+        // afterPhysics ping-pong every frame (the stone->path jitter).
+        // Deeper partial blocks (slab 0.5, snow) put the feet in dy-1, so the
+        // planner emits that cell instead — not this function's problem.
+        AxisAlignedBB foot = new AxisAlignedBB(dx + 0.2, dy - 0.3D, dz + 0.2,
+                dx + 0.8, dy + 0.05, dz + 0.8);
+        double surface = Double.NEGATIVE_INFINITY;
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         List<AxisAlignedBB> boxes = new ArrayList<>();
         for (int cy = dy - 1; cy <= dy; cy++) {
@@ -135,7 +144,9 @@ public final class MovementFly extends Movement {
                 boxes.clear();
             }
         }
-        return surface;
+        // No partial floor intersects the foot — fall back to the integer cell
+        // bottom so air cells still land at dy instead of returning -inf.
+        return surface > Double.NEGATIVE_INFINITY + 0.5D ? surface : dy;
     }
 
     /**
@@ -149,6 +160,16 @@ public final class MovementFly extends Movement {
     public static boolean blinkBoxFits(CalculationContext context, int dx, int dy, int dz) {
         if (!MovementHelper.canFlyThrough(context, dx, dy + 1, dz)) {
             return false;
+        }
+        // 节点格本身是整格实心时必须拒绝。blinkSurfaceY 会把这种格子当成“可站立
+        // 表面”抬到 dy + 1，于是“站得住”掩盖了“这一格是实心块”，规划器就会产出
+        // 落脚点在方块内部的路径：实测节点 (281,61,140) 是 clay，玩家 feet y=61，
+        // 执行器在该点整整 16 秒推不动（SWEEP reached=0.00）。
+        AxisAlignedBB nodeCell = new AxisAlignedBB(dx, dy, dz, dx + 1.0D, dy + 1.0D, dz + 1.0D);
+        for (AxisAlignedBB feet : context.collisionBoxes(new BlockPos(dx, dy, dz), nodeCell)) {
+            if (feet.maxY >= dy + 1.0D - 1e-4D) {
+                return false;
+            }
         }
         double surfaceY = blinkSurfaceY(context, dx, dy, dz);
         AxisAlignedBB playerBox = new AxisAlignedBB(
@@ -236,8 +257,8 @@ public final class MovementFly extends Movement {
         // Cap per-tick speed by remaining distance so fly momentum cannot overshoot
         // the single-block target and trip the corridor check above.
         FlyHandler.INSTANCE.setPathingSpeedCaps(
-                Math.min(FlyHandler.horizontalSpeed, Math.max(0.18D, Math.hypot(dx, dz) * 0.65D)),
-                Math.min(FlyHandler.verticalSpeed, Math.max(0.05D, Math.abs(targetY - ctx.player().posY) * 0.65D)));
+                Math.min(FlyHandler.cfg().horizontalSpeed, Math.max(0.18D, Math.hypot(dx, dz) * 0.65D)),
+                Math.min(FlyHandler.cfg().verticalSpeed, Math.max(0.05D, Math.abs(targetY - ctx.player().posY) * 0.65D)));
         MovementHelper.moveForwardWithRotation(ctx, state, new net.minecraft.util.math.Vec3d(dx, 0.0D, dz));
         // Flight must keep its forward momentum through adjacent route nodes. Turning
         // is handled by the target rotation, not by alternating strafe and back inputs.

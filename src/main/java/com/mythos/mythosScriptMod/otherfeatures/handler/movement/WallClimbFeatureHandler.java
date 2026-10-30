@@ -57,7 +57,7 @@ public final class WallClimbFeatureHandler {
     private static boolean canTravel(EntityPlayerSP player) {
         return player != null && MovementFeatureManager.isEnabled("wall_climb") && player.world != null
                 && player.isEntityAlive() && !player.isRiding() && !player.isSpectator()
-                && !player.isElytraFlying() && !player.capabilities.isFlying && !FlyHandler.enabled
+                && !player.isElytraFlying() && !player.capabilities.isFlying && !FlyHandler.enabled()
                 && !player.noClip && !player.isInWater() && !player.isInLava() && player.movementInput != null;
     }
 

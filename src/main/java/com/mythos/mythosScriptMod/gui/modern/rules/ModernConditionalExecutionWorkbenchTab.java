@@ -700,8 +700,8 @@ public final class ModernConditionalExecutionWorkbenchTab implements ModernSetti
         state.normalizeDrafts();
         List<ConditionalRule> liveRules = state.commitToLive();
         ConditionalExecutionHandler.removeBuiltinRules();
-        ConditionalExecutionHandler.rules.clear();
-        ConditionalExecutionHandler.rules.addAll(liveRules);
+        ConditionalExecutionHandler.cfg().rules.clear();
+        ConditionalExecutionHandler.cfg().rules.addAll(liveRules);
         synchronizeCategories();
         if (ConditionalExecutionHandler.isGloballyEnabled() != state.masterEnabled()) {
             ConditionalExecutionHandler.setGlobalEnabled(state.masterEnabled());
@@ -1052,12 +1052,6 @@ public final class ModernConditionalExecutionWorkbenchTab implements ModernSetti
         return steps + " 步 · " + actions + " 动作 · " + commands + " 条命令";
     }
 
-    private static String executionSummary(ConditionalRule rule) {
-        if (rule == null || safe(rule.sequenceName).trim().isEmpty()) {
-            return "gui.modern.conditional.u138";
-        }
-        return safe(rule.sequenceName).trim() + " · " + sequenceStructure(rule);
-    }
 
     private static List<String> sequenceActionDescriptions(ConditionalRule rule) {
         PathSequenceManager.PathSequence sequence = selectedSequence(rule);
@@ -1298,7 +1292,7 @@ public final class ModernConditionalExecutionWorkbenchTab implements ModernSetti
     private static List<ConditionalRule> readSourceRules() {
         ConditionalExecutionHandler.removeBuiltinRules();
         List<ConditionalRule> result = new ArrayList<>();
-        for (ConditionalRule rule : ConditionalExecutionHandler.rules) {
+        for (ConditionalRule rule : ConditionalExecutionHandler.cfg().rules) {
             if (rule != null && !ConditionalExecutionHandler.isBuiltinRule(rule)) {
                 result.add(rule);
             }

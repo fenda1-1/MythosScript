@@ -111,6 +111,34 @@ public class MixinMinecraft {
                 return mythos$getMinecraft().world;
         }
 
+        /**
+         * The baritone bound to the player currently mounted (mc.player). For a
+         * Nexus bot this is its per-session baritone, so the same instance
+         * receives both onTick (pathing) and onPlayerUpdate (look) — otherwise
+         * pathing runs on the primary while the camera update goes to the
+         * session baritone, which never gets a look target and never turns.
+         */
+        @Unique
+        private IBaritone mythos$activeBaritone() {
+                // Read the MOUNTED session's pinned player, not the live
+                // mc.player — during a live-viewport render pass
+                // (LiveViewportRenderer.renderOne -> withContext) the shared
+                // mc.player is briefly swapped to the background bot being
+                // rendered, and getBaritoneForPlayer(mc.player) would then
+                // return that bot's session baritone and tick it on the client
+                // thread. Its InputOverrideHandler.onTick would then see a
+                // momentarily-idle PathingBehavior and tear the bot's
+                // PlayerMovementInput back to MovementInputFromOptions —
+                // that's the "background bot stops pathing" bug. Pinning to
+                // foregroundPlayer() keeps the foreground baritone selected
+                // regardless of the transient render swap.
+                net.minecraft.client.entity.EntityPlayerSP fg =
+                                com.mythos.mythosScriptMod.mcp.NexusSessions.foregroundPlayer();
+                IBaritone baritone = BaritoneAPI.getProvider()
+                                .getBaritoneForPlayer(fg != null ? fg : mythos$getPlayer());
+                return baritone != null ? baritone : BaritoneAPI.getProvider().getPrimaryBaritone();
+        }
+
         @Inject(method = "init", at = @At("RETURN"))
         private void postInit(CallbackInfo ci) {
                 BaritoneAPI.getProvider().getPrimaryBaritone();
@@ -120,13 +148,12 @@ public class MixinMinecraft {
         private void runTick(CallbackInfo ci) {
                 this.tickProvider = TickEvent.createNextProvider();
 
-                for (IBaritone baritone : BaritoneAPI.getProvider().getAllBaritones()) {
-                        TickEvent.Type type = baritone.getPlayerContext().player() != null
-                                        && baritone.getPlayerContext().world() != null
-                                                        ? TickEvent.Type.IN
-                                                        : TickEvent.Type.OUT;
-                        baritone.getGameEventHandler().onTick(this.tickProvider.apply(EventState.PRE, type));
-                }
+                IBaritone baritone = mythos$activeBaritone();
+                TickEvent.Type type = baritone.getPlayerContext().player() != null
+                                && baritone.getPlayerContext().world() != null
+                                                ? TickEvent.Type.IN
+                                                : TickEvent.Type.OUT;
+                baritone.getGameEventHandler().onTick(this.tickProvider.apply(EventState.PRE, type));
         }
 
         @Inject(method = "runTick", at = @At("RETURN"))
@@ -135,34 +162,29 @@ public class MixinMinecraft {
                         return;
                 }
 
-                for (IBaritone baritone : BaritoneAPI.getProvider().getAllBaritones()) {
-                        TickEvent.Type type = baritone.getPlayerContext().player() != null
-                                        && baritone.getPlayerContext().world() != null
-                                                        ? TickEvent.Type.IN
-                                                        : TickEvent.Type.OUT;
-                        baritone.getGameEventHandler().onPostTick(this.tickProvider.apply(EventState.POST, type));
-                }
+                IBaritone baritone = mythos$activeBaritone();
+                TickEvent.Type type = baritone.getPlayerContext().player() != null
+                                && baritone.getPlayerContext().world() != null
+                                                ? TickEvent.Type.IN
+                                                : TickEvent.Type.OUT;
+                baritone.getGameEventHandler().onPostTick(this.tickProvider.apply(EventState.POST, type));
 
                 this.tickProvider = null;
         }
 
         @Inject(method = "runTick", at = @At(value = "INVOKE", target = "net/minecraft/client/multiplayer/WorldClient.updateEntities()V", shift = At.Shift.AFTER))
         private void postUpdateEntities(CallbackInfo ci) {
-                IBaritone baritone = BaritoneAPI.getProvider().getBaritoneForPlayer(mythos$getPlayer());
-                if (baritone != null) {
-                        // Intentionally call this after all entities have been updated. That way, any
-                        // modification to rotations
-                        // can be recognized by other entity code. (Fireworks and Pigs, for example)
-                        baritone.getGameEventHandler().onPlayerUpdate(new PlayerUpdateEvent(EventState.POST));
-                }
+                IBaritone baritone = mythos$activeBaritone();
+                // Intentionally call this after all entities have been updated. That way, any
+                // modification to rotations
+                // can be recognized by other entity code. (Fireworks and Pigs, for example)
+                baritone.getGameEventHandler().onPlayerUpdate(new PlayerUpdateEvent(EventState.POST));
         }
 
         @Inject(method = "runTick", at = @At(value = "INVOKE", target = "net/minecraft/client/multiplayer/WorldClient.updateEntities()V", shift = At.Shift.BEFORE))
         private void preUpdateEntities(CallbackInfo ci) {
-                IBaritone baritone = BaritoneAPI.getProvider().getBaritoneForPlayer(mythos$getPlayer());
-                if (baritone != null) {
-                        baritone.getGameEventHandler().onPlayerUpdate(new PlayerUpdateEvent(EventState.PRE));
-                }
+                IBaritone baritone = mythos$activeBaritone();
+                baritone.getGameEventHandler().onPlayerUpdate(new PlayerUpdateEvent(EventState.PRE));
         }
 
         @Inject(method = "loadWorld(Lnet/minecraft/client/multiplayer/WorldClient;Ljava/lang/String;)V", at = @At("HEAD"))

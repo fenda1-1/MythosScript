@@ -2,6 +2,7 @@ package com.mythos.mythosScriptMod.mcp;
 
 import com.google.gson.*;
 import com.mythos.mythosScriptMod.handlers.KillAuraHandler;
+import com.mythos.mythosScriptMod.utils.JsonCopy;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -22,7 +23,7 @@ public final class McpModules {
         JsonArray result = new JsonArray();
         JsonArray source = ACTIONS.getAsJsonArray(type);
         if (source != null) for (JsonElement value : source) {
-            JsonObject copy = new JsonParser().parse(value.toString()).getAsJsonObject();
+            JsonObject copy = JsonCopy.deepCopyObject(value.getAsJsonObject());
             if (!includeSource) copy.remove("implementation");
             result.add(copy);
         }

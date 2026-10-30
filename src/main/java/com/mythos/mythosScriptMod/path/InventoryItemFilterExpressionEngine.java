@@ -324,7 +324,7 @@ public final class InventoryItemFilterExpressionEngine {
             Map<String, List<String>> valuesByKey = new LinkedHashMap<String, List<String>>();
 
             try {
-                List<String> tooltip = stack.getTooltip(Minecraft.getMinecraft().player,
+                List<String> tooltip = stack.getTooltip(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer(),
                         ITooltipFlag.TooltipFlags.NORMAL);
                 for (String line : tooltip) {
                     addTextLine(tooltipLines, keyValueEntries, valuesByKey, line, false);

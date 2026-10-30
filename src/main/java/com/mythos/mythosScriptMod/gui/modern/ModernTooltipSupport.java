@@ -272,14 +272,7 @@ public final class ModernTooltipSupport {
         return "";
     }
 
-    public static boolean isSuppressed(GuiScreen screen) {
-        return screen == null || Boolean.TRUE.equals(SUPPRESSED.get(screen));
-    }
 
-    public static boolean hasRegisteredInfoIcons(GuiScreen screen) {
-        List<IconAnchor> icons = screen == null ? null : CUSTOM_ICONS.get(screen);
-        return icons != null && !icons.isEmpty();
-    }
 
     public static boolean isRegisteredInfoIconHit(GuiScreen screen, int mouseX, int mouseY) {
         List<IconAnchor> icons = screen == null ? null : CUSTOM_ICONS.get(screen);
@@ -355,27 +348,6 @@ public final class ModernTooltipSupport {
         }
     }
 
-    /**
-     * Draws only the generic control information icons for an embedded legacy
-     * screen. The enclosing modern host renders the tooltip panel in host
-     * coordinates after querying {@link #getTooltipAt(GuiScreen, int, int)}.
-     */
-    public static void drawEmbeddedControlIcons(GuiScreen screen, int mouseX, int mouseY) {
-        if (screen == null || screen instanceof OwnsTooltipAnchors) {
-            return;
-        }
-        Minecraft minecraft = Minecraft.getMinecraft();
-        if (minecraft == null || minecraft.fontRenderer == null) {
-            return;
-        }
-        List<GuiButton> buttons = getButtonList(screen);
-        List<TooltipAnchor> anchors = anchorsFor(screen);
-        pruneInvalidButtonAnchors(anchors, buttons);
-        for (GuiTextField field : getTextFields(screen)) {
-            registerTextField(screen, field);
-        }
-        drawGenericControlIcons(screen, buttons, anchors, mouseX, mouseY, null);
-    }
 
     public static boolean isInfoIconHit(GuiScreen screen, List<GuiButton> buttons, int mouseX, int mouseY) {
         if (screen == null) {

@@ -53,9 +53,42 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class AutoPickupHandler {
+
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        public final List<AutoPickupRule> rules = new CopyOnWriteArrayList<>();
+        private final List<String> categories = new CopyOnWriteArrayList<>();
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) AutoPickupHandler::loadConfig);
+            return config;
+        }
+    }
+
     public static final AutoPickupHandler INSTANCE = new AutoPickupHandler();
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -69,57 +102,65 @@ public class AutoPickupHandler {
     private static final double NAVIGATION_MOVEMENT_THRESHOLD_SQ = 0.09D;
     private static final double ITEM_POSITION_QUANTIZATION = 4.0D;
 
-    public static boolean globalEnabled = false;
-    public static final List<AutoPickupRule> rules = new CopyOnWriteArrayList<>();
-    private static final List<String> categories = new CopyOnWriteArrayList<>();
     private static final String CATEGORY_DEFAULT = "默认";
 
     private enum State {
         IDLE, SEARCHING, MOVING_TO_ITEM, WAITING_POST_PICKUP, SEQUENCE_RUNNING
     }
 
-    private State currentState = State.IDLE;
-    private AutoPickupRule activeRule = null;
-    private Entity currentTargetItem = null;
-    private int postPickupDelayTicks = 0;
-    private int lastEnterMessageTick = -99999;
-    private int lastGotoTick = -99999;
-    private int lastGotoTargetEntityId = Integer.MIN_VALUE;
-    private ItemStack currentTargetStackSnapshot = ItemStack.EMPTY;
+    private static final ConcurrentHashMap<String, RuntimeState> STATES = new ConcurrentHashMap<>();
 
-    // --- 核心修改 1: 添加新的状态标志 ---
-    private boolean hasPickedUpAtLeastOneItem = false;
-    // --- 修改结束 ---
-    private final List<PendingPickupSequenceAction> pendingPickupActions = new ArrayList<>();
-    private final Map<String, Map<ItemLocationKey, Integer>> failedPickupAttemptsByRule = new HashMap<>();
-    private int antiStuckStationaryTicks = 0;
-    private double antiStuckLastPosX = Double.NaN;
-    private double antiStuckLastPosY = Double.NaN;
-    private double antiStuckLastPosZ = Double.NaN;
-    private int lastItemSearchTick = -99999;
-    private int lastItemSearchRuleKey = 0;
-    private int lastNearestItemEntityId = Integer.MIN_VALUE;
-    private boolean lastItemSearchFoundMatch = false;
-    private int itemSearchBudgetTick = Integer.MIN_VALUE;
-    private int itemSearchEntriesScannedThisTick = 0;
-    private int itemSearchRoundRuleKey = 0;
-    private int itemSearchRoundCursor = 0;
-    private int itemSearchRoundScanned = 0;
-    private int itemSearchRoundTargetCount = 0;
-    private int itemSearchRoundBestEntityId = Integer.MIN_VALUE;
-    private double itemSearchRoundBestDistanceSq = Double.MAX_VALUE;
-    private boolean itemSearchRoundInProgress = false;
-    private int lastItemMatchCachePruneTick = -99999;
-    private final Map<Integer, ItemMatchCacheEntry> itemMatchCache = new HashMap<>();
-    private final Map<String, Integer> lastInventoryCounts = new HashMap<>();
-    private final Map<String, Integer> suppressedInventoryValidationUntilTick = new HashMap<>();
-    private String pendingNavigationRuleKey = "";
-    private ItemLocationKey pendingNavigationItemLocation = null;
-    private int pendingNavigationEntityId = Integer.MIN_VALUE;
-    private int pendingNavigationStartTick = -99999;
-    private double pendingNavigationPlayerX = Double.NaN;
-    private double pendingNavigationPlayerY = Double.NaN;
-    private double pendingNavigationPlayerZ = Double.NaN;
+    private static RuntimeState rt() {
+        return STATES.computeIfAbsent(
+                com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner(),
+                k -> new RuntimeState());
+    }
+
+    private static final class RuntimeState {
+        private boolean globalEnabled = false;
+        private State currentState = State.IDLE;
+        private AutoPickupRule activeRule = null;
+        private Entity currentTargetItem = null;
+        private int postPickupDelayTicks = 0;
+        /** Wall-clock deadline — throttled bot sessions tick slower, so a
+         *  tick-count delay would stretch by 1/rate. */
+        private long postPickupDelayUntilMillis = 0L;
+        private int lastEnterMessageTick = -99999;
+        private int lastGotoTick = -99999;
+        private int lastGotoTargetEntityId = Integer.MIN_VALUE;
+        private ItemStack currentTargetStackSnapshot = ItemStack.EMPTY;
+        private boolean hasPickedUpAtLeastOneItem = false;
+        private final List<PendingPickupSequenceAction> pendingPickupActions = new ArrayList<>();
+        private final Map<String, Map<ItemLocationKey, Integer>> failedPickupAttemptsByRule = new HashMap<>();
+        private int antiStuckStationaryTicks = 0;
+        private double antiStuckLastPosX = Double.NaN;
+        private double antiStuckLastPosY = Double.NaN;
+        private double antiStuckLastPosZ = Double.NaN;
+        private int lastItemSearchTick = -99999;
+        private int lastItemSearchRuleKey = 0;
+        private int lastNearestItemEntityId = Integer.MIN_VALUE;
+        private boolean lastItemSearchFoundMatch = false;
+        private int itemSearchBudgetTick = Integer.MIN_VALUE;
+        private int itemSearchEntriesScannedThisTick = 0;
+        private int itemSearchRoundRuleKey = 0;
+        private int itemSearchRoundCursor = 0;
+        private int itemSearchRoundScanned = 0;
+        private int itemSearchRoundTargetCount = 0;
+        private int itemSearchRoundBestEntityId = Integer.MIN_VALUE;
+        private double itemSearchRoundBestDistanceSq = Double.MAX_VALUE;
+        private boolean itemSearchRoundInProgress = false;
+        private int lastItemMatchCachePruneTick = -99999;
+        private final Map<Integer, ItemMatchCacheEntry> itemMatchCache = new HashMap<>();
+        private final Map<String, Integer> lastInventoryCounts = new HashMap<>();
+        private final Map<String, Integer> suppressedInventoryValidationUntilTick = new HashMap<>();
+        private String pendingNavigationRuleKey = "";
+        private ItemLocationKey pendingNavigationItemLocation = null;
+        private int pendingNavigationEntityId = Integer.MIN_VALUE;
+        private int pendingNavigationStartTick = -99999;
+        private double pendingNavigationPlayerX = Double.NaN;
+        private double pendingNavigationPlayerY = Double.NaN;
+        private double pendingNavigationPlayerZ = Double.NaN;
+    }
 
     private AutoPickupHandler() {
     }
@@ -127,10 +168,14 @@ public class AutoPickupHandler {
     private static final class PendingPickupSequenceAction {
         private final String sequenceName;
         private int remainingTicks;
+        /** Wall-clock deadline — throttled bot sessions tick slower, so a
+         *  tick-count delay would stretch by 1/rate. */
+        private final long untilMillis;
 
         private PendingPickupSequenceAction(String sequenceName, int remainingTicks) {
             this.sequenceName = sequenceName == null ? "" : sequenceName.trim();
             this.remainingTicks = Math.max(0, remainingTicks);
+            this.untilMillis = System.currentTimeMillis() + this.remainingTicks * 50L;
         }
     }
 
@@ -189,8 +234,20 @@ public class AutoPickupHandler {
         }
     }
 
+    // ------------------------------------------------------------------
+    // Runtime-switch accessors (boxed RuntimeState fields)
+    // ------------------------------------------------------------------
+
+    public static boolean globalEnabled() { return rt().globalEnabled; }
+
+    public static void setGlobalEnabledSilently(boolean value) { rt().globalEnabled = value; }
+
     private static Path getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("auto_pickup_rules.json");
+        return ProfileManager.currentConfigFile("auto_pickup_rules.json");
+    }
+
+    private static Path getRuntimeConfigFile() {
+        return ProfileManager.getCurrentRuntimeProfileDir().resolve("auto_pickup_rules.json");
     }
 
     public static synchronized void saveConfig() {
@@ -200,10 +257,16 @@ public class AutoPickupHandler {
             Files.createDirectories(configFile.getParent());
             try (BufferedWriter writer = Files.newBufferedWriter(configFile, StandardCharsets.UTF_8)) {
                 JsonObject root = new JsonObject();
-                root.addProperty("globalEnabled", globalEnabled);
-                root.add("categories", GSON.toJsonTree(new ArrayList<>(categories)));
-                root.add("rules", GSON.toJsonTree(rules));
+                root.add("categories", GSON.toJsonTree(new ArrayList<>(cfg().categories)));
+                root.add("rules", GSON.toJsonTree(cfg().rules));
                 GSON.toJson(root, writer);
+            }
+            Path runtimeFile = getRuntimeConfigFile();
+            Files.createDirectories(runtimeFile.getParent());
+            JsonObject rjson = new JsonObject();
+            rjson.addProperty("globalEnabled", rt().globalEnabled);
+            try (BufferedWriter rw = Files.newBufferedWriter(runtimeFile, StandardCharsets.UTF_8)) {
+                GSON.toJson(rjson, rw);
             }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("无法保存自动拾取规则", e);
@@ -212,21 +275,29 @@ public class AutoPickupHandler {
 
     public static synchronized void loadConfig() {
         Path configFile = getConfigFile();
-        categories.clear();
+        cfg().categories.clear();
         if (!Files.exists(configFile)) {
-            rules.clear();
+            cfg().rules.clear();
             ensureCategoriesSynced();
             return;
         }
         try (BufferedReader reader = Files.newBufferedReader(configFile, StandardCharsets.UTF_8)) {
             JsonObject root = new JsonParser().parse(reader).getAsJsonObject();
-            if (root.has("globalEnabled")) {
-                globalEnabled = root.get("globalEnabled").getAsBoolean();
+            Path runtimeFile = getRuntimeConfigFile();
+            if (Files.exists(runtimeFile)) {
+                try (BufferedReader rr = Files.newBufferedReader(runtimeFile, StandardCharsets.UTF_8)) {
+                    JsonObject rj = new JsonParser().parse(rr).getAsJsonObject();
+                    if (rj.has("globalEnabled")) {
+                        rt().globalEnabled = rj.get("globalEnabled").getAsBoolean();
+                    }
+                }
+            } else if (root.has("globalEnabled")) {
+                rt().globalEnabled = root.get("globalEnabled").getAsBoolean();
             }
             if (root.has("categories") && root.get("categories").isJsonArray()) {
                 for (com.google.gson.JsonElement element : root.getAsJsonArray("categories")) {
                     if (element != null && element.isJsonPrimitive()) {
-                        categories.add(element.getAsString());
+                        cfg().categories.add(element.getAsString());
                     }
                 }
             }
@@ -234,20 +305,20 @@ public class AutoPickupHandler {
                 Type listType = new TypeToken<ArrayList<AutoPickupRule>>() {
                 }.getType();
                 List<AutoPickupRule> loaded = GSON.fromJson(root.get("rules"), listType);
-                rules.clear();
+                cfg().rules.clear();
                 if (loaded != null) {
                     for (AutoPickupRule rule : loaded) {
                         if (rule == null) {
                             continue;
                         }
                         normalizeRule(rule);
-                        rules.add(rule);
+                        cfg().rules.add(rule);
                     }
                 }
             }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("无法加载自动拾取规则", e);
-            rules.clear();
+            cfg().rules.clear();
         }
         ensureCategoriesSynced();
     }
@@ -259,10 +330,10 @@ public class AutoPickupHandler {
 
     private static void ensureCategoriesSynced() {
         LinkedHashSet<String> normalized = new LinkedHashSet<>();
-        for (String category : categories) {
+        for (String category : cfg().categories) {
             normalized.add(normalizeCategory(category));
         }
-        for (AutoPickupRule rule : rules) {
+        for (AutoPickupRule rule : cfg().rules) {
             if (rule == null) {
                 continue;
             }
@@ -272,12 +343,12 @@ public class AutoPickupHandler {
         if (normalized.isEmpty()) {
             normalized.add(CATEGORY_DEFAULT);
         }
-        categories.clear();
-        categories.addAll(normalized);
+        cfg().categories.clear();
+        cfg().categories.addAll(normalized);
     }
 
     private static boolean containsCategoryIgnoreCase(String category) {
-        for (String existing : categories) {
+        for (String existing : cfg().categories) {
             if (normalizeCategory(existing).equalsIgnoreCase(normalizeCategory(category))) {
                 return true;
             }
@@ -286,9 +357,9 @@ public class AutoPickupHandler {
     }
 
     private static boolean removeCategoryIgnoreCase(String category) {
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
-                categories.remove(i);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
+                cfg().categories.remove(i);
                 return true;
             }
         }
@@ -297,7 +368,7 @@ public class AutoPickupHandler {
 
     public static synchronized List<String> getCategoriesSnapshot() {
         ensureCategoriesSynced();
-        return new ArrayList<>(categories);
+        return new ArrayList<>(cfg().categories);
     }
 
     public static synchronized void replaceCategoryOrder(List<String> orderedCategories) {
@@ -308,11 +379,11 @@ public class AutoPickupHandler {
                 normalized.add(normalizeCategory(category));
             }
         }
-        for (String category : categories) {
+        for (String category : cfg().categories) {
             normalized.add(normalizeCategory(category));
         }
-        categories.clear();
-        categories.addAll(normalized);
+        cfg().categories.clear();
+        cfg().categories.addAll(normalized);
         saveConfig();
     }
 
@@ -322,7 +393,7 @@ public class AutoPickupHandler {
         if (containsCategoryIgnoreCase(normalized)) {
             return false;
         }
-        categories.add(normalized);
+        cfg().categories.add(normalized);
         saveConfig();
         return true;
     }
@@ -340,15 +411,15 @@ public class AutoPickupHandler {
         }
 
         boolean changed = false;
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizedOld)) {
-                categories.set(i, normalizedNew);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizedOld)) {
+                cfg().categories.set(i, normalizedNew);
                 changed = true;
                 break;
             }
         }
 
-        for (AutoPickupRule rule : rules) {
+        for (AutoPickupRule rule : cfg().rules) {
             if (rule != null && normalizeCategory(rule.category).equalsIgnoreCase(normalizedOld)) {
                 rule.category = normalizedNew;
                 changed = true;
@@ -369,7 +440,7 @@ public class AutoPickupHandler {
         ensureCategoriesSynced();
 
         boolean changed = removeCategoryIgnoreCase(normalized);
-        for (AutoPickupRule rule : rules) {
+        for (AutoPickupRule rule : cfg().rules) {
             if (rule != null && normalizeCategory(rule.category).equalsIgnoreCase(normalized)) {
                 rule.category = CATEGORY_DEFAULT;
                 changed = true;
@@ -394,69 +465,70 @@ public class AutoPickupHandler {
         try {
         if (event.phase != TickEvent.Phase.END
                 || event.side != Side.CLIENT
-                || event.player != mc.player
-                || mc.player == null
-                || mc.world == null
-                || !globalEnabled) {
+                || event.player != com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer()
+                || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null
+                || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null
+                || !rt().globalEnabled) {
             return;
         }
-        final int nowTick = mc.player.ticksExisted;
+        final int nowTick = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().ticksExisted;
+        RuntimeState rt = rt();
         pruneItemMatchCacheIfNeeded(nowTick);
 
-        if (currentState == State.SEQUENCE_RUNNING) {
-            if (!PathSequenceEventListener.instance.isTracking()) {
-                currentState = activeRule != null ? State.SEARCHING : State.IDLE;
+        if (rt.currentState == State.SEQUENCE_RUNNING) {
+            if (!PathSequenceEventListener.foregroundRunner().isTracking()) {
+                rt.currentState = rt.activeRule != null ? State.SEARCHING : State.IDLE;
             }
-            if (activeRule != null && !activeRule.isPlayerInside(mc.player.posX, mc.player.posY, mc.player.posZ)) {
-                if (activeRule.stopOnExit && PathSequenceEventListener.instance.isTracking()) {
-                    PathSequenceEventListener.instance.stopTracking();
-                    mc.player.sendMessage(new TextComponentString(TextFormatting.YELLOW + "[自动拾取] 已离开区域，后续序列已停止。"));
+            if (rt.activeRule != null && !rt.activeRule.isPlayerInside(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ)) {
+                if (rt.activeRule.stopOnExit && PathSequenceEventListener.foregroundRunner().isTracking()) {
+                    PathSequenceEventListener.foregroundRunner().stopTracking();
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(TextFormatting.YELLOW + "[自动拾取] 已离开区域，后续序列已停止。"));
                 }
-                clearFailedAttemptsForRule(activeRule);
-                resetState();
+                clearFailedAttemptsForRule(rt.activeRule);
+                resetRuntimeState();
             }
-            if (currentState == State.SEQUENCE_RUNNING) {
+            if (rt.currentState == State.SEQUENCE_RUNNING) {
                 return;
             }
         }
 
-        AutoPickupRule rulePlayerIsIn = resolveRuleForPlayer(mc.player, rules);
+        AutoPickupRule rulePlayerIsIn = resolveRuleForPlayer(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer(), cfg().rules);
 
         if (rulePlayerIsIn == null) {
-            if (activeRule != null) {
-                if (activeRule.stopOnExit && PathSequenceEventListener.instance.isTracking()) {
-                    PathSequenceEventListener.instance.stopTracking();
-                    mc.player.sendMessage(new TextComponentString(TextFormatting.YELLOW + "[自动拾取] 已离开区域，后续序列已停止。"));
+            if (rt.activeRule != null) {
+                if (rt.activeRule.stopOnExit && PathSequenceEventListener.foregroundRunner().isTracking()) {
+                    PathSequenceEventListener.foregroundRunner().stopTracking();
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(TextFormatting.YELLOW + "[自动拾取] 已离开区域，后续序列已停止。"));
                 }
-                clearFailedAttemptsForRule(activeRule);
-                resetState();
+                clearFailedAttemptsForRule(rt.activeRule);
+                resetRuntimeState();
             }
             return;
         }
 
-        if (activeRule != rulePlayerIsIn) {
-            if (activeRule != null) {
-                clearFailedAttemptsForRule(activeRule);
+        if (rt.activeRule != rulePlayerIsIn) {
+            if (rt.activeRule != null) {
+                clearFailedAttemptsForRule(rt.activeRule);
             }
-            resetState();
-            activeRule = rulePlayerIsIn;
+            resetRuntimeState();
+            rt.activeRule = rulePlayerIsIn;
             // --- 核心修改 2: 进入新区域时，重置拾取标志 ---
-            hasPickedUpAtLeastOneItem = false;
+            rt.hasPickedUpAtLeastOneItem = false;
             // --- 修改结束 ---
-            captureEntryInventorySnapshot(mc.player);
-            if (nowTick - lastEnterMessageTick > 60) {
-                mc.player.sendMessage(new TextComponentString(
-                        TextFormatting.AQUA + "[自动拾取] " + TextFormatting.GREEN + "进入区域: " + activeRule.name));
-                lastEnterMessageTick = nowTick;
+            captureEntryInventorySnapshot(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer());
+            if (nowTick - rt.lastEnterMessageTick > 60) {
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
+                        TextFormatting.AQUA + "[自动拾取] " + TextFormatting.GREEN + "进入区域: " + rt.activeRule.name));
+                rt.lastEnterMessageTick = nowTick;
             }
-            currentState = State.SEARCHING;
+            rt.currentState = State.SEARCHING;
         }
 
         processPendingPickupActions();
         updateAntiStuckState();
         updatePendingNavigationAttempt(nowTick);
 
-        switch (currentState) {
+        switch (rt.currentState) {
         case SEARCHING:
             findAndSetNextTarget(nowTick);
             break;
@@ -467,8 +539,8 @@ public class AutoPickupHandler {
             handlePostPickupDelay(nowTick);
             break;
         case IDLE:
-            if (activeRule != null) {
-                currentState = State.SEARCHING;
+            if (rt.activeRule != null) {
+                rt.currentState = State.SEARCHING;
             }
             break;
         }
@@ -480,16 +552,17 @@ public class AutoPickupHandler {
     }
 
     public boolean shouldPrioritizeNavigation(EntityPlayerSP player) {
-        if (player == null || mc.world == null || !globalEnabled || currentState == State.SEQUENCE_RUNNING) {
+        RuntimeState rt = rt();
+        if (player == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null || !rt().globalEnabled || rt.currentState == State.SEQUENCE_RUNNING) {
             return false;
         }
 
-        AutoPickupRule rule = resolveRuleForPlayer(player, rules);
+        AutoPickupRule rule = resolveRuleForPlayer(player, cfg().rules);
         if (rule == null) {
             return false;
         }
 
-        if (isItemEligibleForRule(currentTargetItem, rule)) {
+        if (isItemEligibleForRule(rt.currentTargetItem, rule)) {
             return true;
         }
 
@@ -499,19 +572,19 @@ public class AutoPickupHandler {
     }
 
     public boolean isPlayerInsideEnabledRule(EntityPlayerSP player) {
-        if (player == null || !globalEnabled) {
+        if (player == null || !rt().globalEnabled) {
             return false;
         }
-        return resolveRuleForPlayer(player, rules) != null;
+        return resolveRuleForPlayer(player, cfg().rules) != null;
     }
 
     @SubscribeEvent
     public void onRenderWorldLast(RenderWorldLastEvent event) {
-        if (mc == null || mc.world == null) {
+        if (mc == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null) {
             return;
         }
 
-        if (rules.isEmpty()) {
+        if (cfg().rules.isEmpty()) {
             return;
         }
 
@@ -525,7 +598,7 @@ public class AutoPickupHandler {
         double viewerY = viewer.lastTickPosY + (viewer.posY - viewer.lastTickPosY) * partialTicks;
         double viewerZ = viewer.lastTickPosZ + (viewer.posZ - viewer.lastTickPosZ) * partialTicks;
 
-        for (AutoPickupRule rule : rules) {
+        for (AutoPickupRule rule : cfg().rules) {
             if (rule == null || !rule.enabled || !rule.visualizeRange || rule.radius <= 0.05D) {
                 continue;
             }
@@ -534,47 +607,50 @@ public class AutoPickupHandler {
     }
 
     private void findAndSetNextTarget(int nowTick) {
-        if (activeRule == null || mc.player == null) {
-            resetState();
+        RuntimeState rt = rt();
+        if (rt.activeRule == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null) {
+            resetRuntimeState();
             return;
         }
 
-        Entity nearest = findNearestItemInRule(activeRule, mc.player, nowTick, true);
-        if (nearest == null && isItemSearchRoundInProgress(activeRule)) {
+        Entity nearest = findNearestItemInRule(rt.activeRule, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer(), nowTick, true);
+        if (nearest == null && isItemSearchRoundInProgress(rt.activeRule)) {
             return;
         }
 
         if (nearest != null) {
-            boolean targetChanged = currentTargetItem == null
-                    || currentTargetItem.isDead
-                    || currentTargetItem.getEntityId() != nearest.getEntityId();
+            boolean targetChanged = rt.currentTargetItem == null
+                    || rt.currentTargetItem.isDead
+                    || rt.currentTargetItem.getEntityId() != nearest.getEntityId();
             if (targetChanged) {
                 clearPendingNavigationAttempt();
             }
-            currentTargetItem = nearest;
-            currentTargetStackSnapshot = DroppedPickupTarget.getItemStack(nearest).isEmpty()
+            rt.currentTargetItem = nearest;
+            rt.currentTargetStackSnapshot = DroppedPickupTarget.getItemStack(nearest).isEmpty()
                     ? ItemStack.EMPTY : DroppedPickupTarget.getItemStack(nearest).copy();
-            currentState = State.MOVING_TO_ITEM;
+            rt.currentState = State.MOVING_TO_ITEM;
             ensureNavigationToCurrentTarget(nowTick);
             if (targetChanged && ModConfig.isDebugFlagEnabled(DebugModule.AUTO_PICKUP)) {
-                mc.player.sendMessage(new TextComponentString(String.format("§d[调试] §7找到目标掉落物: %s @ (%.1f, %.1f, %.1f)",
-                DroppedPickupTarget.getDisplayName(currentTargetItem), currentTargetItem.posX, currentTargetItem.posY,
-                        currentTargetItem.posZ)));
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(String.format("§d[调试] §7找到目标掉落物: %s @ (%.1f, %.1f, %.1f)",
+                DroppedPickupTarget.getDisplayName(rt.currentTargetItem), rt.currentTargetItem.posX, rt.currentTargetItem.posY,
+                        rt.currentTargetItem.posZ)));
             }
         } else {
-            currentTargetItem = null;
-            currentTargetStackSnapshot = ItemStack.EMPTY;
-            lastGotoTargetEntityId = Integer.MIN_VALUE;
-            lastGotoTick = -99999;
+            rt.currentTargetItem = null;
+            rt.currentTargetStackSnapshot = ItemStack.EMPTY;
+            rt.lastGotoTargetEntityId = Integer.MIN_VALUE;
+            rt.lastGotoTick = -99999;
             clearPendingNavigationAttempt();
-            if (hasPickedUpAtLeastOneItem) {
-                mc.player.sendMessage(new TextComponentString(
+            if (rt.hasPickedUpAtLeastOneItem) {
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
                         TextFormatting.AQUA + "[自动拾取] " + TextFormatting.GREEN + "区域内所有物品拾取完毕。"));
-                currentState = State.WAITING_POST_PICKUP;
-                postPickupDelayTicks = activeRule.postPickupDelaySeconds * 20;
+                rt.currentState = State.WAITING_POST_PICKUP;
+                rt.postPickupDelayTicks = rt.activeRule.postPickupDelaySeconds * 20;
+                rt.postPickupDelayUntilMillis = System.currentTimeMillis()
+                        + rt.activeRule.postPickupDelaySeconds * 1000L;
                 EmbeddedNavigationHandler.INSTANCE.stop();
             } else {
-                currentState = State.SEARCHING;
+                rt.currentState = State.SEARCHING;
                 if (ModConfig.isDebugFlagEnabled(DebugModule.AUTO_PICKUP)) {
                     mythosScriptMod.LOGGER.info("[自动拾取] 区域内未发现掉落物，将持续搜索...");
                 }
@@ -583,35 +659,36 @@ public class AutoPickupHandler {
     }
 
     private void checkIfTargetIsReachedOrGone(int nowTick) {
-        boolean targetGone = (currentTargetItem == null || currentTargetItem.isDead);
+        RuntimeState rt = rt();
+        boolean targetGone = (rt.currentTargetItem == null || rt.currentTargetItem.isDead);
         boolean targetReached = !targetGone
-                && (mc.player.getDistanceSq(currentTargetItem) < getPickupReachedDistanceSq(activeRule));
+                && (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().getDistanceSq(rt.currentTargetItem) < getPickupReachedDistanceSq(rt.activeRule));
 
         if (targetGone) {
-            ItemStack pickedStack = currentTargetStackSnapshot == null ? ItemStack.EMPTY
-                    : currentTargetStackSnapshot.copy();
-            boolean waitForInventoryValidation = hasRestrictedInventoryDetectionSlots(activeRule);
+            ItemStack pickedStack = rt.currentTargetStackSnapshot == null ? ItemStack.EMPTY
+                    : rt.currentTargetStackSnapshot.copy();
+            boolean waitForInventoryValidation = hasRestrictedInventoryDetectionSlots(rt.activeRule);
             if (ModConfig.isDebugFlagEnabled(DebugModule.AUTO_PICKUP)) {
-                mc.player.sendMessage(new TextComponentString("§d[调试] §7目标已拾取/消失，重新搜索..."));
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§d[调试] §7目标已拾取/消失，重新搜索..."));
             }
-            hasPickedUpAtLeastOneItem = true;
+            rt.hasPickedUpAtLeastOneItem = true;
             if (!waitForInventoryValidation) {
                 suppressInventoryValidationForStack(pickedStack, nowTick + 4);
             }
-            currentTargetItem = null;
-            currentTargetStackSnapshot = ItemStack.EMPTY;
-            lastGotoTargetEntityId = Integer.MIN_VALUE;
-            lastGotoTick = -99999;
+            rt.currentTargetItem = null;
+            rt.currentTargetStackSnapshot = ItemStack.EMPTY;
+            rt.lastGotoTargetEntityId = Integer.MIN_VALUE;
+            rt.lastGotoTick = -99999;
             clearPendingNavigationAttempt();
             if (!waitForInventoryValidation && tryTriggerPickupActionSequence(pickedStack)) {
                 return;
             }
-            currentState = State.SEARCHING;
+            rt.currentState = State.SEARCHING;
         } else if (targetReached) {
-            if (lastGotoTargetEntityId == currentTargetItem.getEntityId()) {
+            if (rt.lastGotoTargetEntityId == rt.currentTargetItem.getEntityId()) {
                 EmbeddedNavigationHandler.INSTANCE.stop();
-                lastGotoTargetEntityId = Integer.MIN_VALUE;
-                lastGotoTick = -99999;
+                rt.lastGotoTargetEntityId = Integer.MIN_VALUE;
+                rt.lastGotoTick = -99999;
             }
             clearPendingNavigationAttempt();
         } else {
@@ -620,81 +697,88 @@ public class AutoPickupHandler {
     }
 
     private void handlePostPickupDelay(int nowTick) {
-        if (activeRule != null && mc.player != null) {
-            Entity nextItem = findNearestItemInRule(activeRule, mc.player, nowTick, true);
+        RuntimeState rt = rt();
+        if (rt.activeRule != null && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            Entity nextItem = findNearestItemInRule(rt.activeRule, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer(), nowTick, true);
             if (nextItem != null) {
-                currentTargetItem = nextItem;
-                currentState = State.MOVING_TO_ITEM;
-                postPickupDelayTicks = 0;
+                rt.currentTargetItem = nextItem;
+                rt.currentState = State.MOVING_TO_ITEM;
+                rt.postPickupDelayTicks = 0;
                 ensureNavigationToCurrentTarget(nowTick);
                 return;
             }
-            if (isItemSearchRoundInProgress(activeRule)) {
+            if (isItemSearchRoundInProgress(rt.activeRule)) {
                 return;
             }
         }
 
-        if (postPickupDelayTicks > 0) {
-            postPickupDelayTicks--;
-            if (postPickupDelayTicks == 0) {
-                if (activeRule != null && activeRule.postPickupSequence != null
-                        && !activeRule.postPickupSequence.isEmpty()) {
-                    mc.player.sendMessage(new TextComponentString(TextFormatting.AQUA + "[自动拾取] "
-                            + TextFormatting.YELLOW + "延迟结束，开始执行后续序列: " + activeRule.postPickupSequence));
-                    PathSequenceManager.runPathSequence(activeRule.postPickupSequence);
-                    currentState = State.SEQUENCE_RUNNING;
+        if (rt.postPickupDelayTicks > 0) {
+            rt.postPickupDelayTicks = rt.postPickupDelayUntilMillis > 0L
+                    ? (int) Math.max(0L, (rt.postPickupDelayUntilMillis - System.currentTimeMillis() + 49L) / 50L)
+                    : rt.postPickupDelayTicks - 1;
+            if (rt.postPickupDelayTicks == 0) {
+                if (rt.activeRule != null && rt.activeRule.postPickupSequence != null
+                        && !rt.activeRule.postPickupSequence.isEmpty()) {
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(TextFormatting.AQUA + "[自动拾取] "
+                            + TextFormatting.YELLOW + "延迟结束，开始执行后续序列: " + rt.activeRule.postPickupSequence));
+                    PathSequenceManager.runPathSequence(rt.activeRule.postPickupSequence);
+                    rt.currentState = State.SEQUENCE_RUNNING;
                 } else {
-                    resetState();
+                    resetRuntimeState();
                 }
             }
         }
     }
 
-    private void resetState() {
-        if (currentState == State.MOVING_TO_ITEM || currentState == State.WAITING_POST_PICKUP) {
+    public void resetRuntimeState() {
+        RuntimeState rt = rt();
+        if (rt.currentState == State.MOVING_TO_ITEM || rt.currentState == State.WAITING_POST_PICKUP) {
             EmbeddedNavigationHandler.INSTANCE.stop();
         }
-        currentState = State.IDLE;
-        activeRule = null;
-        currentTargetItem = null;
-        currentTargetStackSnapshot = ItemStack.EMPTY;
-        postPickupDelayTicks = 0;
-        lastGotoTargetEntityId = Integer.MIN_VALUE;
-        lastGotoTick = -99999;
+        rt.currentState = State.IDLE;
+        rt.activeRule = null;
+        rt.currentTargetItem = null;
+        rt.currentTargetStackSnapshot = ItemStack.EMPTY;
+        rt.postPickupDelayTicks = 0;
+        rt.postPickupDelayUntilMillis = 0L;
+        rt.lastGotoTargetEntityId = Integer.MIN_VALUE;
+        rt.lastGotoTick = -99999;
         clearPendingNavigationAttempt();
-        hasPickedUpAtLeastOneItem = false;
-        pendingPickupActions.clear();
-        antiStuckStationaryTicks = 0;
-        antiStuckLastPosX = Double.NaN;
-        antiStuckLastPosY = Double.NaN;
-        antiStuckLastPosZ = Double.NaN;
-        lastItemSearchTick = -99999;
-        lastItemSearchRuleKey = 0;
-        lastNearestItemEntityId = Integer.MIN_VALUE;
-        lastItemSearchFoundMatch = false;
+        rt.hasPickedUpAtLeastOneItem = false;
+        rt.pendingPickupActions.clear();
+        rt.antiStuckStationaryTicks = 0;
+        rt.antiStuckLastPosX = Double.NaN;
+        rt.antiStuckLastPosY = Double.NaN;
+        rt.antiStuckLastPosZ = Double.NaN;
+        rt.lastItemSearchTick = -99999;
+        rt.lastItemSearchRuleKey = 0;
+        rt.lastNearestItemEntityId = Integer.MIN_VALUE;
+        rt.lastItemSearchFoundMatch = false;
         resetItemSearchRound();
-        itemSearchBudgetTick = Integer.MIN_VALUE;
-        itemSearchEntriesScannedThisTick = 0;
-        itemMatchCache.clear();
-        lastInventoryCounts.clear();
-        suppressedInventoryValidationUntilTick.clear();
+        rt.itemSearchBudgetTick = Integer.MIN_VALUE;
+        rt.itemSearchEntriesScannedThisTick = 0;
+        rt.itemMatchCache.clear();
+        rt.lastInventoryCounts.clear();
+        rt.suppressedInventoryValidationUntilTick.clear();
     }
 
     private void captureEntryInventorySnapshot(EntityPlayerSP player) {
-        lastInventoryCounts.clear();
-        suppressedInventoryValidationUntilTick.clear();
+        RuntimeState rt = rt();
+        rt.lastInventoryCounts.clear();
+        rt.suppressedInventoryValidationUntilTick.clear();
         if (player == null) {
             return;
         }
-        replaceLastInventorySnapshot(captureInventoryCounts(player, activeRule));
+        replaceLastInventorySnapshot(captureInventoryCounts(player, rt.activeRule));
     }
 
     private void syncInventoryPickupValidation(int nowTick) {
-        if (activeRule == null || mc.player == null) {
+        RuntimeState rt = rt();
+        if (rt.activeRule == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null) {
             return;
         }
         pruneSuppressedInventoryValidation(nowTick);
-        Map<String, InventoryCountEntry> currentCounts = captureInventoryCounts(mc.player, activeRule);
+        Map<String, InventoryCountEntry> currentCounts = captureInventoryCounts(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer(), rt.activeRule);
         if (!hasInventoryCountChanged(currentCounts)) {
             return;
         }
@@ -705,7 +789,7 @@ public class AutoPickupHandler {
                 continue;
             }
 
-            int previousCount = Math.max(0, lastInventoryCounts.getOrDefault(fingerprint, 0));
+            int previousCount = Math.max(0, rt.lastInventoryCounts.getOrDefault(fingerprint, 0));
             int gained = current.count - previousCount;
             if (gained <= 0) {
                 continue;
@@ -721,15 +805,16 @@ public class AutoPickupHandler {
     }
 
     private void handleValidatedInventoryGain(ItemStack stack, int gainedCount) {
+        RuntimeState rt = rt();
         if (stack == null || stack.isEmpty()) {
             return;
         }
-        if (!isStackEligibleForRule(stack, activeRule)) {
+        if (!isStackEligibleForRule(stack, rt.activeRule)) {
             return;
         }
-        hasPickedUpAtLeastOneItem = true;
-        if (ModConfig.isDebugFlagEnabled(DebugModule.AUTO_PICKUP) && mc.player != null) {
-            mc.player.sendMessage(new TextComponentString(
+        rt.hasPickedUpAtLeastOneItem = true;
+        if (ModConfig.isDebugFlagEnabled(DebugModule.AUTO_PICKUP) && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
                     TextFormatting.LIGHT_PURPLE + "[调试] "
                             + TextFormatting.GRAY + "背包新增校验命中: "
                             + TextFormatting.WHITE + stack.getDisplayName()
@@ -775,37 +860,39 @@ public class AutoPickupHandler {
         if (fingerprint.isEmpty()) {
             return;
         }
-        suppressedInventoryValidationUntilTick.put(fingerprint, Math.max(0, expireTick));
+        rt().suppressedInventoryValidationUntilTick.put(fingerprint, Math.max(0, expireTick));
     }
 
     private boolean isInventoryValidationSuppressed(String fingerprint, int nowTick) {
         if (fingerprint == null || fingerprint.isEmpty()) {
             return false;
         }
-        Integer expireTick = suppressedInventoryValidationUntilTick.get(fingerprint);
+        Integer expireTick = rt().suppressedInventoryValidationUntilTick.get(fingerprint);
         return expireTick != null && expireTick >= nowTick;
     }
 
     private void pruneSuppressedInventoryValidation(int nowTick) {
+        RuntimeState rt = rt();
         List<String> expired = new ArrayList<>();
-        for (Map.Entry<String, Integer> entry : suppressedInventoryValidationUntilTick.entrySet()) {
+        for (Map.Entry<String, Integer> entry : rt.suppressedInventoryValidationUntilTick.entrySet()) {
             if (entry.getValue() == null || entry.getValue() < nowTick) {
                 expired.add(entry.getKey());
             }
         }
         for (String fingerprint : expired) {
-            suppressedInventoryValidationUntilTick.remove(fingerprint);
+            rt.suppressedInventoryValidationUntilTick.remove(fingerprint);
         }
     }
 
     private boolean hasInventoryCountChanged(Map<String, InventoryCountEntry> currentCounts) {
-        if (currentCounts.size() != lastInventoryCounts.size()) {
+        Map<String, Integer> lastCounts = rt().lastInventoryCounts;
+        if (currentCounts.size() != lastCounts.size()) {
             return true;
         }
         for (Map.Entry<String, InventoryCountEntry> entry : currentCounts.entrySet()) {
             InventoryCountEntry current = entry.getValue();
             int currentCount = current == null ? 0 : Math.max(0, current.count);
-            if (Math.max(0, lastInventoryCounts.getOrDefault(entry.getKey(), 0)) != currentCount) {
+            if (Math.max(0, lastCounts.getOrDefault(entry.getKey(), 0)) != currentCount) {
                 return true;
             }
         }
@@ -813,13 +900,14 @@ public class AutoPickupHandler {
     }
 
     private void replaceLastInventorySnapshot(Map<String, InventoryCountEntry> snapshot) {
-        lastInventoryCounts.clear();
+        Map<String, Integer> lastCounts = rt().lastInventoryCounts;
+        lastCounts.clear();
         if (snapshot == null || snapshot.isEmpty()) {
             return;
         }
         for (Map.Entry<String, InventoryCountEntry> entry : snapshot.entrySet()) {
             if (entry.getValue() != null && entry.getValue().count > 0) {
-                lastInventoryCounts.put(entry.getKey(), entry.getValue().count);
+                lastCounts.put(entry.getKey(), entry.getValue().count);
             }
         }
     }
@@ -829,9 +917,10 @@ public class AutoPickupHandler {
             return null;
         }
 
-        if (activeRule != null && activeRule.enabled
-                && activeRule.isPlayerInside(player.posX, player.posY, player.posZ)) {
-            return activeRule;
+        AutoPickupRule active = rt().activeRule;
+        if (active != null && active.enabled
+                && active.isPlayerInside(player.posX, player.posY, player.posZ)) {
+            return active;
         }
 
         for (AutoPickupRule rule : rulesSnapshot) {
@@ -844,117 +933,123 @@ public class AutoPickupHandler {
 
     private Entity findNearestItemInRule(AutoPickupRule rule, EntityPlayerSP player, int nowTick,
             boolean allowCachedResult) {
-        if (rule == null || player == null || mc.world == null) {
+        if (rule == null || player == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null) {
             return null;
         }
 
+        RuntimeState rt = rt();
         int ruleKey = buildRuleSearchKey(rule);
-        if (itemSearchRoundInProgress && itemSearchRoundRuleKey != ruleKey) {
+        if (rt.itemSearchRoundInProgress && rt.itemSearchRoundRuleKey != ruleKey) {
             resetItemSearchRound();
         }
-        if (!itemSearchRoundInProgress && allowCachedResult && ruleKey == lastItemSearchRuleKey
-                && nowTick - lastItemSearchTick < ITEM_SEARCH_SCAN_INTERVAL_TICKS) {
+        if (!rt.itemSearchRoundInProgress && allowCachedResult && ruleKey == rt.lastItemSearchRuleKey
+                && nowTick - rt.lastItemSearchTick < ITEM_SEARCH_SCAN_INTERVAL_TICKS) {
             Entity cached = resolveCachedNearestItem(rule);
             if (cached != null) {
                 return cached;
             }
-            if (!lastItemSearchFoundMatch) {
+            if (!rt.lastItemSearchFoundMatch) {
                 return null;
             }
         }
 
-        List<Entity> loadedEntities = mc.world.loadedEntityList;
+        List<Entity> loadedEntities = com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().loadedEntityList;
         int loadedCount = loadedEntities == null ? 0 : loadedEntities.size();
-        if (itemSearchRoundInProgress && loadedCount != itemSearchRoundTargetCount) {
+        if (rt.itemSearchRoundInProgress && loadedCount != rt.itemSearchRoundTargetCount) {
             resetItemSearchRound();
         }
-        if (!itemSearchRoundInProgress) {
+        if (!rt.itemSearchRoundInProgress) {
             beginItemSearchRound(ruleKey, loadedCount);
         }
         if (loadedCount <= 0) {
             return completeItemSearchRound(rule, nowTick);
         }
 
-        if (itemSearchBudgetTick != nowTick) {
-            itemSearchBudgetTick = nowTick;
-            itemSearchEntriesScannedThisTick = 0;
+        if (rt.itemSearchBudgetTick != nowTick) {
+            rt.itemSearchBudgetTick = nowTick;
+            rt.itemSearchEntriesScannedThisTick = 0;
         }
-        int remainingTickBudget = MAX_SCANNED_LOADED_ENTITIES_PER_TICK - itemSearchEntriesScannedThisTick;
-        int remainingRoundEntries = itemSearchRoundTargetCount - itemSearchRoundScanned;
+        int remainingTickBudget = MAX_SCANNED_LOADED_ENTITIES_PER_TICK - rt.itemSearchEntriesScannedThisTick;
+        int remainingRoundEntries = rt.itemSearchRoundTargetCount - rt.itemSearchRoundScanned;
         int scanCount = Math.min(Math.max(0, remainingTickBudget), Math.max(0, remainingRoundEntries));
-        int cursor = Math.floorMod(itemSearchRoundCursor, loadedCount);
+        int cursor = Math.floorMod(rt.itemSearchRoundCursor, loadedCount);
         for (int scanned = 0; scanned < scanCount; scanned++) {
             Entity entity = loadedEntities.get((cursor + scanned) % loadedCount);
             if (DroppedPickupTarget.isSupported(entity)) {
                 if (isItemEligibleForRule(entity, rule)) {
                     double toPlayerSq = player.getDistanceSq(entity);
-                    if (toPlayerSq < itemSearchRoundBestDistanceSq) {
-                        itemSearchRoundBestDistanceSq = toPlayerSq;
-                        itemSearchRoundBestEntityId = entity.getEntityId();
+                    if (toPlayerSq < rt.itemSearchRoundBestDistanceSq) {
+                        rt.itemSearchRoundBestDistanceSq = toPlayerSq;
+                        rt.itemSearchRoundBestEntityId = entity.getEntityId();
                     }
                 }
             }
         }
-        itemSearchRoundCursor = (cursor + scanCount) % loadedCount;
-        itemSearchRoundScanned += scanCount;
-        itemSearchEntriesScannedThisTick += scanCount;
+        rt.itemSearchRoundCursor = (cursor + scanCount) % loadedCount;
+        rt.itemSearchRoundScanned += scanCount;
+        rt.itemSearchEntriesScannedThisTick += scanCount;
 
-        if (itemSearchRoundScanned < itemSearchRoundTargetCount) {
+        if (rt.itemSearchRoundScanned < rt.itemSearchRoundTargetCount) {
             return null;
         }
         return completeItemSearchRound(rule, nowTick);
     }
 
     private Entity completeItemSearchRound(AutoPickupRule rule, int nowTick) {
-        int completedRuleKey = itemSearchRoundRuleKey;
-        int nearestEntityId = itemSearchRoundBestEntityId;
+        RuntimeState rt = rt();
+        int completedRuleKey = rt.itemSearchRoundRuleKey;
+        int nearestEntityId = rt.itemSearchRoundBestEntityId;
         resetItemSearchRound();
 
         Entity nearest = null;
-        if (nearestEntityId != Integer.MIN_VALUE && mc.world != null) {
-            Entity entity = mc.world.getEntityByID(nearestEntityId);
+        if (nearestEntityId != Integer.MIN_VALUE && com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() != null) {
+            Entity entity = com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().getEntityByID(nearestEntityId);
             if (DroppedPickupTarget.isSupported(entity) && isItemEligibleForRule(entity, rule)) {
                 nearest = entity;
             }
         }
-        if (nearest == null && nearestEntityId != Integer.MIN_VALUE && mc.world != null) {
-            beginItemSearchRound(buildRuleSearchKey(rule), mc.world.loadedEntityList.size());
+        if (nearest == null && nearestEntityId != Integer.MIN_VALUE && com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() != null) {
+            beginItemSearchRound(buildRuleSearchKey(rule), com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().loadedEntityList.size());
             return null;
         }
-        lastItemSearchTick = nowTick;
-        lastItemSearchRuleKey = completedRuleKey;
-        lastNearestItemEntityId = nearest == null ? Integer.MIN_VALUE : nearest.getEntityId();
-        lastItemSearchFoundMatch = nearest != null;
+        rt.lastItemSearchTick = nowTick;
+        rt.lastItemSearchRuleKey = completedRuleKey;
+        rt.lastNearestItemEntityId = nearest == null ? Integer.MIN_VALUE : nearest.getEntityId();
+        rt.lastItemSearchFoundMatch = nearest != null;
         return nearest;
     }
 
     private boolean isItemSearchRoundInProgress(AutoPickupRule rule) {
-        return itemSearchRoundInProgress && itemSearchRoundRuleKey == buildRuleSearchKey(rule);
+        RuntimeState rt = rt();
+        return rt.itemSearchRoundInProgress && rt.itemSearchRoundRuleKey == buildRuleSearchKey(rule);
     }
 
     private void beginItemSearchRound(int ruleKey, int loadedCount) {
-        itemSearchRoundInProgress = true;
-        itemSearchRoundRuleKey = ruleKey;
-        itemSearchRoundScanned = 0;
-        itemSearchRoundTargetCount = Math.max(0, loadedCount);
-        itemSearchRoundBestEntityId = Integer.MIN_VALUE;
-        itemSearchRoundBestDistanceSq = Double.MAX_VALUE;
+        RuntimeState rt = rt();
+        rt.itemSearchRoundInProgress = true;
+        rt.itemSearchRoundRuleKey = ruleKey;
+        rt.itemSearchRoundScanned = 0;
+        rt.itemSearchRoundTargetCount = Math.max(0, loadedCount);
+        rt.itemSearchRoundBestEntityId = Integer.MIN_VALUE;
+        rt.itemSearchRoundBestDistanceSq = Double.MAX_VALUE;
     }
 
     private void resetItemSearchRound() {
-        itemSearchRoundRuleKey = 0;
-        itemSearchRoundScanned = 0;
-        itemSearchRoundTargetCount = 0;
-        itemSearchRoundBestEntityId = Integer.MIN_VALUE;
-        itemSearchRoundBestDistanceSq = Double.MAX_VALUE;
-        itemSearchRoundInProgress = false;
+        RuntimeState rt = rt();
+        rt.itemSearchRoundRuleKey = 0;
+        rt.itemSearchRoundScanned = 0;
+        rt.itemSearchRoundTargetCount = 0;
+        rt.itemSearchRoundBestEntityId = Integer.MIN_VALUE;
+        rt.itemSearchRoundBestDistanceSq = Double.MAX_VALUE;
+        rt.itemSearchRoundInProgress = false;
     }
 
     private Entity resolveCachedNearestItem(AutoPickupRule rule) {
-        if (mc.world == null || lastNearestItemEntityId == Integer.MIN_VALUE) {
+        RuntimeState rt = rt();
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null || rt.lastNearestItemEntityId == Integer.MIN_VALUE) {
             return null;
         }
-        Entity entity = mc.world.getEntityByID(lastNearestItemEntityId);
+        Entity entity = com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().getEntityByID(rt.lastNearestItemEntityId);
         if (!DroppedPickupTarget.isSupported(entity)) {
             return null;
         }
@@ -1030,14 +1125,15 @@ public class AutoPickupHandler {
         int entityId = item.getEntityId();
         ItemStack stack = item.getItem();
         String fingerprint = buildItemFingerprint(stack);
-        ItemMatchCacheEntry cached = itemMatchCache.get(entityId);
+        Map<Integer, ItemMatchCacheEntry> matchCache = rt().itemMatchCache;
+        ItemMatchCacheEntry cached = matchCache.get(entityId);
         if (cached != null && cached.fingerprint.equals(fingerprint)) {
             return cached;
         }
 
         ItemMatchCacheEntry rebuilt = new ItemMatchCacheEntry(fingerprint, getFilterableItemName(item),
                 ItemFilterHandler.buildItemSearchableText(stack));
-        itemMatchCache.put(entityId, rebuilt);
+        matchCache.put(entityId, rebuilt);
         return rebuilt;
     }
 
@@ -1053,84 +1149,86 @@ public class AutoPickupHandler {
     }
 
     private void pruneItemMatchCacheIfNeeded(int nowTick) {
-        if (nowTick - lastItemMatchCachePruneTick < ITEM_MATCH_CACHE_PRUNE_INTERVAL_TICKS
-                && itemMatchCache.size() < MAX_ITEM_MATCH_CACHE_SIZE) {
+        RuntimeState rt = rt();
+        if (nowTick - rt.lastItemMatchCachePruneTick < ITEM_MATCH_CACHE_PRUNE_INTERVAL_TICKS
+                && rt.itemMatchCache.size() < MAX_ITEM_MATCH_CACHE_SIZE) {
             return;
         }
-        lastItemMatchCachePruneTick = nowTick;
-        if (mc.world == null) {
-            itemMatchCache.clear();
+        rt.lastItemMatchCachePruneTick = nowTick;
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null) {
+            rt.itemMatchCache.clear();
             return;
         }
 
         List<Integer> toRemove = new ArrayList<>();
-        for (Integer entityId : itemMatchCache.keySet()) {
-            Entity entity = mc.world.getEntityByID(entityId);
+        for (Integer entityId : rt.itemMatchCache.keySet()) {
+            Entity entity = com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().getEntityByID(entityId);
             if (!(entity instanceof EntityItem) || entity.isDead) {
                 toRemove.add(entityId);
             }
         }
         for (Integer entityId : toRemove) {
-            itemMatchCache.remove(entityId);
+            rt.itemMatchCache.remove(entityId);
         }
-        if (itemMatchCache.size() <= MAX_ITEM_MATCH_CACHE_SIZE) {
+        if (rt.itemMatchCache.size() <= MAX_ITEM_MATCH_CACHE_SIZE) {
             return;
         }
 
-        itemMatchCache.clear();
+        rt.itemMatchCache.clear();
     }
 
     private void ensureNavigationToCurrentTarget(int nowTick) {
-        if (mc.player == null || currentTargetItem == null || currentTargetItem.isDead) {
+        RuntimeState rt = rt();
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || rt.currentTargetItem == null || rt.currentTargetItem.isDead) {
             return;
         }
-        if (mc.player.getDistanceSq(currentTargetItem) <= getPickupReachedDistanceSq(activeRule)) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().getDistanceSq(rt.currentTargetItem) <= getPickupReachedDistanceSq(rt.activeRule)) {
             clearPendingNavigationAttempt();
             return;
         }
 
-        int targetId = currentTargetItem.getEntityId();
-        boolean needSendGoto = targetId != lastGotoTargetEntityId
-                || (nowTick - lastGotoTick) >= PICKUP_GOTO_INTERVAL_TICKS;
+        int targetId = rt.currentTargetItem.getEntityId();
+        boolean needSendGoto = targetId != rt.lastGotoTargetEntityId
+                || (nowTick - rt.lastGotoTick) >= PICKUP_GOTO_INTERVAL_TICKS;
         if (!needSendGoto) {
             return;
         }
 
-        if (DroppedPickupTarget.isExperienceOrb(currentTargetItem)) {
-            startNavigationToPickupTarget(currentTargetItem);
-            lastGotoTick = nowTick;
-            lastGotoTargetEntityId = targetId;
+        if (DroppedPickupTarget.isExperienceOrb(rt.currentTargetItem)) {
+            startNavigationToPickupTarget(rt.currentTargetItem);
+            rt.lastGotoTick = nowTick;
+            rt.lastGotoTargetEntityId = targetId;
             armPendingNavigationAttempt(nowTick);
             return;
         }
 
-        BlockPos pickupGoal = resolveLocalPickupGoal((EntityItem) currentTargetItem);
+        BlockPos pickupGoal = resolveLocalPickupGoal((EntityItem) rt.currentTargetItem);
         if (pickupGoal == null) {
             // Item cell and the cell above are both impassable (buried inside a
             // solid block/wall): permanently skip it instead of holding
             // currentTargetItem forever and starving every other item.
-            markItemUnreachable(activeRule, currentTargetItem);
+            markItemUnreachable(rt.activeRule, rt.currentTargetItem);
             EmbeddedNavigationHandler.INSTANCE.stop();
-            lastGotoTick = nowTick;
-            lastGotoTargetEntityId = targetId;
+            rt.lastGotoTick = nowTick;
+            rt.lastGotoTargetEntityId = targetId;
             clearPendingNavigationAttempt();
             if (ModConfig.isDebugFlagEnabled(DebugModule.AUTO_PICKUP)) {
                 mythosScriptMod.LOGGER.info(
                         "[自动拾取] 掉落物埋在实心方块内，已忽略: {} @ ({}, {}, {})",
-                        DroppedPickupTarget.getDisplayName(currentTargetItem), currentTargetItem.posX,
-                        currentTargetItem.posY, currentTargetItem.posZ);
+                        DroppedPickupTarget.getDisplayName(rt.currentTargetItem), rt.currentTargetItem.posX,
+                        rt.currentTargetItem.posY, rt.currentTargetItem.posZ);
             }
-            currentTargetItem = null;
-            currentTargetStackSnapshot = ItemStack.EMPTY;
-            lastGotoTargetEntityId = Integer.MIN_VALUE;
-            lastGotoTick = -99999;
-            currentState = State.SEARCHING;
+            rt.currentTargetItem = null;
+            rt.currentTargetStackSnapshot = ItemStack.EMPTY;
+            rt.lastGotoTargetEntityId = Integer.MIN_VALUE;
+            rt.lastGotoTick = -99999;
+            rt.currentState = State.SEARCHING;
             return;
         }
 
         startNavigationToPickupGoal(pickupGoal);
-        lastGotoTick = nowTick;
-        lastGotoTargetEntityId = targetId;
+        rt.lastGotoTick = nowTick;
+        rt.lastGotoTargetEntityId = targetId;
         armPendingNavigationAttempt(nowTick);
     }
 
@@ -1140,7 +1238,7 @@ public class AutoPickupHandler {
      * a non-passable cell, only the immediately adjacent air cell is used.
      */
     public BlockPos resolveLocalPickupGoal(EntityItem item) {
-        if (item == null || mc.world == null) {
+        if (item == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null) {
             return null;
         }
 
@@ -1190,48 +1288,50 @@ public class AutoPickupHandler {
         if (baritone != null && baritone.getPlayerContext() != null) {
             return MovementHelper.canWalkThrough(baritone.getPlayerContext(), new BetterBlockPos(pos));
         }
-        IBlockState state = mc.world.getBlockState(pos);
-        return state.getBlock().isPassable(mc.world, pos);
+        IBlockState state = com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().getBlockState(pos);
+        return state.getBlock().isPassable(com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld(), pos);
     }
 
     private void armPendingNavigationAttempt(int nowTick) {
-        if (activeRule == null || currentTargetItem == null || mc.player == null) {
+        RuntimeState rt = rt();
+        if (rt.activeRule == null || rt.currentTargetItem == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null) {
             return;
         }
-        String ruleKey = buildRuleAttemptKey(activeRule);
-        ItemLocationKey locationKey = buildItemLocationKey(currentTargetItem);
+        String ruleKey = buildRuleAttemptKey(rt.activeRule);
+        ItemLocationKey locationKey = buildItemLocationKey(rt.currentTargetItem);
         if (locationKey == null) {
             return;
         }
-        if (ruleKey.equals(pendingNavigationRuleKey)
-                && locationKey.equals(pendingNavigationItemLocation)
-                && pendingNavigationEntityId == currentTargetItem.getEntityId()) {
+        if (ruleKey.equals(rt.pendingNavigationRuleKey)
+                && locationKey.equals(rt.pendingNavigationItemLocation)
+                && rt.pendingNavigationEntityId == rt.currentTargetItem.getEntityId()) {
             return;
         }
-        pendingNavigationRuleKey = ruleKey;
-        pendingNavigationItemLocation = locationKey;
-        pendingNavigationEntityId = currentTargetItem.getEntityId();
-        pendingNavigationStartTick = nowTick;
-        pendingNavigationPlayerX = mc.player.posX;
-        pendingNavigationPlayerY = mc.player.posY;
-        pendingNavigationPlayerZ = mc.player.posZ;
+        rt.pendingNavigationRuleKey = ruleKey;
+        rt.pendingNavigationItemLocation = locationKey;
+        rt.pendingNavigationEntityId = rt.currentTargetItem.getEntityId();
+        rt.pendingNavigationStartTick = nowTick;
+        rt.pendingNavigationPlayerX = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX;
+        rt.pendingNavigationPlayerY = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY;
+        rt.pendingNavigationPlayerZ = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ;
     }
 
     private void updatePendingNavigationAttempt(int nowTick) {
-        if (pendingNavigationItemLocation == null || mc.player == null) {
+        RuntimeState rt = rt();
+        if (rt.pendingNavigationItemLocation == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null) {
             return;
         }
-        if (activeRule == null || currentTargetItem == null || currentTargetItem.isDead) {
+        if (rt.activeRule == null || rt.currentTargetItem == null || rt.currentTargetItem.isDead) {
             clearPendingNavigationAttempt();
             return;
         }
 
-        String currentRuleKey = buildRuleAttemptKey(activeRule);
-        ItemLocationKey currentLocation = buildItemLocationKey(currentTargetItem);
-        if (!currentRuleKey.equals(pendingNavigationRuleKey)
+        String currentRuleKey = buildRuleAttemptKey(rt.activeRule);
+        ItemLocationKey currentLocation = buildItemLocationKey(rt.currentTargetItem);
+        if (!currentRuleKey.equals(rt.pendingNavigationRuleKey)
                 || currentLocation == null
-                || !currentLocation.equals(pendingNavigationItemLocation)
-                || currentTargetItem.getEntityId() != pendingNavigationEntityId) {
+                || !currentLocation.equals(rt.pendingNavigationItemLocation)
+                || rt.currentTargetItem.getEntityId() != rt.pendingNavigationEntityId) {
             clearPendingNavigationAttempt();
             return;
         }
@@ -1242,7 +1342,7 @@ public class AutoPickupHandler {
         }
 
         boolean navigationEngaged = EmbeddedNavigationHandler.INSTANCE.isPathingOrCalculating();
-        int elapsedTicks = nowTick - pendingNavigationStartTick;
+        int elapsedTicks = nowTick - rt.pendingNavigationStartTick;
         if (!navigationEngaged && elapsedTicks < NAVIGATION_START_CHECK_TICKS) {
             return;
         }
@@ -1254,26 +1354,27 @@ public class AutoPickupHandler {
     }
 
     private void handleNavigationAttemptFailure() {
-        if (activeRule == null || currentTargetItem == null) {
+        RuntimeState rt = rt();
+        if (rt.activeRule == null || rt.currentTargetItem == null) {
             clearPendingNavigationAttempt();
             return;
         }
 
-        Entity failedItem = currentTargetItem;
-        ItemLocationKey locationKey = pendingNavigationItemLocation;
-        int maxAttempts = getMaxPickupAttempts(activeRule);
-        int attempts = incrementFailedAttempts(activeRule, locationKey);
+        Entity failedItem = rt.currentTargetItem;
+        ItemLocationKey locationKey = rt.pendingNavigationItemLocation;
+        int maxAttempts = getMaxPickupAttempts(rt.activeRule);
+        int attempts = incrementFailedAttempts(rt.activeRule, locationKey);
 
         EmbeddedNavigationHandler.INSTANCE.stop();
-        currentTargetItem = null;
-        currentTargetStackSnapshot = ItemStack.EMPTY;
-        lastGotoTargetEntityId = Integer.MIN_VALUE;
-        lastGotoTick = -99999;
+        rt.currentTargetItem = null;
+        rt.currentTargetStackSnapshot = ItemStack.EMPTY;
+        rt.lastGotoTargetEntityId = Integer.MIN_VALUE;
+        rt.lastGotoTick = -99999;
         clearPendingNavigationAttempt();
-        currentState = State.SEARCHING;
+        rt.currentState = State.SEARCHING;
 
-        if (mc.player != null && ModConfig.isDebugFlagEnabled(DebugModule.AUTO_PICKUP)) {
-            mc.player.sendMessage(new TextComponentString(String.format(
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null && ModConfig.isDebugFlagEnabled(DebugModule.AUTO_PICKUP)) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(String.format(
                     "§d[调试] §7掉落物未开始寻路，记录尝试 %d/%d: %s @ (%.2f, %.2f, %.2f)",
                     attempts,
                     maxAttempts,
@@ -1282,8 +1383,8 @@ public class AutoPickupHandler {
                     failedItem.posY,
                     failedItem.posZ)));
         }
-        if (mc.player != null && attempts >= maxAttempts) {
-            mc.player.sendMessage(new TextComponentString(String.format(
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null && attempts >= maxAttempts) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(String.format(
                     "%s[自动拾取] %s多次寻路无效，已暂时跳过: %s%s %s@ (%.1f, %.1f, %.1f)%s，离开并重新进入区域后会重试。",
                     TextFormatting.YELLOW,
                     TextFormatting.RED,
@@ -1298,20 +1399,22 @@ public class AutoPickupHandler {
     }
 
     private boolean hasPlayerMovedSincePendingNavigation() {
-        double dx = mc.player.posX - pendingNavigationPlayerX;
-        double dy = mc.player.posY - pendingNavigationPlayerY;
-        double dz = mc.player.posZ - pendingNavigationPlayerZ;
+        RuntimeState rt = rt();
+        double dx = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX - rt.pendingNavigationPlayerX;
+        double dy = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY - rt.pendingNavigationPlayerY;
+        double dz = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ - rt.pendingNavigationPlayerZ;
         return dx * dx + dy * dy + dz * dz > NAVIGATION_MOVEMENT_THRESHOLD_SQ;
     }
 
     private void clearPendingNavigationAttempt() {
-        pendingNavigationRuleKey = "";
-        pendingNavigationItemLocation = null;
-        pendingNavigationEntityId = Integer.MIN_VALUE;
-        pendingNavigationStartTick = -99999;
-        pendingNavigationPlayerX = Double.NaN;
-        pendingNavigationPlayerY = Double.NaN;
-        pendingNavigationPlayerZ = Double.NaN;
+        RuntimeState rt = rt();
+        rt.pendingNavigationRuleKey = "";
+        rt.pendingNavigationItemLocation = null;
+        rt.pendingNavigationEntityId = Integer.MIN_VALUE;
+        rt.pendingNavigationStartTick = -99999;
+        rt.pendingNavigationPlayerX = Double.NaN;
+        rt.pendingNavigationPlayerY = Double.NaN;
+        rt.pendingNavigationPlayerZ = Double.NaN;
     }
 
     private void markItemUnreachable(AutoPickupRule rule, Entity item) {
@@ -1323,14 +1426,15 @@ public class AutoPickupHandler {
             return;
         }
         String ruleKey = buildRuleAttemptKey(rule);
-        Map<ItemLocationKey, Integer> attempts = failedPickupAttemptsByRule.get(ruleKey);
+        Map<String, Map<ItemLocationKey, Integer>> failedAttempts = rt().failedPickupAttemptsByRule;
+        Map<ItemLocationKey, Integer> attempts = failedAttempts.get(ruleKey);
         if (attempts == null) {
             attempts = new HashMap<>();
-            failedPickupAttemptsByRule.put(ruleKey, attempts);
+            failedAttempts.put(ruleKey, attempts);
         }
         attempts.put(locationKey, getMaxPickupAttempts(rule));
-        if (mc.player != null) {
-            mc.player.sendMessage(new TextComponentString(String.format(
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(String.format(
                     "%s[自动拾取] %s掉落物无法到达，已忽略: %s%s %s@ (%.1f, %.1f, %.1f)",
                     TextFormatting.YELLOW,
                     TextFormatting.RED,
@@ -1348,10 +1452,11 @@ public class AutoPickupHandler {
             return 0;
         }
         String ruleKey = buildRuleAttemptKey(rule);
-        Map<ItemLocationKey, Integer> attempts = failedPickupAttemptsByRule.get(ruleKey);
+        Map<String, Map<ItemLocationKey, Integer>> failedAttempts = rt().failedPickupAttemptsByRule;
+        Map<ItemLocationKey, Integer> attempts = failedAttempts.get(ruleKey);
         if (attempts == null) {
             attempts = new HashMap<>();
-            failedPickupAttemptsByRule.put(ruleKey, attempts);
+            failedAttempts.put(ruleKey, attempts);
         }
         int next = attempts.containsKey(locationKey) ? attempts.get(locationKey) + 1 : 1;
         attempts.put(locationKey, next);
@@ -1366,7 +1471,7 @@ public class AutoPickupHandler {
         if (locationKey == null) {
             return false;
         }
-        Map<ItemLocationKey, Integer> attempts = failedPickupAttemptsByRule.get(buildRuleAttemptKey(rule));
+        Map<ItemLocationKey, Integer> attempts = rt().failedPickupAttemptsByRule.get(buildRuleAttemptKey(rule));
         if (attempts == null) {
             return false;
         }
@@ -1378,8 +1483,8 @@ public class AutoPickupHandler {
         if (rule == null) {
             return;
         }
-        failedPickupAttemptsByRule.remove(buildRuleAttemptKey(rule));
-        if (buildRuleAttemptKey(rule).equals(pendingNavigationRuleKey)) {
+        rt().failedPickupAttemptsByRule.remove(buildRuleAttemptKey(rule));
+        if (buildRuleAttemptKey(rule).equals(rt().pendingNavigationRuleKey)) {
             clearPendingNavigationAttempt();
         }
     }
@@ -1513,9 +1618,6 @@ public class AutoPickupHandler {
         return new ArrayList<>(unique);
     }
 
-    private static boolean matchesRuleNameList(String itemName, List<String> filters) {
-        return KillAuraHandler.getNameListMatchIndex(itemName, filters) != Integer.MAX_VALUE;
-    }
 
     private static List<AutoPickupRule.ItemMatchEntry> normalizeRuleEntryList(List<AutoPickupRule.ItemMatchEntry> source,
             List<String> legacyKeywords) {
@@ -1647,31 +1749,32 @@ public class AutoPickupHandler {
     }
 
     private boolean tryTriggerPickupActionSequence(ItemStack pickedStack) {
-        if (activeRule == null || pickedStack == null || pickedStack.isEmpty()) {
+        RuntimeState rt = rt();
+        if (rt.activeRule == null || pickedStack == null || pickedStack.isEmpty()) {
             return false;
         }
-        AutoPickupRule.PickupActionEntry matchedEntry = findMatchingPickupActionEntry(activeRule, pickedStack);
+        AutoPickupRule.PickupActionEntry matchedEntry = findMatchingPickupActionEntry(rt.activeRule, pickedStack);
         if (matchedEntry == null) {
             return false;
         }
 
         String sequenceName = matchedEntry.sequenceName == null ? "" : matchedEntry.sequenceName.trim();
         if (sequenceName.isEmpty() || !PathSequenceManager.hasSequence(sequenceName)) {
-            if (mc.player != null) {
-                mc.player.sendMessage(new TextComponentString(
+            if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
                         TextFormatting.RED + "[自动拾取] 拾取执行序列不存在: " + TextFormatting.WHITE + sequenceName));
             }
-            currentState = State.SEARCHING;
+            rt.currentState = State.SEARCHING;
             return false;
         }
 
         queuePendingPickupAction(sequenceName, Math.max(0, matchedEntry.executeDelaySeconds) * 20);
-        if (mc.player != null) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
             String delayText = matchedEntry.executeDelaySeconds > 0
                     ? TextFormatting.GRAY + "，" + TextFormatting.YELLOW + matchedEntry.executeDelaySeconds
                             + TextFormatting.GRAY + " 秒后执行"
                     : "";
-            mc.player.sendMessage(new TextComponentString(
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
                     TextFormatting.AQUA + "[自动拾取] "
                             + TextFormatting.YELLOW + "拾取到匹配物品，已排入执行序列: "
                             + TextFormatting.WHITE + sequenceName
@@ -1685,108 +1788,113 @@ public class AutoPickupHandler {
         if (normalizedSequenceName.isEmpty()) {
             return;
         }
-        pendingPickupActions.add(new PendingPickupSequenceAction(normalizedSequenceName, delayTicks));
+        rt().pendingPickupActions.add(new PendingPickupSequenceAction(normalizedSequenceName, delayTicks));
     }
 
     private void processPendingPickupActions() {
-        if (currentState == State.SEQUENCE_RUNNING || pendingPickupActions.isEmpty()) {
+        RuntimeState rt = rt();
+        if (rt.currentState == State.SEQUENCE_RUNNING || rt.pendingPickupActions.isEmpty()) {
             return;
         }
 
-        for (int i = 0; i < pendingPickupActions.size(); i++) {
-            PendingPickupSequenceAction action = pendingPickupActions.get(i);
+        for (int i = 0; i < rt.pendingPickupActions.size(); i++) {
+            PendingPickupSequenceAction action = rt.pendingPickupActions.get(i);
             if (action == null) {
                 continue;
             }
             if (action.remainingTicks > 0) {
-                action.remainingTicks--;
+                action.remainingTicks = (int) Math.max(0L,
+                        (action.untilMillis - System.currentTimeMillis() + 49L) / 50L);
             }
             if (action.remainingTicks > 0) {
                 continue;
             }
 
             EmbeddedNavigationHandler.INSTANCE.stop();
-            currentState = State.SEQUENCE_RUNNING;
+            rt.currentState = State.SEQUENCE_RUNNING;
             PathSequenceManager.runPathSequenceOnce(action.sequenceName);
-            if (mc.player != null) {
-                mc.player.sendMessage(new TextComponentString(
+            if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
                         TextFormatting.AQUA + "[自动拾取] "
                                 + TextFormatting.YELLOW + "开始执行拾取序列: "
                                 + TextFormatting.WHITE + action.sequenceName));
             }
-            pendingPickupActions.remove(i);
+            rt.pendingPickupActions.remove(i);
             return;
         }
     }
 
     private void updateAntiStuckState() {
-        if (mc.player == null || activeRule == null || currentState == State.SEQUENCE_RUNNING
-                || !activeRule.antiStuckEnabled) {
-            antiStuckStationaryTicks = 0;
-            antiStuckLastPosX = Double.NaN;
-            antiStuckLastPosY = Double.NaN;
-            antiStuckLastPosZ = Double.NaN;
+        RuntimeState rt = rt();
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || rt.activeRule == null || rt.currentState == State.SEQUENCE_RUNNING
+                || !rt.activeRule.antiStuckEnabled) {
+            rt.antiStuckStationaryTicks = 0;
+            rt.antiStuckLastPosX = Double.NaN;
+            rt.antiStuckLastPosY = Double.NaN;
+            rt.antiStuckLastPosZ = Double.NaN;
             return;
         }
 
-        if (Double.isNaN(antiStuckLastPosX)) {
+        if (Double.isNaN(rt.antiStuckLastPosX)) {
             captureAntiStuckPosition();
-            antiStuckStationaryTicks = 0;
+            rt.antiStuckStationaryTicks = 0;
             return;
         }
 
         if (hasPlayerMoved()) {
-            antiStuckStationaryTicks = 0;
+            rt.antiStuckStationaryTicks = 0;
             captureAntiStuckPosition();
             return;
         }
 
-        antiStuckStationaryTicks++;
+        rt.antiStuckStationaryTicks++;
         captureAntiStuckPosition();
-        int timeoutTicks = Math.max(20, activeRule.antiStuckTimeoutSeconds * 20);
-        if (antiStuckStationaryTicks < timeoutTicks) {
+        int timeoutTicks = Math.max(20, rt.activeRule.antiStuckTimeoutSeconds * 20);
+        if (rt.antiStuckStationaryTicks < timeoutTicks) {
             return;
         }
 
-        if (mc.player != null) {
-            mc.player.sendMessage(new TextComponentString(
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
                     TextFormatting.YELLOW + "[自动拾取] 检测到停留超过 "
-                            + TextFormatting.WHITE + activeRule.antiStuckTimeoutSeconds
+                            + TextFormatting.WHITE + rt.activeRule.antiStuckTimeoutSeconds
                             + TextFormatting.YELLOW + " 秒，正在重启当前规则。"));
         }
         EmbeddedNavigationHandler.INSTANCE.stop();
-        currentTargetItem = null;
-        currentTargetStackSnapshot = ItemStack.EMPTY;
-        lastGotoTargetEntityId = Integer.MIN_VALUE;
-        lastGotoTick = -99999;
+        rt.currentTargetItem = null;
+        rt.currentTargetStackSnapshot = ItemStack.EMPTY;
+        rt.lastGotoTargetEntityId = Integer.MIN_VALUE;
+        rt.lastGotoTick = -99999;
         clearPendingNavigationAttempt();
-        antiStuckStationaryTicks = 0;
-        String restartSequence = activeRule == null ? "" : safeSequenceName(activeRule.antiStuckRestartSequence);
+        rt.antiStuckStationaryTicks = 0;
+        String restartSequence = rt.activeRule == null ? "" : safeSequenceName(rt.activeRule.antiStuckRestartSequence);
         if (!restartSequence.isEmpty() && PathSequenceManager.hasSequence(restartSequence)) {
-            currentState = State.SEQUENCE_RUNNING;
+            rt.currentState = State.SEQUENCE_RUNNING;
             PathSequenceManager.runPathSequenceOnce(restartSequence);
-            if (mc.player != null) {
-                mc.player.sendMessage(new TextComponentString(
+            if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
                         TextFormatting.AQUA + "[自动拾取] "
                                 + TextFormatting.YELLOW + "开始执行防卡重启序列: "
                                 + TextFormatting.WHITE + restartSequence));
             }
             return;
         }
-        currentState = State.SEARCHING;
+        rt.currentState = State.SEARCHING;
     }
 
     private boolean hasPlayerMoved() {
-        double dx = mc.player.posX - antiStuckLastPosX;
-        double dy = mc.player.posY - antiStuckLastPosY;
-        double dz = mc.player.posZ - antiStuckLastPosZ;
+        RuntimeState rt = rt();
+        double dx = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX - rt.antiStuckLastPosX;
+        double dy = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY - rt.antiStuckLastPosY;
+        double dz = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ - rt.antiStuckLastPosZ;
         return dx * dx + dy * dy + dz * dz > 0.0025D;
     }
 
     private void captureAntiStuckPosition() {
-        antiStuckLastPosX = mc.player.posX;
-        antiStuckLastPosY = mc.player.posY;
-        antiStuckLastPosZ = mc.player.posZ;
+        RuntimeState rt = rt();
+        rt.antiStuckLastPosX = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX;
+        rt.antiStuckLastPosY = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY;
+        rt.antiStuckLastPosZ = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ;
     }
 
     private AutoPickupRule.PickupActionEntry findMatchingPickupActionEntry(AutoPickupRule rule, ItemStack stack) {

@@ -19,7 +19,7 @@ public class GuiInventory extends GuiInventoryCustomSupport {
 
     static boolean isOtherFeatureEnabled(String featureId) {
         if ("speed".equalsIgnoreCase(featureId)) {
-            return SpeedHandler.enabled;
+            return SpeedHandler.INSTANCE.isEnabledNow();
         }
         if (MovementFeatureManager.isManagedFeature(featureId)) {
             return MovementFeatureManager.isEnabled(featureId);

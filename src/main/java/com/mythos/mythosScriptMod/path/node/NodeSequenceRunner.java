@@ -8,6 +8,7 @@ import com.mythos.mythosScriptMod.handlers.ItemSpreadHandler;
 import com.mythos.mythosScriptMod.handlers.NearbyItemPickupActionHandler;
 import com.mythos.mythosScriptMod.handlers.WarehouseEventHandler;
 import com.mythos.mythosScriptMod.path.PathSequenceManager;
+import com.mythos.mythosScriptMod.utils.JsonCopy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -878,7 +879,7 @@ public class NodeSequenceRunner {
         }
 
         if (element.isJsonArray() || element.isJsonObject()) {
-            return new JsonParser().parse(element.toString());
+            return JsonCopy.deepCopy(element);
         }
 
         return safeString(element);

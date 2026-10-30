@@ -1304,6 +1304,7 @@ public final class KeybindWorkbenchTab implements ModernSettingsTab {
         }
         KeybindManager.syncPathSequenceKeybinds();
         KeybindManager.saveConfig();
+        com.mythos.mythosScriptMod.mythosScriptMod.applyOpenMenuToVanillaKey();
         this.draftDirty = false;
         showStatus("gui.modern.keybind_wb.u041");
     }

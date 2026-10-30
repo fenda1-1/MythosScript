@@ -698,7 +698,7 @@ public final class ModernGeneralSettingsTab implements ModernSettingsTab {
         minecraft.gameSettings.language = language;
         boolean applied = ClientTranslationInjector.INSTANCE.applyLanguage(language);
         try {
-            minecraft.gameSettings.saveOptions();
+            com.mythos.mythosScriptMod.gui.GuiScaleLock.saveOptions(minecraft.gameSettings);
         } catch (Throwable ignored) {
         }
         if (applied) {

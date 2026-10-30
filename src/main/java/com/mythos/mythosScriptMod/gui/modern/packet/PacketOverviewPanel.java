@@ -47,7 +47,7 @@ final class PacketOverviewPanel extends PacketPanelBase {
         lastMouseX = mouseX;
         lastMouseY = mouseY;
         PacketCaptureHandler.PacketCaptureUiSnapshot snapshot = PacketCaptureHandler.getUiSnapshot();
-        boolean capturing = PacketCaptureHandler.isCapturing;
+        boolean capturing = PacketCaptureHandler.isCapturingForeground();
         boolean whitelist = PacketFilterConfig.INSTANCE.captureMode == PacketCaptureHandler.CaptureMode.WHITELIST;
         boolean business = snapshot.businessProcessingEnabled;
         int x = area.x + 14;

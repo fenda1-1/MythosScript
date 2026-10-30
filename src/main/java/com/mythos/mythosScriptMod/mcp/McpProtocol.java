@@ -38,7 +38,7 @@ public final class McpProtocol {
                     String version = ("2025-06-18".equals(requested) || "2025-03-26".equals(requested)
                             || "2024-11-05".equals(requested)) ? requested : "2025-03-26";
                     result = object("protocolVersion", version, "capabilities", object("tools", object("listChanged", false)),
-                            "serverInfo", object("name", "MythosScript", "version", "1.0.73"),
+                            "serverInfo", object("name", "MythosScript", "version", "1.0.74"),
                             "instructions", "Call mythos_clients first and read players (in-world usernames). If the user named a player, pass player on later tools. If players has exactly one name, use it and do not ask. If several names and the user did not specify, list them and ask; do not guess. pid still selects a process; player=all or pid=-1 broadcasts. Then mythos_discover. For a saved or reusable sequence, call mythos_preflight before mythos_run. Inspect action schemas before execution. Query mythos_templates for wait-then-click and teleport-retry recipes; never click GUI after a blind delay, and confirm teleports by area within ~3s with cooldown/failure retries. Game operations run on the client thread. mythos_run returns an executionSessionId and event baseline; call mythos_wait or inspect mythos_status/mythos_logs, then correlate interaction events with GUI/inventory snapshots. Accepted execution is not completion.");
                     break;
                 case "ping": result = new JsonObject(); break;
@@ -47,8 +47,14 @@ public final class McpProtocol {
                     String name = string(p, "name");
                     JsonObject args = p.has("arguments") ? p.getAsJsonObject("arguments") : new JsonObject();
                     long callId = McpCallHistory.INSTANCE.begin(id, name, args);
+                    long cpuNanos = -1L, allocatedBytes = -1L;
                     try {
                         JsonObject data = backend.call(name, args);
+                        if (data != null && data.has("perf") && data.get("perf").isJsonObject()) {
+                            JsonObject perf = data.getAsJsonObject("perf");
+                            if (perf.has("cpuNanos")) cpuNanos = perf.get("cpuNanos").getAsLong();
+                            if (perf.has("allocatedBytes")) allocatedBytes = perf.get("allocatedBytes").getAsLong();
+                        }
                         JsonArray content = new JsonArray();
                         content.add(object("type", "text", "text", GSON.toJson(data)));
                         result = object("content", content, "structuredContent", data, "isError", false);
@@ -57,7 +63,7 @@ public final class McpProtocol {
                         content.add(object("type", "text", "text", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
                         result = object("content", content, "isError", true);
                     }
-                    McpCallHistory.INSTANCE.finish(callId, result, result.get("isError").getAsBoolean());
+                    McpCallHistory.INSTANCE.finish(callId, result, result.get("isError").getAsBoolean(), cpuNanos, allocatedBytes);
                     break;
                 default: return error(id, -32601, "Method not found: " + method);
             }

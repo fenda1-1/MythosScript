@@ -991,7 +991,7 @@
         "foodLevelThreshold",
         "targetHotbarSlot"
       ],
-      "implementation": "final boolean autoEatEnabled = !params.has(\"enabled\") || params.get(\"enabled\").getAsBoolean();\n                    final int foodThreshold = params.has(\"foodLevelThreshold\")\n                            ? Math.max(0, Math.min(20, params.get(\"foodLevelThreshold\").getAsInt()))\n                            : AutoEatHandler.foodLevelThreshold;\n                    final boolean autoMoveFoodEnabled = !params.has(\"autoMoveFoodEnabled\")\n                            || params.get(\"autoMoveFoodEnabled\").getAsBoolean();\n                    final boolean eatWithLookDown = params.has(\"eatWithLookDown\")\n                            && params.get(\"eatWithLookDown\").getAsBoolean();\n                    final int targetHotbarSlot = params.has(\"targetHotbarSlot\")\n                            ? Math.max(1, Math.min(9, params.get(\"targetHotbarSlot\").getAsInt()))\n                            : AutoEatHandler.targetHotbarSlot;\n                    final String foodKeywordsText = params.has(\"foodKeywordsText\")\n                            ? params.get(\"foodKeywordsText\").getAsString()\n                            : \"\";\n                    return player -> {\n                        AutoEatHandler.autoEatEnabled = autoEatEnabled;\n                        AutoEatHandler.foodLevelThreshold = foodThreshold;\n                        AutoEatHandler.autoMoveFoodEnabled = autoMoveFoodEnabled;\n                        AutoEatHandler.eatWithLookDown = eatWithLookDown;\n                        AutoEatHandler.targetHotbarSlot = targetHotbarSlot;\n                        if (foodKeywordsText != null && !foodKeywordsText.trim().isEmpty()) {\n                            List<String> keywords = Arrays.stream(foodKeywordsText.split(\"\\\\r?\\\\n|,\"))\n                                    .map(String::trim)\n                                    .filter(s -> !s.isEmpty())\n                                    .collect(Collectors.toList());\n                            if (!keywords.isEmpty()) {\n                                AutoEatHandler.foodKeywords = new ArrayList<>(keywords);\n                            }\n                        }\n                        AutoEatHandler.saveAutoEatConfig();\n                    };"
+      "implementation": "final boolean autoEatEnabled = !params.has(\"enabled\") || params.get(\"enabled\").getAsBoolean();\n                    final int foodThreshold = params.has(\"foodLevelThreshold\")\n                            ? Math.max(0, Math.min(20, params.get(\"foodLevelThreshold\").getAsInt()))\n                            : AutoEatHandler.foodLevelThreshold;\n                    final boolean autoMoveFoodEnabled = !params.has(\"autoMoveFoodEnabled\")\n                            || params.get(\"autoMoveFoodEnabled\").getAsBoolean();\n                    final boolean eatWithLookDown = params.has(\"eatWithLookDown\")\n                            && params.get(\"eatWithLookDown\").getAsBoolean();\n                    final int targetHotbarSlot = params.has(\"targetHotbarSlot\")\n                            ? Math.max(1, Math.min(9, params.get(\"targetHotbarSlot\").getAsInt()))\n                            : AutoEatHandler.targetHotbarSlot;\n                    final String foodKeywordsText = params.has(\"foodKeywordsText\")\n                            ? params.get(\"foodKeywordsText\").getAsString()\n                            : \"\";\n                    return player -> {\n                        AutoEatHandler.setAutoEatEnabledSilently(autoEatEnabled);\n                        AutoEatHandler.foodLevelThreshold = foodThreshold;\n                        AutoEatHandler.autoMoveFoodEnabled = autoMoveFoodEnabled;\n                        AutoEatHandler.eatWithLookDown = eatWithLookDown;\n                        AutoEatHandler.targetHotbarSlot = targetHotbarSlot;\n                        if (foodKeywordsText != null && !foodKeywordsText.trim().isEmpty()) {\n                            List<String> keywords = Arrays.stream(foodKeywordsText.split(\"\\\\r?\\\\n|,\"))\n                                    .map(String::trim)\n                                    .filter(s -> !s.isEmpty())\n                                    .collect(Collectors.toList());\n                            if (!keywords.isEmpty()) {\n                                AutoEatHandler.foodKeywords = new ArrayList<>(keywords);\n                            }\n                        }\n                        AutoEatHandler.saveAutoEatConfig();\n                    };"
     }
   ],
   "autoequip": [
@@ -1027,7 +1027,7 @@
       "keys": [
         "enabled"
       ],
-      "implementation": "final boolean autoPickupEnabled = !params.has(\"enabled\") || params.get(\"enabled\").getAsBoolean();\n                    return player -> {\n                        AutoPickupHandler.globalEnabled = autoPickupEnabled;\n                        AutoPickupHandler.saveConfig();\n                    };"
+      "implementation": "final boolean autoPickupEnabled = !params.has(\"enabled\") || params.get(\"enabled\").getAsBoolean();\n                    return player -> {\n                        AutoPickupHandler.setGlobalEnabledSilently(autoPickupEnabled);\n                        AutoPickupHandler.saveConfig();\n                    };"
     }
   ],
   "toggle_autoeat": [
@@ -1045,7 +1045,7 @@
       "keys": [
         "enabled"
       ],
-      "implementation": "final boolean toggleAutoEatEnabled = !params.has(\"enabled\") || params.get(\"enabled\").getAsBoolean();\n                    return player -> {\n                        AutoEatHandler.autoEatEnabled = toggleAutoEatEnabled;\n                        AutoEatHandler.saveAutoEatConfig();\n                    };"
+      "implementation": "final boolean toggleAutoEatEnabled = !params.has(\"enabled\") || params.get(\"enabled\").getAsBoolean();\n                    return player -> {\n                        AutoEatHandler.setAutoEatEnabledSilently(toggleAutoEatEnabled);\n                        AutoEatHandler.saveAutoEatConfig();\n                    };"
     }
   ],
   "toggle_autofishing": [
@@ -1131,7 +1131,7 @@
       "keys": [
         "enabled"
       ],
-      "implementation": "final boolean toggleAutoPickupEnabled = !params.has(\"enabled\")\n                            || params.get(\"enabled\").getAsBoolean();\n                    return player -> {\n                        AutoPickupHandler.globalEnabled = toggleAutoPickupEnabled;\n                        AutoPickupHandler.saveConfig();\n                    };"
+      "implementation": "final boolean toggleAutoPickupEnabled = !params.has(\"enabled\")\n                            || params.get(\"enabled\").getAsBoolean();\n                    return player -> {\n                        AutoPickupHandler.setGlobalEnabledSilently(toggleAutoPickupEnabled);\n                        AutoPickupHandler.saveConfig();\n                    };"
     }
   ],
   "toggle_auto_follow": [
@@ -1258,6 +1258,24 @@
         "enabled"
       ],
       "implementation": "final boolean toggleBaritoneFlightEnabled = !params.has(\"enabled\")\n                            || params.get(\"enabled\").getAsBoolean();\n                    return player -> applyBaritoneFlightToggle(toggleBaritoneFlightEnabled);"
+    }
+  ],
+  "toggle_baritone_blink": [
+    {
+      "source": "path/PathSequenceManager.java",
+      "line": 1498,
+      "keys": [
+        "enabled"
+      ],
+      "implementation": "return \"Baritone瞬移寻路: \"\n                                + ((params.has(\"enabled\") && !params.get(\"enabled\").getAsBoolean())\n                                        ? I18n.format(\"path.common.off\")\n                                        : I18n.format(\"path.common.on\"));"
+    },
+    {
+      "source": "path/PathSequenceManager.java",
+      "line": 3010,
+      "keys": [
+        "enabled"
+      ],
+      "implementation": "final boolean toggleBaritoneBlinkEnabled = !params.has(\"enabled\")\n                            || params.get(\"enabled\").getAsBoolean();\n                    return player -> applyBaritoneBlinkToggle(toggleBaritoneBlinkEnabled);"
     }
   ],
   "toggle_other_feature": [
@@ -1504,7 +1522,6 @@
       "implementation": "String itemName = params.has(\"item\") ? params.get(\"item\").getAsString() : \"\";\n                    int tempSlot = params.has(\"tempslot\")\n                            ? Math.max(0, Math.min(8, params.get(\"tempslot\").getAsInt()))\n                            : 0;\n                    int switchDelayTicks = params.has(\"switchDelayTicks\")\n                            ? Math.max(0, params.get(\"switchDelayTicks\").getAsInt())\n                            : -1;\n                    int useDelayTicks = params.has(\"useDelayTicks\")\n                            ? Math.max(0, params.get(\"useDelayTicks\").getAsInt())\n                            : -1;\n                    int switchBackDelayTicks = params.has(\"switchBackDelayTicks\")\n                            ? Math.max(0, params.get(\"switchBackDelayTicks\").getAsInt())\n                            : -1;\n                    return player -> ModUtils.useItemFromInventory(itemName, tempSlot, switchDelayTicks,\n                            useDelayTicks, switchBackDelayTicks);"
     }
   ],
-  "runlastsequence": [],
   "send_packet": [
     {
       "source": "path/PathSequenceManager.java",

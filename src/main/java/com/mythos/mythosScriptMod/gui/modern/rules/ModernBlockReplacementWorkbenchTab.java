@@ -122,7 +122,7 @@ public final class ModernBlockReplacementWorkbenchTab implements ModernSettingsT
     private String entryValidation = "";
 
     public ModernBlockReplacementWorkbenchTab() {
-        state = new WorkbenchState(BlockReplacementHandler.rules, BlockReplacementHandler.getCategoriesSnapshot());
+        state = new WorkbenchState(BlockReplacementHandler.cfg().rules, BlockReplacementHandler.getCategoriesSnapshot());
     }
 
     @Override
@@ -1066,11 +1066,11 @@ public final class ModernBlockReplacementWorkbenchTab implements ModernSettingsT
 
     private void persistDraftToHandler() {
         List<String> existingCategories = BlockReplacementHandler.getCategoriesSnapshot();
-        BlockReplacementHandler.rules.clear();
+        BlockReplacementHandler.cfg().rules.clear();
         for (BlockReplacementRule rule : state.rules()) {
             BlockReplacementRule copy = copyRule(rule);
             copy.dirty = true;
-            BlockReplacementHandler.rules.add(copy);
+            BlockReplacementHandler.cfg().rules.add(copy);
         }
 
         // replaceCategoryOrder intentionally retains categories owned by the
@@ -1111,7 +1111,7 @@ public final class ModernBlockReplacementWorkbenchTab implements ModernSettingsT
         }
         try {
             BlockReplacementHandler.loadConfig();
-            state.reload(BlockReplacementHandler.rules, BlockReplacementHandler.getCategoriesSnapshot());
+            state.reload(BlockReplacementHandler.cfg().rules, BlockReplacementHandler.getCategoriesSnapshot());
             selectedEntryIndex = -1;
             entryScroll = 0;
             entryValidation = "";
@@ -1930,18 +1930,6 @@ public final class ModernBlockReplacementWorkbenchTab implements ModernSettingsT
         return result;
     }
 
-    private int navigationControlsHeight() {
-        if (navigationBounds.height >= 190) {
-            return FULL_NAV_CONTROLS_HEIGHT;
-        }
-        if (navigationBounds.height >= 130) {
-            return 88;
-        }
-        if (navigationBounds.height >= 100) {
-            return 60;
-        }
-        return 38;
-    }
 
     private static ModernFormSettingsTab.TextValue text(final StringGetter getter, final StringSetter setter) {
         return new ModernFormSettingsTab.TextValue() {

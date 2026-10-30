@@ -124,3 +124,9 @@ gui.modern.notes.deleted=Group deleted
 gui.modern.notes.rename_error=Rename failed; the target group may already exist
 gui.modern.notes.delete_error=Delete failed
 gui.mcp.event_filter=g=entities,gui id=ID from=epochMs to=epochMs
+
+key.categories.mythosnexus=Mythos Nexus
+key.mythosnexus.manager=Open Nexus manager
+key.mythosnexus.mountNext=Mount next bot
+key.mythosnexus.mountPrev=Mount previous bot
+key.mythosnexus.mountHuman=Mount human view

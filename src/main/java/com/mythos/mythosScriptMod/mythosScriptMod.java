@@ -99,7 +99,7 @@ import java.nio.file.Path;
 public class mythosScriptMod {
     public static final String MODID = "mythos_script";
     public static final String NAME = "MythosScript";
-    public static final String VERSION = "v1.0.73";
+    public static final String VERSION = "v1.0.74";
 
     public static final Logger LOGGER = LogManager.getLogger(mythosScriptMod.class);
     public static mythosScriptMod instance;
@@ -124,6 +124,43 @@ public class mythosScriptMod {
 
     public static boolean isAttachedRuntime() { return attachedRuntime; }
 
+    // ---- cached NexusHooks handles ----
+    // Class.forName+getMethod on every call was the top jdk-reflection cost in
+    // the 30-bot CPU profile — resolve once and reuse.
+    private static Class<?> nexusHooksCls;
+    private static java.lang.reflect.Method nexusInContextM;
+    private static java.lang.reflect.Method nexusContextMismatchM;
+    private static boolean nexusHandlesTried;
+
+    private static void initNexusHandles() {
+        if (nexusHandlesTried) return;
+        nexusHandlesTried = true;
+        try {
+            nexusHooksCls = Class.forName("com.mythos.nexus.core.NexusHooks");
+            nexusInContextM = nexusHooksCls.getMethod("inContext");
+            nexusContextMismatchM = nexusHooksCls.getMethod("contextMismatch");
+        } catch (Throwable ignored) {}
+    }
+
+    /**
+     * True while Nexus is dispatching packets for a session that is NOT the
+     * mounted one.  When true, every Forge event handler in this class
+     * should early-out — the mc singleton belongs to the mounted session,
+     * not the session currently executing.
+     * Implemented via reflection so MythosScript compiles without Nexus.
+     */
+    public static boolean nexusInBackgroundContext() {
+        initNexusHandles();
+        if (nexusInContextM == null || nexusContextMismatchM == null) return false;
+        try {
+            Object ctx = nexusInContextM.invoke(null);
+            if (ctx == null) return false;
+            return Boolean.TRUE.equals(nexusContextMismatchM.invoke(null));
+        } catch (Throwable t) {
+            return false; // Nexus absent → single-instance mode
+        }
+    }
+
     /** Called only on the Minecraft client thread by the version-checked Agent. */
     public static synchronized void initializeForAttach() {
         if (instance != null) return;
@@ -138,6 +175,7 @@ public class mythosScriptMod {
         DebugLogManager.installLoggerBridge();
 
         ProfileManager.initialize();
+        com.mythos.mythosScriptMod.config.session.SessionConfigBinder.apply();
         ModConfig.loadAllConfigs();
         LoopExecutionConfig.load();
         GuiInventory.loopCount = LoopExecutionConfig.INSTANCE.loopCount;
@@ -152,11 +190,13 @@ public class mythosScriptMod {
         ClientTranslationInjector.INSTANCE.install();
 
         ClientRegistry.registerKeyBinding(guiKey);
+        applyOpenMenuToVanillaKey();
         MinecraftForge.EVENT_BUS.register(this);
         MinecraftForge.EVENT_BUS.register(SimulatedKeyInputManager.INSTANCE);
         com.mythos.mythosScriptMod.system.HeadlessInputBridge.install();
         LOGGER.info("Key Command Mod initialized!");
         MinecraftForge.EVENT_BUS.register(GlobalEventListener.instance);
+        MinecraftForge.EVENT_BUS.register(com.mythos.mythosScriptMod.gui.GuiScaleLock.INSTANCE);
         MinecraftForge.EVENT_BUS.register(new OverlayGuiHandler());
 
         MinecraftForge.EVENT_BUS.register(new com.mythos.mythosScriptMod.system.GlobalKeybindListener());
@@ -247,6 +287,60 @@ public class mythosScriptMod {
             LOGGER.error("内置导航初始化失败", t);
         }
 
+        // Expose the listener set so Mythos Nexus can re-fire tick events
+        // per bot session (NexusTickBridge reads this).
+        nexusListeners = java.util.Arrays.asList(
+                this,
+                SimulatedKeyInputManager.INSTANCE,
+                GlobalEventListener.instance,
+                ConditionalExecutionHandler.INSTANCE,
+                AutoEscapeHandler.INSTANCE,
+                FlyHandler.INSTANCE,
+                SpeedHandler.INSTANCE,
+                MovementFeatureManager.INSTANCE,
+                BlockFeatureManager.INSTANCE,
+                WorldFeatureManager.INSTANCE,
+                RenderFeatureManager.INSTANCE,
+                ItemFeatureManager.INSTANCE,
+                MiscFeatureManager.INSTANCE,
+                DungeonWarehouseHandler.INSTANCE,
+                KillAuraHandler.INSTANCE,
+                AutoFishingHandler.INSTANCE,
+                WarehouseEventHandler.INSTANCE,
+                AutoPickupHandler.INSTANCE,
+                EmbeddedNavigationHandler.INSTANCE,
+                BlockReplacementHandler.INSTANCE,
+                // 后台 bot 的 DelayTask 由 owner 键控——DelayScheduler 必须随该
+                // bot 的 tick 线程跑 onClientTick，否则 unmount 后循环重启等延迟
+                // 任务永远等不到匹配 owner（client thread 只有 mounted owner）。
+                ModUtils.DelayScheduler.instance
+        );
+        // Register our tick relay with Nexus if the coremod is present.
+        try {
+            Class<?> hooks = Class.forName("com.mythos.nexus.core.NexusHooks");
+            java.lang.reflect.Method reg = hooks.getMethod(
+                    "registerTickHook", Runnable.class);
+            reg.invoke(null, (Runnable) com.mythos.mythosScriptMod.handlers
+                    .NexusTickBridge::tickAll);
+            LOGGER.info("Registered NexusTickBridge with Mythos Nexus");
+            // Fast hook: DelayScheduler drains wall-clock tasks every bot
+            // tick-thread iteration — not gated by the adaptive tick rate,
+            // so a "2 tick" container click delay stays ~100ms real even
+            // when the session is throttled to 20%.
+            java.lang.reflect.Method regFast = hooks.getMethod(
+                    "registerFastTickHook", Runnable.class);
+            regFast.invoke(null, (Runnable) () -> {
+                ModUtils.DelayScheduler s = ModUtils.DelayScheduler.instance;
+                if (s != null) s.drainForCurrentOwner();
+                AutoFishingHandler.INSTANCE.tickFishingFast();
+                KillAuraHandler.INSTANCE.tickTeleportFast();
+            });
+        } catch (ClassNotFoundException e) {
+            // Nexus absent — single-instance mode, no relay needed.
+        } catch (Throwable t) {
+            LOGGER.warn("Failed to register NexusTickBridge", t);
+        }
+
         MinecraftForge.EVENT_BUS.register(BlockReplacementHandler.INSTANCE);
         BlockReplacementHandler.loadConfig();
         LOGGER.info("Block Replacement Handler registered!");
@@ -258,7 +352,15 @@ public class mythosScriptMod {
         ClientCommandHandler.instance.registerCommand(new CopyNameCommand());
         ClientCommandHandler.instance.registerCommand(new BaritoneChatCommand());
         ClientCommandHandler.instance.registerCommand(new RunNodeSequenceCommand());
+        ClientCommandHandler.instance.registerCommand(new com.mythos.mythosScriptMod.system.command.ReloadLangCommand());
         LOGGER.info("/copy 与 /run_node_sequence 命令已注册。");
+        // 第三方插件在命令表填好之后才加载：插件注册的命令要能和自己内置命令查重，
+        // 反过来（插件先注册、内置命令后注册）会让内置命令把插件的同名命令覆盖掉。
+        try {
+            com.mythos.mythosScriptMod.gui.modern.plugin.PluginLoader.loadAll();
+        } catch (Throwable broken) {
+            LOGGER.warn("第三方插件加载失败", broken);
+        }
         MythosScriptMcpServer.start();
     }
 
@@ -306,9 +408,7 @@ public class mythosScriptMod {
 
     public static void resetAllStates() {
         LOGGER.info("重置所有Mod状态...");
-        if (PathSequenceEventListener.instance.isTracking()) {
-            PathSequenceEventListener.instance.stopTracking();
-        }
+        PathSequenceEventListener.stopAllForegroundRunners();
         PathSequenceEventListener.stopAllBackgroundRunners();
         ScopedRuntimeVariables.clearGlobalScope();
         GuiInventory.isLooping = false;
@@ -316,9 +416,7 @@ public class mythosScriptMod {
         int persistedLoopCount = (LoopExecutionConfig.INSTANCE == null) ? 1 : LoopExecutionConfig.INSTANCE.loopCount;
         GuiInventory.loopCount = persistedLoopCount;
         GuiInventory.loopCounter = 0;
-        AutoEatHandler.isEating = false;
-        AutoEatHandler.originalHotbarSlot = -1;
-        AutoEatHandler.swappedItem = net.minecraft.item.ItemStack.EMPTY;
+        AutoEatHandler.resetRuntimeState();
 
         AutoEscapeHandler.resetRuntimeState();
         GuiBlockerHandler.reset();
@@ -358,8 +456,30 @@ public class mythosScriptMod {
 
     }
 
+    /** Exposed for NexusTickBridge — the exact set of listeners we
+     *  registered on the Forge bus during init(). */
+    private static volatile java.util.List<Object> nexusListeners =
+            java.util.Collections.emptyList();
+    public static java.util.List<Object> nexusListeners() {
+        return nexusListeners;
+    }
+
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
+        // Per-session support (Mythos Nexus): when running inside a bot's
+        // packet context the mc singleton points at a DIFFERENT session —
+        // ClientTickEvent here means "the mounted session". Background bots
+        // get their tick via NexusHooks.runSessionTicks calling
+        // NexusTickBridge.tickFor(session) below.
+        if (nexusInBackgroundContext()) {
+            // A non-mounted session is dispatching packets on this thread.
+            // The normal Forge bus already fired this tick on the client
+            // thread for the mounted session — we must NOT also run
+            // MythosScript ticks here or feature state would double-apply.
+            // The background tick is driven explicitly by NexusTickBridge.
+            return;
+        }
+
         if (event.phase == TickEvent.Phase.START && !hasInjectedGui) {
             if (mc.ingameGUI != null) {
                 try {
@@ -382,9 +502,29 @@ public class mythosScriptMod {
         }
 
         if (event.phase == TickEvent.Phase.END) {
+            // 挂载的会话变了就把静态配置字段换成新会话那一套（各会话配置独立存储）。
+            com.mythos.mythosScriptMod.config.session.SessionConfigSync.tick();
+            if (mc.currentScreen == null) {
+                pullOpenMenuFromVanillaKeyIfChanged();
+            }
             consumeGuiToggleKey();
+            // 插件 tick 挂在挂载会话的客户端 tick 上：`mc` 此时指向玩家正在看的那个会话，
+            // 插件拿到的 Minecraft 实例就是它，不需要插件自己处理多开路由。
+            com.mythos.mythosScriptMod.gui.modern.plugin.PluginLoader.tick();
         }
 
+    }
+
+    @SubscribeEvent
+    public void onClientChat(net.minecraftforge.client.event.ClientChatReceivedEvent event) {
+        // Plugins see exactly what the player sees. Action-bar lines (type 2) are
+        // excluded on purpose: they refresh several times per second and would turn
+        // every plugin's chat log into noise.
+        if (event.getType() == net.minecraft.util.text.ChatType.GAME_INFO) {
+            return;
+        }
+        com.mythos.mythosScriptMod.gui.modern.plugin.PluginLoader.onChatMessage(
+                event.getMessage().getUnformattedText());
     }
 
     @SubscribeEvent
@@ -414,9 +554,19 @@ public class mythosScriptMod {
     }
 
     private void consumeGuiToggleKey() {
-        if (mc.player == null || mc.world == null) {
-            while (guiKey.isPressed()) {
-            }
+        // Menu is allowed at the title screen too — the multiboxer leaves
+        // the human parked at title while bots run, and F must still open it.
+        // (Formerly this block drained the keypress and returned when
+        // mc.player/mc.world were null, which silently ate F at title.)
+        //
+        // Multibox: guiKey.pressTime is shared static state. Background
+        // sessions re-fire this method via NexusTickBridge — if one drains
+        // isPressed() first, the mounted session (the screen the user is
+        // actually looking at) never toggles. Only the mounted session may
+        // consume the key; background sessions must not even drain it.
+        String mountedName = com.mythos.mythosScriptMod.mcp.NexusSessions.mountedUsername();
+        if (mountedName != null && mc.player != null
+                && !mc.player.getName().equalsIgnoreCase(mountedName)) {
             return;
         }
 
@@ -591,6 +741,26 @@ public class mythosScriptMod {
             return true;
         }
         return distanceSq <= Math.pow(tolerance, 2);
+    }
+
+    /** Vanilla Controls and the script OPEN_MENU binding are the same key. */
+    public static void applyOpenMenuToVanillaKey() {
+        guiKey.setKeyCode(com.mythos.mythosScriptMod.system.KeybindManager
+                .primaryKeyCode(com.mythos.mythosScriptMod.system.BindableAction.OPEN_MENU));
+        KeyBinding.resetKeyBindingArrayAndHash();
+    }
+
+    public static void pullOpenMenuFromVanillaKeyIfChanged() {
+        int shown = guiKey.getKeyCode();
+        int saved = com.mythos.mythosScriptMod.system.KeybindManager
+                .primaryKeyCode(com.mythos.mythosScriptMod.system.BindableAction.OPEN_MENU);
+        if (shown == saved) {
+            return;
+        }
+        com.mythos.mythosScriptMod.system.KeybindManager.keybinds.put(
+                com.mythos.mythosScriptMod.system.BindableAction.OPEN_MENU,
+                new com.mythos.mythosScriptMod.system.KeybindManager.Keybind(shown, new java.util.HashSet<Integer>()));
+        com.mythos.mythosScriptMod.system.KeybindManager.saveConfig();
     }
 
     public static int getGuiToggleKeyCode() {

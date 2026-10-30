@@ -62,7 +62,6 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
 
     private static final int TOP_INSET = 8;
     private static final int FOOTER_HEIGHT = 32;
-    private static final int NAV_FOOTER_HEIGHT = 50;
     private static final int NAV_ROW_HEIGHT = 25;
     private static final int CHEST_ROW_HEIGHT = 25;
     private static final int RULE_ROW_HEIGHT = 25;
@@ -2154,10 +2153,10 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
             return;
         }
         try {
-            List<Warehouse> source = WarehouseManager.warehouses;
+            List<Warehouse> source = WarehouseManager.cfg().warehouses;
             if (source == null) {
                 source = new CopyOnWriteArrayList<>();
-                WarehouseManager.warehouses = source;
+                WarehouseManager.cfg().warehouses = source;
             }
             Set<Warehouse> keptSources = Collections.newSetFromMap(new IdentityHashMap<Warehouse, Boolean>());
             Warehouse selectedSource = null;
@@ -3389,7 +3388,7 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         originalSourceWarehouses.clear();
         sourceByDraft.clear();
 
-        List<Warehouse> source = WarehouseManager.warehouses;
+        List<Warehouse> source = WarehouseManager.cfg().warehouses;
         if (source != null) {
             for (Warehouse originalSource : source) {
                 if (originalSource == null) {
@@ -4024,21 +4023,6 @@ public final class ModernWarehouseWorkbenchTab implements ModernSettingsTab {
         return values == null ? Collections.<String>emptyList() : values;
     }
 
-    private String viewTooltip(View candidate) {
-        switch (candidate) {
-        case REGION:
-            return "gui.modern.warehouse.u227";
-        case CHESTS:
-            return "gui.modern.warehouse.u052";
-        case INVENTORY:
-            return "gui.modern.warehouse.u228";
-        case POLICY:
-            return "gui.modern.warehouse.u229";
-        case SORTING:
-        default:
-            return "gui.modern.warehouse.u230";
-        }
-    }
 
     private String snapshotFingerprint() {
         try {

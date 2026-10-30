@@ -211,10 +211,10 @@ public final class ModernChatOptimizationSettingsTab {
     }
 
     private static ChatOptimizationConfig config() {
-        if (ChatOptimizationConfig.INSTANCE == null) {
+        if (ChatOptimizationConfig.instance() == null) {
             ChatOptimizationConfig.load();
         }
-        return ChatOptimizationConfig.INSTANCE;
+        return ChatOptimizationConfig.instance();
     }
 
     private static void normalizeAndPersist() {
@@ -255,7 +255,7 @@ public final class ModernChatOptimizationSettingsTab {
         }
         minecraft.gameSettings.chatScale = clamp(settingsChatScale(settings), 0.0F, 1.0F);
         minecraft.gameSettings.chatWidth = clamp(settingsChatWidth(settings), 0.0F, 1.0F);
-        minecraft.gameSettings.saveOptions();
+        com.mythos.mythosScriptMod.gui.GuiScaleLock.saveOptions(minecraft.gameSettings);
     }
 
     private static float settingsChatScale(ChatOptimizationConfig settings) {

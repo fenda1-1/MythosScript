@@ -18,19 +18,7 @@ public class CapturingFontRenderer extends FontRenderer {
         super(gameSettings, location, textureManager, unicode);
     }
 
-    /**
-     * 禁用文本捕获。
-     */
-    public void disableCapture() {
-        this.captureEnabled = false;
-    }
 
-    /**
-     * 启用文本捕获。
-     */
-    public void enableCapture() {
-        this.captureEnabled = true;
-    }
 
     /**
      * 重写核心的绘制字符串方法.

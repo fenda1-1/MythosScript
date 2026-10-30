@@ -74,10 +74,9 @@ public final class PacketWorkbenchTab implements ModernSettingsTab {
         synchronized (PacketCaptureHandler.capturedReceivedPackets) { return new ArrayList<>(PacketCaptureHandler.capturedReceivedPackets); }
     }
     public List<PacketSnapshotManager.SnapshotMeta> snapshots() { return PacketSnapshotManager.listSnapshots(); }
-    public List<PacketIdRecordManager.PacketIdRecord> capturedIds() { return PacketIdRecordManager.listRecords(); }
     public List<String> sequences() { return PacketSequenceManager.getAllSequenceNames(); }
 
-    public void toggleCapture() { PacketCaptureHandler.isCapturing = !PacketCaptureHandler.isCapturing; status(tr("gui.modern.pktwb.fmt.capture", tr(PacketCaptureHandler.isCapturing ? "gui.modern.pktwb.u001" : "gui.modern.pktwb.u002"))); }
+    public void toggleCapture() { PacketCaptureHandler.setCapturingForeground(!PacketCaptureHandler.isCapturingForeground()); status(tr("gui.modern.pktwb.fmt.capture", tr(PacketCaptureHandler.isCapturingForeground() ? "gui.modern.pktwb.u001" : "gui.modern.pktwb.u002"))); }
     public void clearCapture() { PacketCaptureHandler.clearAllPackets(); status("gui.modern.pktwb.u003"); }
     public void toggleBusinessProcessing() {
         PacketFilterConfig.INSTANCE.enableBusinessPacketProcessing = !PacketFilterConfig.INSTANCE.enableBusinessPacketProcessing;
@@ -159,11 +158,7 @@ public final class PacketWorkbenchTab implements ModernSettingsTab {
     public void openPathSequenceSelector(PacketPathSequenceSelectorPanel.Selection selection) {
         overlays.push(new PacketPathSequenceSelectorPanel(this, selection));
     }
-    public void openSequenceEditorFromManager(String name) { openSequenceEditor(name); }
-    public PacketDrafts.FilterDraft beginFilterEdit() { filterDraft = PacketDrafts.FilterDraft.capture(PacketFilterConfig.INSTANCE); return filterDraft; }
-    public void saveFilter() { if (filterDraft != null) { filterDraft.save(); filterDraft = null; status("gui.modern.pktwb.u006"); } }
     public void cancelFilter() { if (filterDraft != null) { filterDraft.cancel(); filterDraft = null; status("gui.modern.pktwb.u007"); } }
-    public PacketDrafts.SequenceDraft newSequence(String name) { return new PacketDrafts.SequenceDraft(name); }
     public boolean saveSequence(PacketDrafts.SequenceDraft draft) { boolean ok = draft != null && draft.save(); status(ok ? "gui.modern.pktwb.u008" : "gui.modern.pktwb.u009"); return ok; }
 
     public void back() {

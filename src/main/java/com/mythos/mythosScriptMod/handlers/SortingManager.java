@@ -211,7 +211,7 @@ public class SortingManager {
     }
 
     private static void executeMoves(int windowId, List<ModUtils.Click> moves) {
-        int delay = DungeonWarehouseHandler.settings.clickIntervalMs / 50;
+        int delay = DungeonWarehouseHandler.cfg().settings.clickIntervalMs / 50;
         for (int i = 0; i < moves.size(); i++) {
             final ModUtils.Click move = moves.get(i);
             ModUtils.DelayScheduler.instance.schedule(() -> {

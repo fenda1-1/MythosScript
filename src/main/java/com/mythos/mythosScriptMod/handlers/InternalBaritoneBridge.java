@@ -29,13 +29,39 @@ public final class InternalBaritoneBridge {
             if (BaritoneAPI.getSettings().byLowerName.containsKey(settingName)) {
                 normalized = "set " + normalized;
             }
-            return BaritoneAPI.getProvider()
-                    .getPrimaryBaritone()
-                    .getCommandManager()
-                    .execute(normalized);
+            com.mythos.mythosScriptMod.shadowbaritone.api.IBaritone baritone = resolveBaritone();
+            if (baritone == null) {
+                return false;
+            }
+            return baritone.getCommandManager().execute(normalized);
         } catch (Throwable t) {
             mythosScriptMod.LOGGER.error("内置导航命令执行失败: {}", raw, t);
             return false;
+        }
+    }
+
+    /**
+     * Session-aware baritone for chat commands. When a Nexus bot is mounted,
+     * mc.player is that bot and its per-session baritone (keyed by username)
+     * is the one MixinMinecraft ticks — so commands must land there, not on
+     * the primary baritone which would sit in PATH_REQUESTED untouched.
+     */
+    private static com.mythos.mythosScriptMod.shadowbaritone.api.IBaritone resolveBaritone() {
+        try {
+            net.minecraft.client.entity.EntityPlayerSP p =
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+            com.mythos.mythosScriptMod.shadowbaritone.api.IBaritoneProvider provider =
+                    BaritoneAPI.getProvider();
+            if (p != null) {
+                com.mythos.mythosScriptMod.shadowbaritone.api.IBaritone b =
+                        provider.getBaritoneForPlayer(p);
+                if (b != null) {
+                    return b;
+                }
+            }
+            return provider.getPrimaryBaritone();
+        } catch (Throwable t) {
+            return null;
         }
     }
 

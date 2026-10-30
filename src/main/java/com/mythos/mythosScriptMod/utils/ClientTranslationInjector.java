@@ -158,6 +158,25 @@ public final class ClientTranslationInjector implements IResourceManagerReloadLi
         }
     }
 
+    /**
+     * Force a re-parse of every bundled module .lang for the given locale and
+     * re-apply to the live Locale.properties. Called when module files change
+     * on disk so a client restart isn't needed to pick up new keys.
+     */
+    public synchronized boolean reloadLocale(String localeCode) {
+        String normalizedLocale = normalizeLocaleCode(localeCode);
+        try {
+            Map<String, String> fresh = new HashMap<>();
+            mergeLocale(fresh, normalizedLocale);
+            translationCache.put(normalizedLocale, fresh);
+            injectTranslations("reloadLocale");
+            return true;
+        } catch (Throwable t) {
+            mythosScriptMod.LOGGER.warn("Failed to reload bundled translations for {}", normalizedLocale, t);
+            return false;
+        }
+    }
+
     private void preloadLocaleAsync(final String localeCode) {
         final String normalizedLocale = normalizeLocaleCode(localeCode);
         synchronized (this) {

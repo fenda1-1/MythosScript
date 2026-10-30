@@ -342,21 +342,6 @@ public final class PathConfigValidator {
         }
     }
 
-    private static List<Issue> validateStepJumpTarget(String sequenceName, int stepIndex, int target, int currentStep,
-            int stepCount) {
-        List<Issue> issues = new ArrayList<>();
-        if (target < 0) {
-            issues.add(new Issue(Severity.ERROR, "failure_jump_missing", sequenceName, stepIndex, -1,
-                    "失败跳转目标无效", "失败策略为跳转步骤时，必须填写大于等于 0 的目标步骤。"));
-        } else if (target >= stepCount) {
-            issues.add(new Issue(Severity.ERROR, "failure_jump_range", sequenceName, stepIndex, -1,
-                    "失败跳转目标超出范围", "当前序列只有 " + stepCount + " 个步骤。"));
-        } else if (target == currentStep) {
-            issues.add(new Issue(Severity.WARNING, "failure_jump_self", sequenceName, stepIndex, -1,
-                    "失败跳转回当前步骤", "连续失败时可能反复重试当前步骤，建议确认是否会形成死循环。"));
-        }
-        return issues;
-    }
 
     private static void validateParameterVariableReferences(String sequenceName, int stepIndex, int actionIndex,
             ActionData action, JsonObject params, ActionParameterVariableResolver.Context variableContext,
@@ -540,7 +525,12 @@ public final class PathConfigValidator {
                     issues.add(new Issue(Severity.ERROR, "send_packet_hex", sequenceName, stepIndex, actionIndex,
                             "发送数据包缺少 HEX 数据", "请至少填写 HEX 数据。"));
                 }
-                if (isBlank(getString(params, "channel")) && !params.has("packetId")) {
+                String targetType = getString(params, "targetType").trim();
+                boolean missingTarget = "channel".equalsIgnoreCase(targetType)
+                        ? isBlank(getString(params, "channel"))
+                        : "packetId".equalsIgnoreCase(targetType) ? isBlank(getString(params, "packetId"))
+                                : isBlank(getString(params, "channel")) && !params.has("packetId");
+                if (missingTarget) {
                     issues.add(new Issue(Severity.ERROR, "send_packet_target", sequenceName, stepIndex, actionIndex,
                             "发送数据包未指定频道或 Packet ID", "请填写 FML 频道，或填写标准包 Packet ID。"));
                 }
@@ -2299,42 +2289,6 @@ public final class PathConfigValidator {
         return expressions;
     }
 
-    private static List<String> readSimpleStringList(JsonObject params, String arrayKey, String legacyKey) {
-        List<String> values = new ArrayList<>();
-        if (params == null) {
-            return values;
-        }
-        if (params.has(arrayKey) && params.get(arrayKey).isJsonArray()) {
-            JsonArray array = params.getAsJsonArray(arrayKey);
-            for (JsonElement element : array) {
-                if (element != null && element.isJsonPrimitive()) {
-                    String value = safe(element.getAsString()).trim();
-                    if (!value.isEmpty()) {
-                        values.add(value);
-                    }
-                }
-            }
-            if (!values.isEmpty()) {
-                return values;
-            }
-        }
-
-        String text = getString(params, legacyKey);
-        if (isBlank(text)) {
-            text = getString(params, arrayKey);
-        }
-        if (isBlank(text)) {
-            return values;
-        }
-
-        for (String token : text.split("\\r?\\n|,")) {
-            String value = safe(token).trim();
-            if (!value.isEmpty()) {
-                values.add(value);
-            }
-        }
-        return values;
-    }
 
     private static String getString(JsonObject params, String key) {
         if (params == null || key == null || !params.has(key) || params.get(key).isJsonNull()) {

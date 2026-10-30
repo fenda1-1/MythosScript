@@ -148,6 +148,17 @@ public class MovementDiagonal extends Movement {
                     || !MovementHelper.canWalkThrough(context, destX, y + 2, destZ)) {
                 return;
             }
+            // A snow-capped landing raises the real surface above the integer
+            // cell top; re-check the actual jump rise like MovementAscend does.
+            if (MovementHelper.isSnowState(destInto)
+                    || MovementHelper.isSnowState(context.get(x, y, z))
+                    || MovementHelper.isSnowState(context.get(x, y - 1, z))) {
+                double jumpRise = MovementHelper.walkingSurfaceY(context.bsi, destX, y + 1, destZ)
+                        - MovementHelper.walkingSurfaceY(context.bsi, x, y, z);
+                if (jumpRise > MovementAscend.SNOW_MAX_JUMP_RISE) {
+                    return;
+                }
+            }
             destWalkOn = destInto;
             fromDown = context.get(x, y - 1, z);
         } else {

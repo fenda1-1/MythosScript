@@ -99,7 +99,6 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
 
     @Override
     public void path() {
-        logBaritoneDebug(String.format("[DBG][CustomGoalProcess] path() stateBefore=%s goal=%s", this.state, this.goal));
         this.state = State.PATH_REQUESTED;
         logBaritoneDebug(String.format("[DBG][CustomGoalProcess] path() stateAfter=%s", this.state));
     }
@@ -155,13 +154,34 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
                     return new PathingCommand(this.goal, PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
                 }
                 boolean flightTerminal = baritone.getPathingBehavior().isFlightTerminalReached();
+                boolean playerReady = ctx.player() != null && ctx.player().world != null;
+                boolean feetInGoal = false;
+                boolean startInGoal = false;
+                if (this.goal != null && playerReady) {
+                    feetInGoal = this.goal.isInGoal(ctx.playerFeet());
+                    startInGoal = this.goal.isInGoal(baritone.getPathingBehavior().pathStart());
+                }
+                if (baritone.getPathingBehavior().getCurrent() == null
+                        && (feetInGoal || startInGoal)) {
+                    try {
+                        com.mythos.mythosScriptMod.shadowbaritone.pathing.movement.parkour.ParkourDebugLog.INSTANCE
+                                .event(String.format(java.util.Locale.ROOT,
+                                        "customgoal ARRIVAL-CANDIDATE cur=null feet=%s feetInGoal=%s pathStart=%s startInGoal=%s player=%s world=%s",
+                                        ctx.playerFeet(), feetInGoal,
+                                        baritone.getPathingBehavior().pathStart(), startInGoal,
+                                        System.identityHashCode(ctx.player()),
+                                        ctx.player() == null ? "null" : System.identityHashCode(ctx.player().world)));
+                    } catch (Throwable ignored) {
+                    }
+                }
                 if (this.goal == null || baritone.getPathingBehavior().isFlightTerminalSafeLanding()
                         || (flightTerminal && (this.goal instanceof GoalFlightExact
                         || this.goal instanceof GoalFlightXZ)
+                        && playerReady
                         && this.goal.isInGoal(ctx.playerFeet()))
                         || (!flightTerminal && baritone.getPathingBehavior().getCurrent() == null
-                        && this.goal.isInGoal(ctx.playerFeet())
-                        && this.goal.isInGoal(baritone.getPathingBehavior().pathStart()))) {
+                        && feetInGoal
+                        && startInGoal)) {
                     onLostControl(); // we're there xd
                     if (Baritone.settings().disconnectOnArrival.value) {
                         ModUtils.disconnectFromCurrentWorld();

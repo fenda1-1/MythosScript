@@ -180,12 +180,17 @@ public class ShadowBaritoneForgeBridge {
         if (mc.player == null) {
             return;
         }
-        try {
-            IBaritone baritone = provider.getBaritoneForPlayer(mc.player);
-            if (baritone != null) {
+        // Drive onPlayerUpdate for EVERY baritone, not just the mounted one —
+        // each session baritone's ctx.player/ctx.world are already pinned to
+        // its own session, so the look/input update resolves correctly per bot.
+        // Mounted-only dispatch left background bots' PathingBehavior
+        // isPathing=true while InputOverrideHandler never forced keys — the
+        // "bot stands still with navActive=true" stall.
+        for (IBaritone baritone : provider.getAllBaritones()) {
+            try {
                 baritone.getGameEventHandler().onPlayerUpdate(new PlayerUpdateEvent(state));
+            } catch (Throwable ignored) {
             }
-        } catch (Throwable ignored) {
         }
     }
 
@@ -210,21 +215,4 @@ public class ShadowBaritoneForgeBridge {
                 : TickEvent.Type.OUT;
     }
 
-    private void kickStartGoalPathing(IBaritoneProvider provider) {
-        for (IBaritone baritone : provider.getAllBaritones()) {
-            try {
-                Goal goal = baritone.getCustomGoalProcess().getGoal();
-                if (goal == null) {
-                    continue;
-                }
-                if (baritone.getPathingBehavior().isPathing()
-                        || baritone.getPathingBehavior().getInProgress().isPresent()) {
-                    continue;
-                }
-                ((PathingBehavior) baritone.getPathingBehavior()).secretInternalSetGoalAndPath(
-                        new PathingCommand(goal, PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH));
-            } catch (Throwable ignored) {
-            }
-        }
-    }
 }

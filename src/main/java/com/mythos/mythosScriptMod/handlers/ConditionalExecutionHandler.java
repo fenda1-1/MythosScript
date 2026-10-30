@@ -42,15 +42,44 @@ import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ConditionalExecutionHandler {
+
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        // --- 核心修改：使用规则列表 ---
+        public final List<ConditionalRule> rules = new CopyOnWriteArrayList<>();
+        private final List<String> categories = new CopyOnWriteArrayList<>();
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) ConditionalExecutionHandler::loadConfig);
+            return config;
+        }
+    }
+
     public static final ConditionalExecutionHandler INSTANCE = new ConditionalExecutionHandler();
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final int DEBUG_LINES_LIMIT = 5;
 
-    // --- 核心修改：使用规则列表 ---
-    public static boolean globalEnabled = true;
-    public static final List<ConditionalRule> rules = new CopyOnWriteArrayList<>();
-    private static final List<String> categories = new CopyOnWriteArrayList<>();
 
     private static final String CATEGORY_DEFAULT = "默认";
     private static final String BUILTIN_RULE_NAME = "初始化界面";
@@ -58,25 +87,40 @@ public class ConditionalExecutionHandler {
     private static final double BUILTIN_CENTER_X = 185.51D;
     private static final double BUILTIN_CENTER_Y = 14.0D;
     private static final double BUILTIN_CENTER_Z = -587.42D;
-    private static final double BUILTIN_RANGE = 10.0D;
 
-    // --- 运行时状态 ---
-    private static ConditionalRule activeRule = null; // 记录当前是由哪个规则启动的序列
-    private static final List<String> debugLines = new ArrayList<>();
-    private static ConditionalRule antiStuckMonitorRule = null;
-    private static int antiStuckStationaryTicks = 0;
-    private static boolean antiStuckWarnSent = false;
-    private static double antiStuckLastPosX = Double.NaN;
-    private static double antiStuckLastPosY = Double.NaN;
-    private static double antiStuckLastPosZ = Double.NaN;
-    private static ConditionalRule antiStuckEntryGraceRule = null;
-    private static int antiStuckEntryGraceTicks = 0;
+    // --- 运行时状态（per-session，按 NexusSessions.currentTickOwner() 键控）---
+    private static final java.util.concurrent.ConcurrentHashMap<String, RuntimeState> STATES =
+        new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static RuntimeState rt() {
+        return STATES.computeIfAbsent(
+            com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner(),
+            k -> new RuntimeState());
+    }
+
+    private static final class RuntimeState {
+        boolean globalEnabled = true;
+        ConditionalRule activeRule = null;
+        final List<String> debugLines = new ArrayList<>();
+        ConditionalRule antiStuckMonitorRule = null;
+        int antiStuckStationaryTicks = 0;
+        boolean antiStuckWarnSent = false;
+        double antiStuckLastPosX = Double.NaN;
+        double antiStuckLastPosY = Double.NaN;
+        double antiStuckLastPosZ = Double.NaN;
+        ConditionalRule antiStuckEntryGraceRule = null;
+        int antiStuckEntryGraceTicks = 0;
+    }
 
     private ConditionalExecutionHandler() {
     }
 
     private static Path getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("conditional_rules.json");
+        return ProfileManager.currentConfigFile("conditional_rules.json");
+    }
+
+    private static Path getRuntimeConfigFile() {
+        return ProfileManager.getCurrentRuntimeProfileDir().resolve("conditional_rules.json");
     }
 
     public static synchronized void saveConfig() {
@@ -91,12 +135,19 @@ public class ConditionalExecutionHandler {
             Files.createDirectories(configFile.getParent());
 
             JsonObject root = new JsonObject();
-            root.addProperty("globalEnabled", globalEnabled);
-            root.add("categories", GSON.toJsonTree(new ArrayList<>(categories)));
+            root.add("categories", GSON.toJsonTree(new ArrayList<>(cfg().categories)));
             root.add("rules", GSON.toJsonTree(snapshotRules()));
 
             try (BufferedWriter writer = Files.newBufferedWriter(configFile, StandardCharsets.UTF_8)) {
                 GSON.toJson(root, writer);
+            }
+
+            Path runtimeFile = getRuntimeConfigFile();
+            Files.createDirectories(runtimeFile.getParent());
+            JsonObject rjson = new JsonObject();
+            rjson.addProperty("globalEnabled", rt().globalEnabled);
+            try (BufferedWriter rw = Files.newBufferedWriter(runtimeFile, StandardCharsets.UTF_8)) {
+                GSON.toJson(rjson, rw);
             }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("无法保存条件执行规则", e);
@@ -105,9 +156,9 @@ public class ConditionalExecutionHandler {
 
     public static synchronized void loadConfig() {
         Path configFile = getConfigFile();
-        rules.clear();
-        categories.clear();
-        globalEnabled = true;
+        cfg().rules.clear();
+        cfg().categories.clear();
+        rt().globalEnabled = true;
 
         if (!Files.exists(configFile)) {
             ensureBuiltinRules();
@@ -122,8 +173,19 @@ public class ConditionalExecutionHandler {
 
             if (parsed != null && parsed.isJsonObject()) {
                 JsonObject root = parsed.getAsJsonObject();
-                if (root.has("globalEnabled")) {
-                    globalEnabled = root.get("globalEnabled").getAsBoolean();
+                Path runtimeFile = getRuntimeConfigFile();
+                if (Files.exists(runtimeFile)) {
+                    try (BufferedReader rr = Files.newBufferedReader(runtimeFile, StandardCharsets.UTF_8)) {
+                        JsonElement rp = new JsonParser().parse(rr);
+                        if (rp != null && rp.isJsonObject()) {
+                            JsonObject rj = rp.getAsJsonObject();
+                            if (rj.has("globalEnabled")) {
+                                rt().globalEnabled = rj.get("globalEnabled").getAsBoolean();
+                            }
+                        }
+                    }
+                } else if (root.has("globalEnabled")) {
+                    rt().globalEnabled = root.get("globalEnabled").getAsBoolean();
                 }
                 if (root.has("categories") && root.get("categories").isJsonArray()) {
                     JsonArray categoryArray = root.getAsJsonArray("categories");
@@ -145,17 +207,17 @@ public class ConditionalExecutionHandler {
             }
 
             if (loadedRules != null) {
-                rules.addAll(loadedRules);
+                cfg().rules.addAll(loadedRules);
             }
-            categories.addAll(loadedCategories);
+            cfg().categories.addAll(loadedCategories);
 
             ensureBuiltinRules();
             ensureCategoriesSynced();
             sanitizeRules();
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("无法加载条件执行规则", e);
-            rules.clear();
-            categories.clear();
+            cfg().rules.clear();
+            cfg().categories.clear();
             ensureBuiltinRules();
             ensureCategoriesSynced();
             sanitizeRules();
@@ -169,15 +231,15 @@ public class ConditionalExecutionHandler {
      */
     public static synchronized void removeBuiltinRules() {
         boolean removed = false;
-        for (ConditionalRule rule : new ArrayList<>(rules)) {
+        for (ConditionalRule rule : new ArrayList<>(cfg().rules)) {
             if (isBuiltinRule(rule)) {
-                rules.remove(rule);
+                cfg().rules.remove(rule);
                 removed = true;
             }
         }
-        if (activeRule != null && isBuiltinRule(activeRule)) {
+        if (rt().activeRule != null && isBuiltinRule(rt().activeRule)) {
             INSTANCE.stopActiveSequence();
-            activeRule = null;
+            rt().activeRule = null;
             removed = true;
         }
         if (removed) {
@@ -192,10 +254,10 @@ public class ConditionalExecutionHandler {
 
     private static void ensureCategoriesSynced() {
         LinkedHashSet<String> normalized = new LinkedHashSet<>();
-        for (String category : categories) {
+        for (String category : cfg().categories) {
             normalized.add(normalizeCategory(category));
         }
-        for (ConditionalRule rule : rules) {
+        for (ConditionalRule rule : cfg().rules) {
             if (rule == null || isBuiltinRule(rule)) {
                 continue;
             }
@@ -206,12 +268,12 @@ public class ConditionalExecutionHandler {
         if (normalized.isEmpty()) {
             normalized.add(CATEGORY_DEFAULT);
         }
-        categories.clear();
-        categories.addAll(normalized);
+        cfg().categories.clear();
+        cfg().categories.addAll(normalized);
     }
 
     private static void sanitizeRules() {
-        for (ConditionalRule rule : rules) {
+        for (ConditionalRule rule : cfg().rules) {
             if (rule != null) {
                 rule.normalize();
             }
@@ -224,7 +286,7 @@ public class ConditionalExecutionHandler {
     }
 
     private static boolean containsCategoryIgnoreCase(String category) {
-        for (String existing : categories) {
+        for (String existing : cfg().categories) {
             if (normalizeCategory(existing).equalsIgnoreCase(normalizeCategory(category))) {
                 return true;
             }
@@ -233,9 +295,9 @@ public class ConditionalExecutionHandler {
     }
 
     private static boolean removeCategoryIgnoreCase(String category) {
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
-                categories.remove(i);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
+                cfg().categories.remove(i);
                 return true;
             }
         }
@@ -245,7 +307,7 @@ public class ConditionalExecutionHandler {
     public static synchronized List<String> getCategoriesSnapshot() {
         ensureBuiltinRules();
         ensureCategoriesSynced();
-        return new ArrayList<>(categories);
+        return new ArrayList<>(cfg().categories);
     }
 
     public static synchronized void replaceCategoryOrder(List<String> orderedCategories) {
@@ -257,11 +319,11 @@ public class ConditionalExecutionHandler {
                 normalized.add(normalizeCategory(category));
             }
         }
-        for (String category : categories) {
+        for (String category : cfg().categories) {
             normalized.add(normalizeCategory(category));
         }
-        categories.clear();
-        categories.addAll(normalized);
+        cfg().categories.clear();
+        cfg().categories.addAll(normalized);
         saveConfig();
     }
 
@@ -272,7 +334,7 @@ public class ConditionalExecutionHandler {
         if (containsCategoryIgnoreCase(normalized)) {
             return false;
         }
-        categories.add(normalized);
+        cfg().categories.add(normalized);
         saveConfig();
         return true;
     }
@@ -291,15 +353,15 @@ public class ConditionalExecutionHandler {
         }
 
         boolean changed = false;
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizedOld)) {
-                categories.set(i, normalizedNew);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizedOld)) {
+                cfg().categories.set(i, normalizedNew);
                 changed = true;
                 break;
             }
         }
 
-        for (ConditionalRule rule : rules) {
+        for (ConditionalRule rule : cfg().rules) {
             if (rule != null && !isBuiltinRule(rule)
                     && normalizeCategory(rule.category).equalsIgnoreCase(normalizedOld)) {
                 rule.category = normalizedNew;
@@ -322,7 +384,7 @@ public class ConditionalExecutionHandler {
         ensureCategoriesSynced();
 
         boolean changed = removeCategoryIgnoreCase(normalized);
-        for (ConditionalRule rule : rules) {
+        for (ConditionalRule rule : cfg().rules) {
             if (rule != null && !isBuiltinRule(rule)
                     && normalizeCategory(rule.category).equalsIgnoreCase(normalized)) {
                 rule.category = CATEGORY_DEFAULT;
@@ -351,21 +413,29 @@ public class ConditionalExecutionHandler {
     }
 
     public static List<String> getDebugLinesSnapshot() {
-        synchronized (debugLines) {
-            return new ArrayList<>(debugLines);
+        synchronized (rt().debugLines) {
+            return new ArrayList<>(rt().debugLines);
         }
     }
 
     public static void setGlobalEnabled(boolean enabled) {
-        globalEnabled = enabled;
+        rt().globalEnabled = enabled;
         if (!enabled) {
             INSTANCE.stopRuntimeActivity();
         }
         saveConfig();
     }
 
+    // ------------------------------------------------------------------
+    // Runtime-switch accessors (boxed RuntimeState fields)
+    // ------------------------------------------------------------------
+
+    public static boolean globalEnabled() { return rt().globalEnabled; }
+
+    public static void setGlobalEnabledSilently(boolean value) { rt().globalEnabled = value; }
+
     public static boolean isGloballyEnabled() {
-        return globalEnabled;
+        return rt().globalEnabled;
     }
 
     public static boolean shouldRenderDebugOverlay() {
@@ -373,14 +443,14 @@ public class ConditionalExecutionHandler {
     }
 
     private static void updateDebugLines(List<String> lines) {
-        synchronized (debugLines) {
-            debugLines.clear();
+        synchronized (rt().debugLines) {
+            rt().debugLines.clear();
             if (lines == null || lines.isEmpty()) {
                 return;
             }
             int count = Math.min(DEBUG_LINES_LIMIT, lines.size());
             for (int i = 0; i < count; i++) {
-                debugLines.add(lines.get(i));
+                rt().debugLines.add(lines.get(i));
             }
         }
     }
@@ -388,7 +458,7 @@ public class ConditionalExecutionHandler {
     private static String formatRuleStatus(ConditionalRule rule, boolean inRange, boolean enteredThisTick,
             boolean onCooldown) {
         StringBuilder sb = new StringBuilder();
-        sb.append(rule == activeRule ? "§a> " : "§7- ");
+        sb.append(rule == rt().activeRule ? "§a> " : "§7- ");
         sb.append(rule.name == null || rule.name.trim().isEmpty() ? "<未命名规则>" : rule.name);
         sb.append(" §7[");
         sb.append(inRange ? "§a区域内" : "§c区域外");
@@ -417,13 +487,13 @@ public class ConditionalExecutionHandler {
         if (event == null
                 || event.phase != TickEvent.Phase.START
                 || event.side != Side.CLIENT
-                || mc.player == null
-                || mc.world == null
-                || event.player != mc.player) {
+                || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null
+                || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null
+                || event.player != com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer()) {
             return;
         }
 
-        if (!globalEnabled) {
+        if (!rt().globalEnabled) {
             stopRuntimeActivity();
             updateDebugLines(new ArrayList<String>() {
                 {
@@ -448,7 +518,7 @@ public class ConditionalExecutionHandler {
         List<ConditionalRule> rulesSnapshot = snapshotRules();
         List<String> runtimeDebugLines = new ArrayList<>();
         runtimeDebugLines.add("§b[条件执行] §f当前活动: "
-                + (activeRule != null ? "§a" + activeRule.name : "§7无"));
+                + (rt().activeRule != null ? "§a" + rt().activeRule.name : "§7无"));
 
         ConditionalRule highestPriorityRuleInRange = null;
         ConditionalRule highestPriorityFreshEntryRule = null;
@@ -458,7 +528,7 @@ public class ConditionalExecutionHandler {
             if (rule == null) {
                 continue;
             }
-            boolean inRange = rule.enabled && rule.isInRange(mc.player.posX, mc.player.posY, mc.player.posZ);
+            boolean inRange = rule.enabled && rule.isInRange(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ);
             boolean enteredThisTick = inRange && !rule.wasPlayerInRangeLastTick;
             boolean onCooldown = rule.isOnCooldown();
 
@@ -487,20 +557,20 @@ public class ConditionalExecutionHandler {
             primeAntiStuckEntryGrace(highestPriorityFreshEntryRule);
         }
 
-        if (activeRule != null) {
-            if (!activeRule.enabled) {
+        if (rt().activeRule != null) {
+            if (!rt().activeRule.enabled) {
                 stopActiveSequence();
-                activeRule = null;
-            } else if (!PathSequenceEventListener.instance.isTracking()
-                    && !activeRule.isInRange(mc.player.posX, mc.player.posY, mc.player.posZ)) {
+                rt().activeRule = null;
+            } else if (!isOwnerSequenceActive()
+                    && !rt().activeRule.isInRange(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ)) {
                 stopActiveSequence();
-                activeRule = null;
+                rt().activeRule = null;
             }
         }
 
-        boolean isSequenceActive = PathSequenceEventListener.instance.isTracking() && activeRule != null;
+        boolean isSequenceActive = isOwnerSequenceActive() && rt().activeRule != null;
 
-        if (highestPriorityRuleInRange == null && activeRule == null) {
+        if (highestPriorityRuleInRange == null && rt().activeRule == null) {
             updateAntiStuckState(false, null);
             return;
         }
@@ -508,13 +578,13 @@ public class ConditionalExecutionHandler {
         // --- 核心逻辑 ---
 
         // 1. 处理离开区域的情况
-        if (isSequenceActive && activeRule.stopOnExit) {
+        if (isSequenceActive && rt().activeRule.stopOnExit) {
             // 检查玩家是否已经离开了 *当前活动规则* 的区域
-            if (!activeRule.isInRange(mc.player.posX, mc.player.posY, mc.player.posZ)) {
-                mythosScriptMod.LOGGER.info("[条件执行] 玩家离开规则 '{}' 的区域，终止序列。", activeRule.name);
+            if (!rt().activeRule.isInRange(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ)) {
+                mythosScriptMod.LOGGER.info("[条件执行] 玩家离开规则 '{}' 的区域，终止序列。", rt().activeRule.name);
                 stopActiveSequence();
-                activeRule.startCooldown(); // 离开后也启动冷却
-                activeRule = null;
+                rt().activeRule.startCooldown(); // 离开后也启动冷却
+                rt().activeRule = null;
                 clearAntiStuckState();
                 return;
             }
@@ -524,14 +594,14 @@ public class ConditionalExecutionHandler {
         if (highestPriorityRuleInRange != null) {
             // 如果没有序列在运行，或者当前运行的序列优先级低于新发现的规则
             if (!isSequenceActive
-                    || (activeRule != null
+                    || (rt().activeRule != null
                             && getRulePriorityIndex(rulesSnapshot, highestPriorityRuleInRange) < getRulePriorityIndex(
-                                    rulesSnapshot, activeRule))) {
+                                    rulesSnapshot, rt().activeRule))) {
 
                 // 如果有低优先级的在运行，先停止它
                 if (isSequenceActive) {
                     mythosScriptMod.LOGGER.info("[条件执行] 发现更高优先级的规则 '{}'，停止当前规则 '{}'。", highestPriorityRuleInRange.name,
-                            activeRule.name);
+                            rt().activeRule.name);
                     stopActiveSequence();
                 }
 
@@ -547,10 +617,10 @@ public class ConditionalExecutionHandler {
                 // 启动新规则
                 mythosScriptMod.LOGGER.info("[条件执行] 玩家进入规则 '{}' 的区域，开始执行序列: {}", candidateRule.name,
                         candidateRule.sequenceName);
-                activeRule = candidateRule;
-                activeRule.hasBeenTriggered = true; // 标记已触发
+                rt().activeRule = candidateRule;
+                rt().activeRule.hasBeenTriggered = true; // 标记已触发
 
-                runRuleSequence(activeRule, false);
+                runRuleSequence(rt().activeRule, false);
             }
         }
 
@@ -559,12 +629,12 @@ public class ConditionalExecutionHandler {
             for (ConditionalRule rule : rulesSnapshot) {
                 rule.resetTrigger();
             }
-            if (!PathSequenceEventListener.instance.isTracking()) {
-                activeRule = null;
+            if (!isOwnerSequenceActive()) {
+                rt().activeRule = null;
             }
         }
 
-        updateAntiStuckState(PathSequenceEventListener.instance.isTracking() && activeRule != null,
+        updateAntiStuckState(isOwnerSequenceActive() && rt().activeRule != null,
                 highestPriorityRuleInRange);
         } finally {
             timer.stop();
@@ -572,10 +642,10 @@ public class ConditionalExecutionHandler {
     }
 
     private static List<ConditionalRule> snapshotRules() {
-        if (rules == null || rules.isEmpty()) {
+        if (cfg().rules == null || cfg().rules.isEmpty()) {
             return Collections.emptyList();
         }
-        return new ArrayList<>(rules);
+        return new ArrayList<>(cfg().rules);
     }
 
     private static int getRulePriorityIndex(List<ConditionalRule> snapshot, ConditionalRule rule) {
@@ -585,15 +655,29 @@ public class ConditionalExecutionHandler {
 
     private void stopActiveSequence() {
         EmbeddedNavigationHandler.INSTANCE.stop();
-        PathSequenceEventListener.instance.stopTracking();
+        PathSequenceEventListener runner = PathSequenceEventListener.activeRunner();
+        if (runner != null) {
+            runner.stopTracking();
+        }
         GuiInventory.isLooping = false;
     }
 
+    /**
+     * Conditional execution owns either the foreground runner or a
+     * non-interrupting background runner for the current Nexus session.
+     * Looking only at foregroundRunner() makes a background sequence appear
+     * idle on the next tick, so it is stopped and restarted continuously.
+     */
+    private boolean isOwnerSequenceActive() {
+        PathSequenceEventListener runner = PathSequenceEventListener.activeRunner();
+        return runner != null && runner.isTracking();
+    }
+
     private void stopRuntimeActivity() {
-        if (activeRule != null) {
+        if (rt().activeRule != null) {
             stopActiveSequence();
         }
-        activeRule = null;
+        rt().activeRule = null;
         clearAntiStuckState();
     }
 
@@ -601,51 +685,51 @@ public class ConditionalExecutionHandler {
         if (rule == null) {
             return;
         }
-        antiStuckEntryGraceRule = rule;
-        antiStuckEntryGraceTicks = Math.max(1, rule.getAntiStuckTimeoutTicks());
+        rt().antiStuckEntryGraceRule = rule;
+        rt().antiStuckEntryGraceTicks = Math.max(1, rule.getAntiStuckTimeoutTicks());
         resetAntiStuckTracking(rule);
     }
 
     private void updateAntiStuckState(boolean isSequenceActive, ConditionalRule highestPriorityRuleInRange) {
-        if (mc.player == null) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null) {
             clearAntiStuckState();
             return;
         }
 
-        if (antiStuckEntryGraceRule != null) {
-            if (antiStuckEntryGraceTicks <= 0
-                    || !antiStuckEntryGraceRule.enabled
-                    || !antiStuckEntryGraceRule.antiStuckEnabled
-                    || !antiStuckEntryGraceRule.isInRange(mc.player.posX, mc.player.posY, mc.player.posZ)) {
-                antiStuckEntryGraceRule = null;
-                antiStuckEntryGraceTicks = 0;
+        if (rt().antiStuckEntryGraceRule != null) {
+            if (rt().antiStuckEntryGraceTicks <= 0
+                    || !rt().antiStuckEntryGraceRule.enabled
+                    || !rt().antiStuckEntryGraceRule.antiStuckEnabled
+                    || !rt().antiStuckEntryGraceRule.isInRange(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ)) {
+                rt().antiStuckEntryGraceRule = null;
+                rt().antiStuckEntryGraceTicks = 0;
             } else {
-                antiStuckEntryGraceTicks--;
+                rt().antiStuckEntryGraceTicks--;
             }
         }
 
         ConditionalRule monitorRule = null;
-        if (activeRule != null
-                && activeRule.enabled
-                && activeRule.antiStuckEnabled
-                && activeRule.isInRange(mc.player.posX, mc.player.posY, mc.player.posZ)
+        if (rt().activeRule != null
+                && rt().activeRule.enabled
+                && rt().activeRule.antiStuckEnabled
+                && rt().activeRule.isInRange(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ)
                 && (isSequenceActive
-                        || (antiStuckEntryGraceRule == activeRule && antiStuckEntryGraceTicks > 0))) {
-            monitorRule = activeRule;
+                        || (rt().antiStuckEntryGraceRule == rt().activeRule && rt().antiStuckEntryGraceTicks > 0))) {
+            monitorRule = rt().activeRule;
         }
         if (monitorRule == null
-                && antiStuckEntryGraceRule != null
-                && antiStuckEntryGraceTicks > 0
-                && antiStuckEntryGraceRule.enabled
-                && antiStuckEntryGraceRule.antiStuckEnabled
-                && antiStuckEntryGraceRule.isInRange(mc.player.posX, mc.player.posY, mc.player.posZ)) {
-            monitorRule = antiStuckEntryGraceRule;
+                && rt().antiStuckEntryGraceRule != null
+                && rt().antiStuckEntryGraceTicks > 0
+                && rt().antiStuckEntryGraceRule.enabled
+                && rt().antiStuckEntryGraceRule.antiStuckEnabled
+                && rt().antiStuckEntryGraceRule.isInRange(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ)) {
+            monitorRule = rt().antiStuckEntryGraceRule;
         }
         if (monitorRule == null
                 && highestPriorityRuleInRange != null
-                && highestPriorityRuleInRange == activeRule
+                && highestPriorityRuleInRange == rt().activeRule
                 && highestPriorityRuleInRange.antiStuckEnabled
-                && highestPriorityRuleInRange.isInRange(mc.player.posX, mc.player.posY, mc.player.posZ)
+                && highestPriorityRuleInRange.isInRange(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ)
                 && isSequenceActive) {
             monitorRule = highestPriorityRuleInRange;
         }
@@ -655,30 +739,30 @@ public class ConditionalExecutionHandler {
             return;
         }
 
-        if (antiStuckMonitorRule != monitorRule) {
+        if (rt().antiStuckMonitorRule != monitorRule) {
             resetAntiStuckTracking(monitorRule);
             return;
         }
 
-        if (Double.isNaN(antiStuckLastPosX) || hasPlayerMoved()) {
-            antiStuckStationaryTicks = 0;
-            antiStuckWarnSent = false;
+        if (Double.isNaN(rt().antiStuckLastPosX) || hasPlayerMoved()) {
+            rt().antiStuckStationaryTicks = 0;
+            rt().antiStuckWarnSent = false;
             captureAntiStuckPosition();
             return;
         }
 
-        antiStuckStationaryTicks++;
+        rt().antiStuckStationaryTicks++;
         captureAntiStuckPosition();
 
         int timeoutTicks = Math.max(20, monitorRule.getAntiStuckTimeoutTicks());
         int warningTicks = timeoutTicks - 20;
 
-        if (warningTicks >= 20 && !antiStuckWarnSent && antiStuckStationaryTicks >= warningTicks) {
+        if (warningTicks >= 20 && !rt().antiStuckWarnSent && rt().antiStuckStationaryTicks >= warningTicks) {
             sendAntiStuckWarning(monitorRule, warningTicks / 20, 1);
-            antiStuckWarnSent = true;
+            rt().antiStuckWarnSent = true;
         }
 
-        if (antiStuckStationaryTicks < timeoutTicks) {
+        if (rt().antiStuckStationaryTicks < timeoutTicks) {
             return;
         }
 
@@ -688,7 +772,7 @@ public class ConditionalExecutionHandler {
     }
 
     private void restartRuleSequence(ConditionalRule rule) {
-        if (rule == null || mc.player == null) {
+        if (rule == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null) {
             return;
         }
 
@@ -697,18 +781,18 @@ public class ConditionalExecutionHandler {
             return;
         }
         if (!PathSequenceManager.hasSequence(sequenceName)) {
-            mc.player.sendMessage(new TextComponentString("§c[条件执行] 未找到序列: " + sequenceName));
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§c[条件执行] 未找到序列: " + sequenceName));
             return;
         }
 
         runOnClientThread(() -> {
-            if (mc.player == null || mc.world == null) {
+            if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null) {
                 return;
             }
             stopActiveSequence();
-            activeRule = rule;
-            activeRule.hasBeenTriggered = true;
-            runRuleSequence(activeRule, true);
+            rt().activeRule = rule;
+            rt().activeRule.hasBeenTriggered = true;
+            runRuleSequence(rt().activeRule, true);
         });
     }
 
@@ -721,7 +805,7 @@ public class ConditionalExecutionHandler {
             return;
         }
         runOnClientThread(() -> {
-            if (mc.player == null || mc.world == null) {
+            if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null) {
                 return;
             }
             if (forceSingleExecution) {
@@ -741,6 +825,14 @@ public class ConditionalExecutionHandler {
         if (task == null) {
             return;
         }
+        // Nexus drives background bots from their own bound tick thread. Do
+        // not move a bot-owned sequence start onto the Minecraft thread: the
+        // queued Runnable would lose currentTickOwner() and bind the run to
+        // the human/mounted session instead.
+        if (!com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner().isEmpty()) {
+            task.run();
+            return;
+        }
         if (mc.isCallingFromMinecraftThread()) {
             task.run();
             return;
@@ -749,62 +841,62 @@ public class ConditionalExecutionHandler {
     }
 
     private void sendAntiStuckWarning(ConditionalRule rule, int elapsedSeconds, int remainSeconds) {
-        if (mc.player == null || rule == null) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || rule == null) {
             return;
         }
         String sequenceName = rule.sequenceName == null ? "" : rule.sequenceName.trim();
-        mc.player.sendMessage(new TextComponentString(
+        com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
                 "§e[条件执行] 已在" + sequenceName + "序列中停留超过" + Math.max(1, elapsedSeconds)
                         + "s，将在" + Math.max(1, remainSeconds) + "s后重启序列。"));
     }
 
     private void sendAntiStuckRestartMessage(ConditionalRule rule, int elapsedSeconds) {
-        if (mc.player == null || rule == null) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || rule == null) {
             return;
         }
         String sequenceName = rule.sequenceName == null ? "" : rule.sequenceName.trim();
-        mc.player.sendMessage(new TextComponentString(
+        com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
                 "§c[条件执行] 已在" + sequenceName + "序列中停留超过" + Math.max(1, elapsedSeconds)
                         + "s，正在重启序列。"));
     }
 
     private boolean hasPlayerMoved() {
-        double dx = mc.player.posX - antiStuckLastPosX;
-        double dy = mc.player.posY - antiStuckLastPosY;
-        double dz = mc.player.posZ - antiStuckLastPosZ;
+        double dx = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX - rt().antiStuckLastPosX;
+        double dy = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY - rt().antiStuckLastPosY;
+        double dz = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ - rt().antiStuckLastPosZ;
         return dx * dx + dy * dy + dz * dz > 0.0025D;
     }
 
     private void captureAntiStuckPosition() {
-        antiStuckLastPosX = mc.player.posX;
-        antiStuckLastPosY = mc.player.posY;
-        antiStuckLastPosZ = mc.player.posZ;
+        rt().antiStuckLastPosX = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posX;
+        rt().antiStuckLastPosY = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posY;
+        rt().antiStuckLastPosZ = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().posZ;
     }
 
     private void resetAntiStuckTracking(ConditionalRule rule) {
-        antiStuckMonitorRule = rule;
-        antiStuckStationaryTicks = 0;
-        antiStuckWarnSent = false;
+        rt().antiStuckMonitorRule = rule;
+        rt().antiStuckStationaryTicks = 0;
+        rt().antiStuckWarnSent = false;
         captureAntiStuckPosition();
     }
 
     private void clearAntiStuckState() {
-        antiStuckMonitorRule = null;
-        antiStuckStationaryTicks = 0;
-        antiStuckWarnSent = false;
-        antiStuckLastPosX = Double.NaN;
-        antiStuckLastPosY = Double.NaN;
-        antiStuckLastPosZ = Double.NaN;
-        antiStuckEntryGraceRule = null;
-        antiStuckEntryGraceTicks = 0;
+        rt().antiStuckMonitorRule = null;
+        rt().antiStuckStationaryTicks = 0;
+        rt().antiStuckWarnSent = false;
+        rt().antiStuckLastPosX = Double.NaN;
+        rt().antiStuckLastPosY = Double.NaN;
+        rt().antiStuckLastPosZ = Double.NaN;
+        rt().antiStuckEntryGraceRule = null;
+        rt().antiStuckEntryGraceTicks = 0;
     }
 
     @SubscribeEvent
     public void onRenderWorldLast(RenderWorldLastEvent event) {
-        if (mc == null || mc.world == null) {
+        if (mc == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null) {
             return;
         }
-        if (!globalEnabled) {
+        if (!rt().globalEnabled) {
             return;
         }
 
@@ -840,8 +932,8 @@ public class ConditionalExecutionHandler {
         float r = ((rgb >> 16) & 0xFF) / 255.0F;
         float g = ((rgb >> 8) & 0xFF) / 255.0F;
         float b = (rgb & 0xFF) / 255.0F;
-        float fillAlpha = rule == activeRule ? 0.18F : 0.10F;
-        float lineAlpha = rule == activeRule ? 0.95F : 0.75F;
+        float fillAlpha = rule == rt().activeRule ? 0.18F : 0.10F;
+        float lineAlpha = rule == rt().activeRule ? 0.95F : 0.75F;
 
         AxisAlignedBB renderBox = new AxisAlignedBB(
                 rule.centerX - rule.range,

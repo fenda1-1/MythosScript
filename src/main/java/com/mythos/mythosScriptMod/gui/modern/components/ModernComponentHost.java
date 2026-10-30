@@ -68,9 +68,6 @@ public final class ModernComponentHost {
         return focused;
     }
 
-    public boolean hasFocus() {
-        return focused != null && focused.isFocused();
-    }
 
     public void update() {
         for (ModernComponent child : children) {

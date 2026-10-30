@@ -34,6 +34,10 @@ public final class GoalTargetNormalizer {
             GoalXZ xz = (GoalXZ) goal;
             return goal instanceof GoalFlightXZ ? goal : new GoalFlightXZ(xz.getX(), xz.getZ());
         }
+        if (!BaritoneAPI.getSettings().allowFlightPathing.value && goal instanceof GoalFlightXZ) {
+            GoalFlightXZ xz = (GoalFlightXZ) goal;
+            return new GoalXZ(xz.getX(), xz.getZ());
+        }
         if (!(goal instanceof GoalBlock)) {
             return goal;
         }
@@ -161,7 +165,7 @@ public final class GoalTargetNormalizer {
             return goal;
         }
 
-        int searchRadius = Math.max(8, Math.min(16, FlightPathingConfig.arrivalRange));
+        int searchRadius = Math.max(8, Math.min(16, FlightPathingConfig.cfg().arrivalRange));
         for (int radius = 0; radius <= searchRadius; radius++) {
             GoalBlock best = null;
             int bestVerticalDifference = Integer.MAX_VALUE;

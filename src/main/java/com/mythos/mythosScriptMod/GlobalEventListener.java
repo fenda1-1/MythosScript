@@ -120,8 +120,8 @@ public class GlobalEventListener {
             String guiClassName = event.getGui().getClass().getName();
             String message = "§e[GUI 侦测] §f打开的界面类名: §b" + guiClassName;
 
-            if (Minecraft.getMinecraft().player != null) {
-                Minecraft.getMinecraft().player.sendMessage(new TextComponentString(message));
+            if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(message));
             }
             mythosScriptMod.LOGGER.info(message);
         }
@@ -367,8 +367,8 @@ public class GlobalEventListener {
                     && !DetachedSwingWindowManager.isDetached()) {
                 OverlayGuiHandler.resetLastCheckedChest();
 
-                if (PathSequenceEventListener.instance.wasPausedByGui()) {
-                    PathSequenceEventListener.instance.resume();
+                if (PathSequenceEventListener.foregroundRunner().wasPausedByGui()) {
+                    PathSequenceEventListener.foregroundRunner().resume();
                 }
             }
             if (DetachedSwingWindowManager.isDetached() && currentScreen == null) {
@@ -416,7 +416,7 @@ public class GlobalEventListener {
             }
 
             runGuarded("timed_message", "执行定时发送消息时出错", () -> {
-                ChatOptimizationConfig config = ChatOptimizationConfig.INSTANCE;
+                ChatOptimizationConfig config = ChatOptimizationConfig.instance();
                 if (config.enableTimedMessage && config.timedMessages != null && !config.timedMessages.isEmpty()) {
                     timedMessageTickCounter++;
                     if (timedMessageTickCounter >= config.timedMessageIntervalSeconds * 20) {

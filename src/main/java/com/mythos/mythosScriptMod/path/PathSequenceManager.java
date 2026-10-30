@@ -36,6 +36,7 @@ import com.mythos.mythosScriptMod.system.ProfileManager;
 import com.mythos.mythosScriptMod.path.template.LegacyActionTemplateManager;
 import com.mythos.mythosScriptMod.path.trigger.PlayerListTriggerSupport;
 import com.mythos.mythosScriptMod.utils.HudTextScanner;
+import com.mythos.mythosScriptMod.utils.JsonCopy;
 import com.mythos.mythosScriptMod.utils.ModUtils;
 import com.mythos.mythosScriptMod.utils.TickRangeSpec;
 import com.mythos.mythosScriptMod.utils.locator.ActionTargetLocator;
@@ -76,18 +77,21 @@ public class PathSequenceManager {
         private final int loopCount;
         private final int loopCounter;
         private final boolean isLooping;
+        private final String owner;
 
         private SequenceCallContext(PathSequence callerSequence,
                 PathSequenceEventListener.ProgressSnapshot snapshot,
                 int loopCount,
                 int loopCounter,
-                boolean isLooping) {
+                boolean isLooping,
+                String owner) {
             this.sequenceName = callerSequence.getName();
             this.callerSequence = callerSequence;
             this.snapshot = snapshot;
             this.loopCount = loopCount;
             this.loopCounter = loopCounter;
             this.isLooping = isLooping;
+            this.owner = owner == null ? "" : owner;
         }
     }
 
@@ -118,7 +122,7 @@ public class PathSequenceManager {
             int stepIndex, int actionIndex) {
         runPathSequenceInternal(name, false, loops, variables, stepIndex, actionIndex);
     }
-    private static final Deque<SequenceCallContext> runSequenceCallStack = new ArrayDeque<>();
+    private static final Map<String, Deque<SequenceCallContext>> runSequenceCallStack = new HashMap<>();
     private static final Path BUILTIN_SEQUENCES_PATH = Paths.get(ModConfig.CONFIG_DIR, "pathsequences.json");
     private static final Path WINDOW_CLICK_UUID_MAP_PATH = Paths.get(ModConfig.CONFIG_DIR,
             "window_click_uuid_map.json");
@@ -204,6 +208,36 @@ public class PathSequenceManager {
             return value.getAsString();
         } catch (Exception ignored) {
             return fallback;
+        }
+    }
+
+    /**
+     * Hex-only packet-ID parser: accepts a JSON number or a string like
+     * "0x14", "0X14", "#14" or bare "14" (all read as hexadecimal). Plain
+     * digits are hexadecimal, never decimal, so "14" == 0x14 == 20.
+     */
+    private static int parsePacketIdHex(JsonElement element) {
+        if (element == null || !element.isJsonPrimitive()) {
+            return 0;
+        }
+        String s;
+        try {
+            s = element.getAsString().trim();
+        } catch (Exception ignored) {
+            return 0;
+        }
+        if (s.startsWith("0x") || s.startsWith("0X")) {
+            s = s.substring(2);
+        } else if (s.startsWith("#")) {
+            s = s.substring(1);
+        }
+        if (s.isEmpty()) {
+            return 0;
+        }
+        try {
+            return Math.max(0, Math.min(255, Integer.parseInt(s, 16)));
+        } catch (NumberFormatException ignored) {
+            return 0;
         }
     }
 
@@ -605,7 +639,7 @@ public class PathSequenceManager {
     }
 
     private static void applyBaritoneHumanLikeToggle(boolean enabled) {
-        HumanLikeMovementConfig.INSTANCE.enabled = enabled;
+        HumanLikeMovementConfig.instance().enabled = enabled;
         HumanLikeMovementConfig.save();
         if (!enabled) {
             HumanLikeMovementController.INSTANCE.reset();
@@ -625,6 +659,22 @@ public class PathSequenceManager {
             SettingsUtil.save(settings);
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("设置 Baritone 飞行寻路失败: enabled={}", enabled, e);
+        }
+    }
+
+    private static void applyBaritoneBlinkToggle(boolean enabled) {
+        Settings settings = BaritoneAPI.getSettings();
+        if (settings == null) {
+            return;
+        }
+        try {
+            settings.allowBlinkPathing.value = enabled;
+            if (enabled) {
+                settings.allowFlightPathing.value = false;
+            }
+            SettingsUtil.save(settings);
+        } catch (Exception e) {
+            mythosScriptMod.LOGGER.error("设置 Baritone 瞬移寻路失败: enabled={}", enabled, e);
         }
     }
 
@@ -704,7 +754,21 @@ public class PathSequenceManager {
          */
         public ActionData(ActionData other, boolean preservePersistentUuid) {
             this.type = other.type;
-            this.params = new JsonParser().parse(other.params.toString()).getAsJsonObject();
+            // JsonCopy avoids serializing large params (e.g. recorded packets) to a String
+            this.params = JsonCopy.deepCopyObject(other.params);
+            // Recorded-packet payloads are append-only (replaced wholesale via
+            // params.add(PACKETS_KEY, ...), never mutated in place), so undo/copy
+            // snapshots share the subtree instead of duplicating hundreds of MB.
+            if (other.params != null && other.params.has(RecordingPacketSupport.PACKETS_KEY)
+                    && this.params.has(RecordingPacketSupport.PACKETS_KEY)) {
+                this.params.add(RecordingPacketSupport.PACKETS_KEY,
+                        other.params.get(RecordingPacketSupport.PACKETS_KEY));
+            }
+            if (other.params != null && other.params.has(RecordingPacketSupport.ORIGINAL_PARAMS_KEY)
+                    && this.params.has(RecordingPacketSupport.ORIGINAL_PARAMS_KEY)) {
+                this.params.add(RecordingPacketSupport.ORIGINAL_PARAMS_KEY,
+                        other.params.get(RecordingPacketSupport.ORIGINAL_PARAMS_KEY));
+            }
             ensureHuntVerticalRangeDefaults(this.type, this.params);
             if (!preservePersistentUuid && supportsPersistentActionUuid(this.type)) {
                 this.params.addProperty("uuid", java.util.UUID.randomUUID().toString());
@@ -1480,6 +1544,11 @@ public class PathSequenceManager {
                                 + ((params.has("enabled") && !params.get("enabled").getAsBoolean())
                                         ? I18n.format("path.common.off")
                                         : I18n.format("path.common.on"));
+                    case "toggle_baritone_blink":
+                        return "Baritone瞬移寻路: "
+                                + ((params.has("enabled") && !params.get("enabled").getAsBoolean())
+                                        ? I18n.format("path.common.off")
+                                        : I18n.format("path.common.on"));
                     case "toggle_other_feature":
                         String otherFeatureName = getOtherFeatureDisplayName(
                                 params.has("featureId") ? params.get("featureId").getAsString() : "",
@@ -1688,12 +1757,19 @@ public class PathSequenceManager {
                         String directionText = "S2C".equalsIgnoreCase(direction)
                                 ? I18n.format("path.action.desc.send_packet.direction.s2c")
                                 : I18n.format("path.action.desc.send_packet.direction.c2s");
-                        if (params.has("channel") && !params.get("channel").getAsString().isEmpty()) {
+                        String targetType = params.has("targetType") ? params.get("targetType").getAsString() : "";
+                        boolean channelMode = "channel".equalsIgnoreCase(targetType)
+                                || (targetType.isEmpty() && params.has("channel")
+                                        && !params.get("channel").getAsString().isEmpty());
+                        if (channelMode && params.has("channel") && !params.get("channel").getAsString().isEmpty()) {
                             return I18n.format("path.action.desc.send_packet.channel",
                                     params.get("channel").getAsString(), directionText);
                         } else if (params.has("packetId")) {
-                            return I18n.format("path.action.desc.send_packet.id", params.get("packetId").toString(),
-                                    directionText);
+                            JsonElement idEl = params.get("packetId");
+                            String idText = idEl.isJsonPrimitive() && idEl.getAsJsonPrimitive().isString()
+                                    ? idEl.getAsString()
+                                    : String.format("0x%02X", idEl.getAsInt());
+                            return I18n.format("path.action.desc.send_packet.id", idText, directionText);
                         } else {
                             return I18n.format("path.action.desc.send_packet.unconfigured");
                         }
@@ -2479,6 +2555,8 @@ public class PathSequenceManager {
                                 String type = actionObj.get("type").getAsString();
                                 JsonObject params = actionObj.has("params") ? actionObj.getAsJsonObject("params")
                                         : new JsonObject();
+                                // Legacy files may carry recorded packet payloads; discard them on load.
+                                RecordingPacketSupport.stripRecordingKeys(params);
                                 migratedHuntVerticalDefaults |= ensureHuntVerticalRangeDefaults(type, params);
                                 step.addAction(new ActionData(type, params));
                             }
@@ -2508,7 +2586,7 @@ public class PathSequenceManager {
                     return player -> ModUtils.sendChatCommand(params.get("command").getAsString());
                 case "system_message":
                     String rawMessage = params.has("message") ? params.get("message").getAsString() : "";
-                    return player -> player.sendMessage(new TextComponentString(rawMessage));
+                    return player -> player.sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + rawMessage));
                 case "paste_text":
                     final String pasteText = params.has("text") ? params.get("text").getAsString() : "";
                     return player -> ModUtils.simulatePasteText(pasteText);
@@ -2742,9 +2820,9 @@ public class PathSequenceManager {
                         }
                         if (player != null) {
                             if (matches.isEmpty()) {
-                                player.sendMessage(new TextComponentString("§e[HUD识别] 未找到匹配文本"));
+                                player.sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + "§e[HUD识别] 未找到匹配文本"));
                             } else {
-                                player.sendMessage(new TextComponentString("§a[HUD识别] " + matches.get(0)));
+                                player.sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + "§a[HUD识别] " + matches.get(0)));
                             }
                         }
                     };
@@ -2805,7 +2883,7 @@ public class PathSequenceManager {
                                         entityLocatorText);
                                 return;
                             }
-                            Minecraft.getMinecraft().playerController.interactWithEntity(player, targetEntity,
+                            com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().interactWithEntity(player, targetEntity,
                                     EnumHand.MAIN_HAND);
                             return;
                         }
@@ -2893,30 +2971,30 @@ public class PathSequenceManager {
                     final boolean autoEatEnabled = !params.has("enabled") || params.get("enabled").getAsBoolean();
                     final int foodThreshold = params.has("foodLevelThreshold")
                             ? Math.max(0, Math.min(20, params.get("foodLevelThreshold").getAsInt()))
-                            : AutoEatHandler.foodLevelThreshold;
+                            : AutoEatHandler.cfg().foodLevelThreshold;
                     final boolean autoMoveFoodEnabled = !params.has("autoMoveFoodEnabled")
                             || params.get("autoMoveFoodEnabled").getAsBoolean();
                     final boolean eatWithLookDown = params.has("eatWithLookDown")
                             && params.get("eatWithLookDown").getAsBoolean();
                     final int targetHotbarSlot = params.has("targetHotbarSlot")
                             ? Math.max(1, Math.min(9, params.get("targetHotbarSlot").getAsInt()))
-                            : AutoEatHandler.targetHotbarSlot;
+                            : AutoEatHandler.cfg().targetHotbarSlot;
                     final String foodKeywordsText = params.has("foodKeywordsText")
                             ? params.get("foodKeywordsText").getAsString()
                             : "";
                     return player -> {
-                        AutoEatHandler.autoEatEnabled = autoEatEnabled;
-                        AutoEatHandler.foodLevelThreshold = foodThreshold;
-                        AutoEatHandler.autoMoveFoodEnabled = autoMoveFoodEnabled;
-                        AutoEatHandler.eatWithLookDown = eatWithLookDown;
-                        AutoEatHandler.targetHotbarSlot = targetHotbarSlot;
+                        AutoEatHandler.setAutoEatEnabledSilently(autoEatEnabled);
+                        AutoEatHandler.cfg().foodLevelThreshold = foodThreshold;
+                        AutoEatHandler.cfg().autoMoveFoodEnabled = autoMoveFoodEnabled;
+                        AutoEatHandler.cfg().eatWithLookDown = eatWithLookDown;
+                        AutoEatHandler.cfg().targetHotbarSlot = targetHotbarSlot;
                         if (foodKeywordsText != null && !foodKeywordsText.trim().isEmpty()) {
                             List<String> keywords = Arrays.stream(foodKeywordsText.split("\\r?\\n|,"))
                                     .map(String::trim)
                                     .filter(s -> !s.isEmpty())
                                     .collect(Collectors.toList());
                             if (!keywords.isEmpty()) {
-                                AutoEatHandler.foodKeywords = new ArrayList<>(keywords);
+                                AutoEatHandler.cfg().foodKeywords = new ArrayList<>(keywords);
                             }
                         }
                         AutoEatHandler.saveAutoEatConfig();
@@ -2927,13 +3005,13 @@ public class PathSequenceManager {
                 case "autopickup":
                     final boolean autoPickupEnabled = !params.has("enabled") || params.get("enabled").getAsBoolean();
                     return player -> {
-                        AutoPickupHandler.globalEnabled = autoPickupEnabled;
+                        AutoPickupHandler.setGlobalEnabledSilently(autoPickupEnabled);
                         AutoPickupHandler.saveConfig();
                     };
                 case "toggle_autoeat":
                     final boolean toggleAutoEatEnabled = !params.has("enabled") || params.get("enabled").getAsBoolean();
                     return player -> {
-                        AutoEatHandler.autoEatEnabled = toggleAutoEatEnabled;
+                        AutoEatHandler.setAutoEatEnabledSilently(toggleAutoEatEnabled);
                         AutoEatHandler.saveAutoEatConfig();
                     };
                 case "toggle_autofishing":
@@ -2944,7 +3022,7 @@ public class PathSequenceManager {
                     final boolean toggleAutoPickupEnabled = !params.has("enabled")
                             || params.get("enabled").getAsBoolean();
                     return player -> {
-                        AutoPickupHandler.globalEnabled = toggleAutoPickupEnabled;
+                        AutoPickupHandler.setGlobalEnabledSilently(toggleAutoPickupEnabled);
                         AutoPickupHandler.saveConfig();
                     };
                 case "toggle_kill_aura":
@@ -2985,6 +3063,10 @@ public class PathSequenceManager {
                     final boolean toggleBaritoneFlightEnabled = !params.has("enabled")
                             || params.get("enabled").getAsBoolean();
                     return player -> applyBaritoneFlightToggle(toggleBaritoneFlightEnabled);
+                case "toggle_baritone_blink":
+                    final boolean toggleBaritoneBlinkEnabled = !params.has("enabled")
+                            || params.get("enabled").getAsBoolean();
+                    return player -> applyBaritoneBlinkToggle(toggleBaritoneBlinkEnabled);
                 case "toggle_other_feature":
                     final String targetOtherFeatureId = params.has("featureId")
                             ? params.get("featureId").getAsString()
@@ -3130,29 +3212,35 @@ public class PathSequenceManager {
                     return player -> ModUtils.useHeldItem(player, heldItemDelayTicks);
                 // --- 核心修改：更新 send_packet 的解析逻辑 ---
                 case "send_packet":
+                    String targetType = params.has("targetType") ? params.get("targetType").getAsString() : "";
+                    // Resolve channel/packetId exclusively per targetType; when targetType is
+                    // absent (legacy) fall back to whichever field carries a value, channel first.
+                    boolean useChannel = "channel".equalsIgnoreCase(targetType)
+                            || (targetType.isEmpty()
+                                    && params.has("channel") && !params.get("channel").getAsString().trim().isEmpty());
                     String channel = params.has("channel") ? params.get("channel").getAsString() : null;
                     String hexData = params.get("hex").getAsString();
                     String direction = params.has("direction") ? params.get("direction").getAsString() : "C2S";
                     boolean inbound = "S2C".equalsIgnoreCase(direction) || "INBOUND".equalsIgnoreCase(direction);
 
-                    if (channel != null && !channel.isEmpty()) {
+                    if (useChannel && channel != null && !channel.isEmpty()) {
                         // 优先使用频道发送 FML 包
                         if (inbound) {
-                            return player -> ModUtils.mockReceiveFmlPacket(channel, hexData);
+                            return player -> ModUtils.mockReceiveFmlPacket(player, channel, hexData);
                         }
-                        return player -> ModUtils.sendFmlPacket(channel, hexData);
+                        return player -> ModUtils.sendFmlPacket(player, channel, hexData);
                     } else if (params.has("packetId")) {
                         // 如果没有频道，则尝试使用 Packet ID 发送标准包
-                        int packetId = params.get("packetId").getAsInt();
+                        int packetId = parsePacketIdHex(params.get("packetId"));
                         if (inbound) {
-                            return player -> ModUtils.mockReceiveStandardPacketById(packetId, hexData);
+                            return player -> ModUtils.mockReceiveStandardPacketById(player, packetId, hexData);
                         }
-                        return player -> ModUtils.sendStandardPacketById(packetId, hexData);
+                        return player -> ModUtils.sendStandardPacketById(player, packetId, hexData);
                     } else {
                         // 如果两者都未提供，则记录错误
                         mythosScriptMod.LOGGER.error(I18n.format("log.path.send_packet_missing_target"));
                         return player -> player.sendMessage(
-                                new TextComponentString(I18n.format("msg.path.send_packet.invalid_config")));
+                                new TextComponentString(ModUtils.nexusChatPrefix() + I18n.format("msg.path.send_packet.invalid_config")));
                     }
                     // --- 修改结束 ---
                 default:
@@ -3329,7 +3417,8 @@ public class PathSequenceManager {
                 for (ActionData action : step.getActions()) {
                     JsonObject actionObj = new JsonObject();
                     actionObj.addProperty("type", action.type);
-                    actionObj.add("params", action.params);
+                    // Live recording packet data is correlation scratch — never persisted.
+                    actionObj.add("params", RecordingPacketSupport.paramsForSave(action.params));
                     actionsArray.add(actionObj);
                 }
                 stepObj.add("actions", actionsArray);
@@ -3658,11 +3747,12 @@ public class PathSequenceManager {
     }
 
     public static void runPathSequenceOnce(String sequenceName) {
-        int preservedLoopCount = GuiInventory.loopCount;
+        PathSequenceEventListener runner = PathSequenceEventListener.foregroundRunner();
+        int preservedLoopCount = runner.getLoopCount();
         try {
             runPathSequenceInternal(sequenceName, false, 1, null);
         } finally {
-            GuiInventory.loopCount = preservedLoopCount;
+            runner.setLoopCount(preservedLoopCount);
         }
     }
 
@@ -3694,7 +3784,7 @@ public class PathSequenceManager {
             int startActionIndex, boolean stopAfterCurrentStep) {
 
         if (!preserveCallerStack) {
-            clearRunSequenceCallStack();
+            clearRunSequenceCallStackFor(com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner());
         }
 
         if (!hasSequence(sequenceName)) {
@@ -3712,7 +3802,7 @@ public class PathSequenceManager {
         int effectiveStartActionIndex = clampStartActionIndex(sequence, effectiveStartStepIndex, startActionIndex);
         int effectiveLoopCount = explicitLoopCount != null
                 ? explicitLoopCount
-                : (sequence.isSingleExecution() ? 1 : GuiInventory.loopCount);
+                : (sequence.isSingleExecution() ? 1 : PathSequenceEventListener.foregroundRunner().getLoopCount());
 
         if (!preserveCallerStack && sequence.isNonInterruptingExecution()) {
             if (effectiveLoopCount != 0) {
@@ -3726,8 +3816,9 @@ public class PathSequenceManager {
             return;
         }
 
-        GuiInventory.loopCounter = 0;
-        GuiInventory.isLooping = true;
+        PathSequenceEventListener runner = PathSequenceEventListener.foregroundRunner();
+        runner.setLoopCounter(0);
+        runner.setLooping(true);
 
         if (effectiveLoopCount != 0) {
             startNextLoopInternal(sequenceName, explicitLoopCount, initialSequenceVariables, effectiveStartStepIndex,
@@ -3755,9 +3846,15 @@ public class PathSequenceManager {
         runSequenceCallStack.clear();
     }
 
+    public static synchronized void clearRunSequenceCallStackFor(String owner) {
+        runSequenceCallStack.remove(owner == null ? "" : owner);
+    }
+
     static synchronized boolean hasPendingCaller(PathSequence sequence) {
-        for (SequenceCallContext context : runSequenceCallStack) {
-            if (context.callerSequence == sequence) return true;
+        for (Deque<SequenceCallContext> stack : runSequenceCallStack.values()) {
+            for (SequenceCallContext context : stack) {
+                if (context.callerSequence == sequence) return true;
+            }
         }
         return false;
     }
@@ -3767,12 +3864,17 @@ public class PathSequenceManager {
     }
 
     public static boolean resumeCallerSequenceAfterAction(EntityPlayerSP player, boolean preserveCurrentNavigation) {
+        String owner = com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner();
         SequenceCallContext context;
         synchronized (PathSequenceManager.class) {
-            if (runSequenceCallStack.isEmpty()) {
+            Deque<SequenceCallContext> stack = runSequenceCallStack.get(owner);
+            if (stack == null || stack.isEmpty()) {
                 return false;
             }
-            context = runSequenceCallStack.pop();
+            context = stack.pop();
+            if (stack.isEmpty()) {
+                runSequenceCallStack.remove(owner);
+            }
         }
 
         PathSequence sequence = getSequence(context.sequenceName);
@@ -3785,11 +3887,14 @@ public class PathSequenceManager {
             return false;
         }
 
-        GuiInventory.loopCount = context.loopCount;
-        GuiInventory.loopCounter = context.loopCounter;
-        GuiInventory.isLooping = context.isLooping;
+        PathSequenceEventListener runner = PathSequenceEventListener.foregroundFor(context.owner);
+        runner.setLoopCounter(context.loopCounter);
+        runner.setLooping(context.isLooping);
+        if (context.owner.isEmpty()) {
+            GuiInventory.loopCount = context.loopCount;
+        }
 
-        boolean resumed = PathSequenceEventListener.instance.resumeFromSnapshot(sequence, context.snapshot,
+        boolean resumed = runner.resumeFromSnapshot(sequence, context.snapshot,
                 preserveCurrentNavigation);
         if (!resumed) {
             mythosScriptMod.LOGGER.warn("[run_sequence] 恢复调用方序列失败: {}", context.sequenceName);
@@ -3864,7 +3969,7 @@ public class PathSequenceManager {
             mythosScriptMod.LOGGER.warn("[run_sequence] 目标序列不存在: {}", target);
             if (player != null) {
                 player.sendMessage(
-                        new TextComponentString(I18n.format("msg.path.run_sequence.target_not_found", target)));
+                        new TextComponentString(ModUtils.nexusChatPrefix() + I18n.format("msg.path.run_sequence.target_not_found", target)));
             }
             return false;
         }
@@ -3877,10 +3982,11 @@ public class PathSequenceManager {
 
         String caller = null;
         PathSequenceEventListener listener = PathSequenceEventListener.getCurrentExecutionContext();
-        if ((listener == null || !listener.isTracking() || listener.currentSequence == null)
-                && PathSequenceEventListener.instance.isTracking()
-                && PathSequenceEventListener.instance.currentSequence != null) {
-            listener = PathSequenceEventListener.instance;
+        if (listener == null || !listener.isTracking() || listener.currentSequence == null) {
+            PathSequenceEventListener foreground = PathSequenceEventListener.foregroundRunner();
+            if (foreground != null && foreground.isTracking() && foreground.currentSequence != null) {
+                listener = foreground;
+            }
         }
         if (listener != null && listener.currentSequence != null) {
             caller = listener.currentSequence.getName();
@@ -3894,7 +4000,7 @@ public class PathSequenceManager {
             mythosScriptMod.LOGGER.warn("[run_sequence] 拒绝循环调用: {} -> {}", caller, target);
             if (player != null) {
                 player.sendMessage(
-                        new TextComponentString(I18n.format("msg.path.run_sequence.cycle_blocked", caller, target)));
+                        new TextComponentString(ModUtils.nexusChatPrefix() + I18n.format("msg.path.run_sequence.cycle_blocked", caller, target)));
             }
             return false;
         }
@@ -3903,7 +4009,7 @@ public class PathSequenceManager {
             return PathSequenceEventListener.startBackgroundSequence(targetSequence, 0, initialSequenceVariables);
         }
 
-        if (listener == PathSequenceEventListener.instance
+        if (listener == PathSequenceEventListener.foregroundRunner()
                 && listener.isTracking()
                 && listener.currentSequence != null) {
             PathSequenceEventListener.ProgressSnapshot snapshot = listener.captureProgressSnapshot();
@@ -3922,12 +4028,15 @@ public class PathSequenceManager {
                         snapshot.isNoStopNavigationOnCompletion());
 
                 synchronized (PathSequenceManager.class) {
-                    runSequenceCallStack.push(new SequenceCallContext(
-                            listener.currentSequence,
-                            resumeSnapshot,
-                            GuiInventory.loopCount,
-                            GuiInventory.loopCounter,
-                            GuiInventory.isLooping));
+                    String owner = listener.owner();
+                    runSequenceCallStack.computeIfAbsent(owner, k -> new ArrayDeque<>())
+                            .push(new SequenceCallContext(
+                                    listener.currentSequence,
+                                    resumeSnapshot,
+                                    listener.getLoopCount(),
+                                    listener.getLoopCounter(),
+                                    listener.isLooping(),
+                                    owner));
                 }
             }
         }
@@ -3947,7 +4056,7 @@ public class PathSequenceManager {
             int startActionIndex) {
         if (targetSequenceName == null || targetSequenceName.trim().isEmpty()) {
             if (player != null) {
-                player.sendMessage(new TextComponentString("§c失败后执行序列未设置目标序列。"));
+                player.sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + "§c失败后执行序列未设置目标序列。"));
             }
             return false;
         }
@@ -3957,7 +4066,7 @@ public class PathSequenceManager {
             mythosScriptMod.LOGGER.warn("[run_sequence] 目标序列不存在: {}", target);
             if (player != null) {
                 player.sendMessage(
-                        new TextComponentString(I18n.format("msg.path.run_sequence.target_not_found", target)));
+                        new TextComponentString(ModUtils.nexusChatPrefix() + I18n.format("msg.path.run_sequence.target_not_found", target)));
             }
             return false;
         }
@@ -3966,7 +4075,7 @@ public class PathSequenceManager {
         if (targetSequence == null || targetSequence.getSteps().isEmpty()) {
             mythosScriptMod.LOGGER.warn("[run_sequence] 目标序列为空或无效: {}", target);
             if (player != null) {
-                player.sendMessage(new TextComponentString("§c目标序列为空或无有效步骤: " + target));
+                player.sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + "§c目标序列为空或无有效步骤: " + target));
             }
             return false;
         }
@@ -3976,7 +4085,7 @@ public class PathSequenceManager {
             mythosScriptMod.LOGGER.warn("[run_sequence] 拒绝循环调用: {} -> {}", caller, target);
             if (player != null) {
                 player.sendMessage(
-                        new TextComponentString(I18n.format("msg.path.run_sequence.cycle_blocked", caller, target)));
+                        new TextComponentString(ModUtils.nexusChatPrefix() + I18n.format("msg.path.run_sequence.cycle_blocked", caller, target)));
             }
             return false;
         }
@@ -3996,7 +4105,7 @@ public class PathSequenceManager {
                 paramsText);
         if (call == null || call.getSequenceName().trim().isEmpty()) {
             if (player != null) {
-                player.sendMessage(new TextComponentString("§c模板不存在或模板目标序列无效: " + templateName));
+                player.sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + "§c模板不存在或模板目标序列无效: " + templateName));
             }
             return false;
         }
@@ -4110,6 +4219,29 @@ public class PathSequenceManager {
         startNextLoopInternal(sequenceName, explicitLoopCount, initialSequenceVariables, 0);
     }
 
+    /**
+     * Whether a step can produce movement through its own actions (as opposed to
+     * the static first-step goto point). Covers direct navigation actions and the
+     * generic command action which may issue baritone commands like !goto.
+     */
+    private static boolean stepHasMovementAction(PathStep step) {
+        if (step == null || step.getActions() == null) {
+            return false;
+        }
+        for (ActionData action : step.getActions()) {
+            if (action == null || action.type == null) {
+                continue;
+            }
+            String type = action.type.trim().toLowerCase(java.util.Locale.ROOT);
+            if ("command".equals(type) || "goto_action".equals(type) || "hunt".equals(type)
+                    || "follow_entity".equals(type) || "run_sequence".equals(type)
+                    || "run_template".equals(type)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static void startNextLoopInternal(String sequenceName, Integer explicitLoopCount,
             Map<String, Object> initialSequenceVariables, int startStepIndex) {
         startNextLoopInternal(sequenceName, explicitLoopCount, initialSequenceVariables, startStepIndex, 0);
@@ -4124,7 +4256,8 @@ public class PathSequenceManager {
     private static void startNextLoopInternal(String sequenceName, Integer explicitLoopCount,
             Map<String, Object> initialSequenceVariables, int startStepIndex, int startActionIndex,
             boolean stopAfterCurrentStep) {
-        if (!GuiInventory.isLooping) {
+        PathSequenceEventListener runner = PathSequenceEventListener.foregroundRunner();
+        if (!runner.isLooping()) {
             mythosScriptMod.LOGGER.info(I18n.format("log.path.looping_false_skip"));
             return;
         }
@@ -4136,18 +4269,22 @@ public class PathSequenceManager {
         double[] firstTarget = sequence.getSteps().get(effectiveStartStepIndex).getGotoPoint();
 
         if (!Double.isNaN(firstTarget[0])) {
-            PathSequenceEventListener.instance.prepareForSequenceStartDispatch("startNextLoopInternal:" + sequenceName);
+            runner.prepareForSequenceStartDispatch("startNextLoopInternal:" + sequenceName);
             EmbeddedNavigationHandler.INSTANCE.startGoto(firstTarget[0], firstTarget[1], firstTarget[2], true);
-        } else {
+        } else if (!stepHasMovementAction(sequence.getSteps().get(effectiveStartStepIndex))) {
+            // The step moves via its own actions (command !goto / hunt / ...), so
+            // skipping the static first goto is expected — only warn when the step
+            // can produce no movement at all. Otherwise this fires once per loop
+            // per bot and spams the log.
             mythosScriptMod.LOGGER.warn(I18n.format("log.path.first_step_no_target"), sequenceName);
         }
 
-        GuiInventory.loopCounter++;
+        runner.setLoopCounter(runner.getLoopCounter() + 1);
 
-        String loopInfo = I18n.format("path.loop.info", GuiInventory.loopCounter);
+        String loopInfo = I18n.format("path.loop.info", runner.getLoopCounter());
         int effectiveLoopCount = explicitLoopCount != null
                 ? explicitLoopCount
-                : ((sequence != null && sequence.isSingleExecution()) ? 1 : GuiInventory.loopCount);
+                : ((sequence != null && sequence.isSingleExecution()) ? 1 : runner.getLoopCount());
 
         if (effectiveLoopCount > 0) {
             loopInfo += "/" + effectiveLoopCount;
@@ -4155,20 +4292,20 @@ public class PathSequenceManager {
             loopInfo += "/" + I18n.format("path.loop.infinite");
         }
 
-        if (Minecraft.getMinecraft().player != null) {
-            Minecraft.getMinecraft().player.sendMessage(new TextComponentString(
-                    I18n.format("msg.path.sequence_start_loop", sequenceName, GuiInventory.loopCounter)));
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + 
+                    I18n.format("msg.path.sequence_start_loop", sequenceName, runner.getLoopCounter())));
         }
-        PathSequenceEventListener.instance.setStatus(sequenceName + " - " + loopInfo);
+        runner.setStatus(sequenceName + " - " + loopInfo);
 
-        PathSequenceEventListener.instance.startTracking(sequence,
-                effectiveLoopCount < 0 ? -1 : effectiveLoopCount + 1 - GuiInventory.loopCounter,
+        runner.startTracking(sequence,
+                effectiveLoopCount < 0 ? -1 : effectiveLoopCount + 1 - runner.getLoopCounter(),
                 initialSequenceVariables,
                 effectiveStartStepIndex,
                 effectiveStartActionIndex,
                 stopAfterCurrentStep);
 
-        PathSequenceEventListener.instance.resume();
+        runner.resume();
         mythosScriptMod.LOGGER.info(I18n.format("log.path.start_running") + sequenceName);
     }
 

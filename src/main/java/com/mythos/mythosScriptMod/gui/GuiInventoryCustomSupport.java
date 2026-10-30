@@ -301,15 +301,6 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
         }
     }
 
-    protected static void clearCustomSequenceSearch(boolean keepFocus) {
-        customSequenceSearchQuery = "";
-        if (customSequenceSearchField != null) {
-            customSequenceSearchField.setText("");
-            customSequenceSearchField.setFocused(keepFocus);
-        }
-        currentPage = 0;
-        CATEGORY_PAGE_MAP.put(getCurrentPageKey(), currentPage);
-    }
 
     protected static boolean isCustomSearchExpanded() {
         return customSequenceSearchExpanded;
@@ -362,15 +353,6 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
         return customSequenceSearchScope;
     }
 
-    protected static String getCustomSearchScopeLabel(String scope) {
-        if (SEARCH_SCOPE_CURRENT_SUBCATEGORY.equals(scope)) {
-            return "gui.modern.inv.u004";
-        }
-        if (SEARCH_SCOPE_ALL_CATEGORIES.equals(scope)) {
-            return "gui.modern.inv.u002";
-        }
-        return "gui.modern.inv.u005";
-    }
 
     protected static void applyCustomSearchScope(String scope) {
         String normalizedScope = normalizeText(scope);
@@ -522,9 +504,6 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
         return getCustomSequencesForSelection(normalizedCategory, "");
     }
 
-    protected static boolean matchesCustomSequenceSearch(PathSequence sequence, String query) {
-        return matchesCustomSequenceSearchNormalized(sequence, PinyinSearchHelper.normalizeQuery(query));
-    }
 
     protected static List<CustomSectionModel> buildCustomSectionModels(String category, String selectedSubCategory) {
         String normalizedCategory = normalizeText(category);
@@ -790,12 +769,12 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
     }
 
     protected static String getRunningCustomSequenceName() {
-        if (!PathSequenceEventListener.instance.isTracking()
-                || PathSequenceEventListener.instance.currentSequence == null
-                || !PathSequenceEventListener.instance.currentSequence.isCustom()) {
+        if (!PathSequenceEventListener.foregroundRunner().isTracking()
+                || PathSequenceEventListener.foregroundRunner().currentSequence == null
+                || !PathSequenceEventListener.foregroundRunner().currentSequence.isCustom()) {
             return "";
         }
-        return normalizeText(PathSequenceEventListener.instance.currentSequence.getName());
+        return normalizeText(PathSequenceEventListener.foregroundRunner().currentSequence.getName());
     }
 
     protected static boolean isCustomCategoryRunning(String category) {
@@ -820,12 +799,6 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
         return false;
     }
 
-    protected static int getCurrentTotalPages(OverlayMetrics m, int contentStartY) {
-        if (isCustomCategorySelection()) {
-            return buildCustomPageLayout(m, contentStartY).totalPages;
-        }
-        return getTotalPagesForCategory(currentCategory);
-    }
 
     protected static int getTotalPagesForCategory(String category) {
         if (isCommonCategory(category)) {
@@ -871,13 +844,13 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
     protected static String getCommonDisplayName(String command) {
         String baseName = findBaseItemName(command);
         if ("toggle_auto_fishing".equals(command)) {
-            return AutoFishingHandler.enabled ? I18n.format("gui.inventory.auto_fishing.on") : baseName;
+            return AutoFishingHandler.enabled() ? I18n.format("gui.inventory.auto_fishing.on") : baseName;
         }
         if ("toggle_kill_aura".equals(command)) {
-            return KillAuraHandler.enabled ? I18n.format("gui.inventory.kill_aura.on") : baseName;
+            return KillAuraHandler.enabled() ? I18n.format("gui.inventory.kill_aura.on") : baseName;
         }
         if ("toggle_fly".equals(command)) {
-            return FlyHandler.enabled ? I18n.format("gui.inventory.fly.on") : baseName;
+            return FlyHandler.enabled() ? I18n.format("gui.inventory.fly.on") : baseName;
         }
         if ("baritone_flight_pathing".equals(command)) {
             return I18n.format(isBaritoneFlightPathingEnabled() ? "gui.modern.inv.fmt.on" : "gui.modern.inv.fmt.off", baseName);
@@ -891,29 +864,29 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
     protected static boolean isCommonItemEnabled(String command) {
         boolean active = false;
         if ("autoeat".equals(command)) {
-            active = AutoEatHandler.autoEatEnabled;
+            active = AutoEatHandler.autoEatEnabled();
         } else if ("toggle_auto_fishing".equals(command)) {
-            active = AutoFishingHandler.enabled;
+            active = AutoFishingHandler.enabled();
         } else if ("toggle_mouse_detach".equals(command)) {
             active = ModConfig.isMouseDetached;
         } else if ("followconfig".equals(command)) {
             active = AutoFollowHandler.getActiveRule() != null;
         } else if ("toggle_kill_aura".equals(command)) {
-            active = KillAuraHandler.enabled;
+            active = KillAuraHandler.enabled();
         } else if ("toggle_fly".equals(command)) {
-            active = FlyHandler.enabled;
+            active = FlyHandler.enabled();
         } else if ("baritone_flight_pathing".equals(command)) {
             active = isBaritoneFlightPathingEnabled();
         } else if ("baritone_blink_pathing".equals(command)) {
             active = isBaritoneBlinkPathingEnabled();
         } else if ("toggle_auto_pickup".equals(command)) {
-            active = AutoPickupHandler.globalEnabled;
+            active = AutoPickupHandler.globalEnabled();
         } else if ("conditional_execution".equals(command)) {
             active = ConditionalExecutionHandler.isGloballyEnabled();
         } else if ("auto_escape".equals(command)) {
-            active = AutoEscapeHandler.isMasterEnabled();
+            active = AutoEscapeHandler.masterEnabled();
         } else if ("toggle_auto_use_item".equals(command)) {
-            active = AutoUseItemHandler.globalEnabled;
+            active = AutoUseItemHandler.globalEnabled();
         } else if ("baritone_parkour".equals(command)) {
             active = BaritoneParkourSettingsHelper.isParkourModeEnabled();
         } else if ("baritone_visual_pick".equals(command)) {
@@ -975,32 +948,8 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
         return hovered;
     }
 
-    protected static boolean isCommonInfoIconHit(int mouseX, int mouseY) {
-        for (Rectangle bounds : visibleCommonInfoIcons.values()) {
-            if (bounds != null && bounds.contains(mouseX, mouseY)) {
-                return true;
-            }
-        }
-        return false;
-    }
 
-    protected static boolean isCustomSequenceInfoIconHit(int mouseX, int mouseY) {
-        for (Rectangle bounds : visibleCustomSequenceInfoIcons.values()) {
-            if (bounds != null && bounds.contains(mouseX, mouseY)) {
-                return true;
-            }
-        }
-        return false;
-    }
 
-    protected static boolean isOtherFeatureInfoIconHit(int mouseX, int mouseY) {
-        for (Rectangle bounds : visibleOtherFeatureInfoIcons.values()) {
-            if (bounds != null && bounds.contains(mouseX, mouseY)) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     protected static void drawModernCenteredText(FontRenderer fontRenderer, String text, int centerX, int y,
             int color, int maxWidth) {
@@ -1500,10 +1449,14 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
                         int cardY = cardAreaY + row * (layout.grid.cardHeight + layout.grid.gap);
                         Rectangle bounds = new Rectangle(cardX, cardY, layout.grid.cardWidth, layout.grid.cardHeight);
                         boolean hovered = bounds.contains(mouseX, mouseY);
+                        // 按屏幕当前 viewed 会话（mounted bot，无挂载=人类）过滤
+                        // 运行状态 —— 别的 bot 在跑同名序列不应在本会话卡片上亮条。
+                        String viewOwner = com.mythos.mythosScriptMod.mcp.NexusSessions.mountedBotUsername();
+                        if (viewOwner == null) viewOwner = "";
                         boolean foregroundRunning = PathSequenceEventListener
-                                .isSequenceRunningInForeground(sequence.getName());
+                                .isSequenceRunningInForegroundForOwner(viewOwner, sequence.getName());
                         boolean backgroundRunning = PathSequenceEventListener
-                                .isSequenceRunningInBackground(sequence.getName());
+                                .isSequenceRunningInBackgroundForOwner(viewOwner, sequence.getName());
                         boolean running = foregroundRunning || backgroundRunning;
                         boolean selectedCard = isCustomSequenceSelected(sequence);
 
@@ -1851,82 +1804,13 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
         }
     }
 
-    protected static void drawCustomSequenceDragGhost(int mouseX, int mouseY, FontRenderer fontRenderer) {
-        if (!isDraggingCustomSequenceCard || pressedCustomSequence == null) {
-            return;
-        }
 
-        String text = fontRenderer.trimStringToWidth(pressedCustomSequence.getName(), 120);
-        int width = Math.max(96, fontRenderer.getStringWidth(text) + 18);
-        String targetText = null;
-        if (!normalizeText(currentCustomSequenceSortTargetName).isEmpty()) {
-            SequenceCardRenderInfo targetCard = findVisibleCustomSequenceCardByName(
-                    currentCustomSequenceSortTargetName);
-            String targetName = targetCard != null && targetCard.sequence != null ? targetCard.sequence.getName()
-                    : currentCustomSequenceSortTargetName;
-            targetText = I18n.format(currentCustomSequenceSortAfter ? "gui.modern.inv.fmt.sort_after" : "gui.modern.inv.fmt.sort_before", targetName);
-            width = Math.max(width, Math.min(180, fontRenderer.getStringWidth(targetText) + 18));
-        } else if (currentSequenceDropTarget != null) {
-            targetText = currentSequenceDropTarget.isSubCategory()
-                    ? I18n.format("gui.modern.inv.fmt.move_sub", currentSequenceDropTarget.category, currentSequenceDropTarget.subCategory)
-                    : I18n.format("gui.modern.inv.fmt.move_cat", currentSequenceDropTarget.category);
-            width = Math.max(width, Math.min(180, fontRenderer.getStringWidth(targetText) + 18));
-        }
-        int height = targetText == null ? 22 : 36;
-        int x = mouseX + 10;
-        int y = mouseY + 10;
-        ModernUiRenderer.drawPanel(x, y, width, height, 6, 0xFF1B2A34, ModernUiRenderer.ACCENT);
-        ModernUiRenderer.drawText(fontRenderer, text, x + 8, y + (height - fontRenderer.FONT_HEIGHT) / 2,
-                ModernUiRenderer.TEXT, width - 16);
-        if (targetText != null) {
-            ModernUiRenderer.drawText(fontRenderer, targetText, x + 8, y + 20, ModernUiRenderer.SUBTLE_TEXT,
-                    width - 16);
-        }
-    }
-
-    protected static void drawCategoryTreeDragGhost(int mouseX, int mouseY, FontRenderer fontRenderer) {
-        if (!isDraggingCategoryRow || pressedCategoryRow == null) {
-            return;
-        }
-        String label = fontRenderer.trimStringToWidth(getCategoryRowDisplayLabel(pressedCategoryRow), 120);
-        String targetText = null;
-        if (currentCategorySortDropTarget != null) {
-            targetText = I18n.format(currentCategorySortDropAfter ? "gui.modern.inv.fmt.sort_after" : "gui.modern.inv.fmt.sort_before",
-                    fontRenderer.trimStringToWidth(getCategoryRowDisplayLabel(currentCategorySortDropTarget), 100));
-        }
-        int width = Math.max(88, fontRenderer.getStringWidth(label) + 18);
-        if (targetText != null) {
-            width = Math.max(width, Math.min(180, fontRenderer.getStringWidth(targetText) + 18));
-        }
-        int height = targetText == null ? 22 : 36;
-        int x = mouseX + 10;
-        int y = mouseY + 10;
-        ModernUiRenderer.drawPanel(x, y, width, height, 6, 0xFF1B2A34, ModernUiRenderer.ACCENT);
-        ModernUiRenderer.drawText(fontRenderer, label, x + 8, y + (height - fontRenderer.FONT_HEIGHT) / 2,
-                ModernUiRenderer.TEXT, width - 16);
-        if (targetText != null) {
-            ModernUiRenderer.drawText(fontRenderer, targetText, x + 8, y + 20, ModernUiRenderer.SUBTLE_TEXT,
-                    width - 16);
-        }
-    }
 
     protected static boolean isProtectedCustomCategory(String category) {
         return I18n.format("path.category.default").equals(category)
                 || I18n.format("path.category.builtin").equals(category);
     }
 
-    protected static void activateSequence(PathSequence sequence) {
-        if (sequence == null) {
-            return;
-        }
-        if (sequence.isCustom()) {
-            MainUiLayoutManager.recordSequenceOpened(sequence.getName());
-        }
-        if (sequence.shouldCloseGuiAfterStart()) {
-            closeOverlay();
-        }
-        PathSequenceManager.runPathSequence(sequence.getName());
-    }
 
     protected static void activateSequenceFromStep(PathSequence sequence, int stepIndex) {
         if (sequence == null) {
@@ -1954,23 +1838,7 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
         PathSequenceManager.runPathSequenceSingleStep(sequence.getName(), stepIndex);
     }
 
-    protected static void clearPressedCustomSequence() {
-        pressedCustomSequence = null;
-        pressedCustomSequenceRect = null;
-        isDraggingCustomSequenceCard = false;
-        currentSequenceDropTarget = null;
-        currentCustomSequenceSortTargetName = "";
-        currentCustomSequenceSortAfter = false;
-        customSequencePageTurnLockUntil = 0L;
-    }
 
-    protected static void clearPressedCategoryRow() {
-        pressedCategoryRow = null;
-        pressedCategoryRowRect = null;
-        isDraggingCategoryRow = false;
-        currentCategorySortDropTarget = null;
-        currentCategorySortDropAfter = false;
-    }
 
     protected static List<ContextMenuItem> buildCategoryBlankAreaMenu() {
         List<ContextMenuItem> items = new ArrayList<>();
@@ -2456,53 +2324,6 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
         }
     }
 
-    protected static boolean handleContextMenuClick(int mouseX, int mouseY, int mouseButton) {
-        if (!contextMenuVisible) {
-            return false;
-        }
-
-        for (int layerIndex = contextMenuLayers.size() - 1; layerIndex >= 0; layerIndex--) {
-            ContextMenuLayer layer = contextMenuLayers.get(layerIndex);
-            if (!layer.bounds.contains(mouseX, mouseY)) {
-                continue;
-            }
-
-            if (mouseButton != 0) {
-                closeContextMenu();
-                return true;
-            }
-
-            for (int itemIndex = 0; itemIndex < layer.itemBounds.size(); itemIndex++) {
-                if (!layer.itemBounds.get(itemIndex).contains(mouseX, mouseY)) {
-                    continue;
-                }
-                ContextMenuItem item = layer.items.get(itemIndex);
-                if (!item.enabled) {
-                    closeContextMenu();
-                    return true;
-                }
-                if (item.hasChildren()) {
-                    while (contextMenuOpenPath.size() <= layerIndex) {
-                        contextMenuOpenPath.add(-1);
-                    }
-                    contextMenuOpenPath.set(layerIndex, itemIndex);
-                    trimContextMenuOpenPath(layerIndex + 1);
-                    return true;
-                }
-
-                closeContextMenu();
-                if (item.action != null) {
-                    item.action.run();
-                }
-                return true;
-            }
-
-            closeContextMenu();
-            return true;
-        }
-        closeContextMenu();
-        return false;
-    }
 
     private static boolean isBaritoneFlightPathingEnabled() {
         return BaritoneAPI.getSettings() != null
@@ -2679,7 +2500,7 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
             return true;
         } else if ("toggle_auto_pickup".equals(command)) {
             if (mouseButton == 0) {
-                AutoPickupHandler.globalEnabled = !AutoPickupHandler.globalEnabled;
+                AutoPickupHandler.setGlobalEnabledSilently(!AutoPickupHandler.globalEnabled());
                 AutoPickupHandler.saveConfig();
             } else if (mouseButton == 1) {
                 GuiModernMainScreen.openSettingsTab(mc, command);
@@ -2687,7 +2508,7 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
             return true;
         } else if ("toggle_auto_use_item".equals(command)) {
             if (mouseButton == 0) {
-                AutoUseItemHandler.globalEnabled = !AutoUseItemHandler.globalEnabled;
+                AutoUseItemHandler.setGlobalEnabledSilently(!AutoUseItemHandler.globalEnabled());
                 AutoUseItemHandler.INSTANCE.resetSchedule();
                 AutoUseItemHandler.saveConfig();
             } else if (mouseButton == 1) {
@@ -2704,7 +2525,7 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
             return true;
         } else if ("autoeat".equals(command)) {
             if (mouseButton == 0) {
-                AutoEatHandler.autoEatEnabled = !AutoEatHandler.autoEatEnabled;
+                AutoEatHandler.setAutoEatEnabledSilently(!AutoEatHandler.autoEatEnabled());
                 AutoEatHandler.saveAutoEatConfig();
             } else if (mouseButton == 1) {
                 GuiModernMainScreen.openSettingsTab(mc, "autoeat");
@@ -2746,7 +2567,7 @@ abstract class GuiInventoryCustomSupport extends GuiInventoryBase {
             return true;
         } else if ("auto_escape".equals(command)) {
             if (mouseButton == 0) {
-                AutoEscapeHandler.setMasterEnabled(!AutoEscapeHandler.isMasterEnabled());
+                AutoEscapeHandler.setMasterEnabled(!AutoEscapeHandler.masterEnabled());
             } else if (mouseButton == 1) {
                 GuiModernMainScreen.openSettingsTab(mc, command);
             }

@@ -44,7 +44,7 @@ public final class ModernAutoUseItemWorkbenchTab implements ModernSettingsTab {
     private static final int RULE_ACTION_RESERVE = 77;
 
     private final WorkbenchState state = new WorkbenchState(
-            AutoUseItemHandler.rules, AutoUseItemHandler.getCategoriesSnapshot(), AutoUseItemHandler.globalEnabled);
+            AutoUseItemHandler.cfg().rules, AutoUseItemHandler.getCategoriesSnapshot(), AutoUseItemHandler.globalEnabled());
     private final Set<String> collapsedGroups = new HashSet<>();
     private final List<RuleHit> ruleHits = new ArrayList<>();
     private final List<GroupHit> groupHits = new ArrayList<>();
@@ -623,9 +623,9 @@ public final class ModernAutoUseItemWorkbenchTab implements ModernSettingsTab {
         if (editor != null) {
             editor.save();
         }
-        AutoUseItemHandler.globalEnabled = state.masterEnabled();
-        AutoUseItemHandler.rules.clear();
-        AutoUseItemHandler.rules.addAll(copyRules(state.rules()));
+        AutoUseItemHandler.setGlobalEnabledSilently(state.masterEnabled());
+        AutoUseItemHandler.cfg().rules.clear();
+        AutoUseItemHandler.cfg().rules.addAll(copyRules(state.rules()));
         AutoUseItemHandler.replaceCategoryOrder(state.categories());
         AutoUseItemHandler.saveConfig();
         AutoUseItemHandler.INSTANCE.resetSchedule();

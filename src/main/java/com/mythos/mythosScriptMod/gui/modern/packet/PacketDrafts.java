@@ -67,17 +67,8 @@ public final class PacketDrafts {
             return new FilterDraft(config);
         }
 
-        public FilterDraft withWhitelist(String commaSeparated) {
-            return new FilterDraft(config, split(commaSeparated), blacklist, maxCapturedPackets);
-        }
 
-        public FilterDraft withBlacklist(String commaSeparated) {
-            return new FilterDraft(config, whitelist, split(commaSeparated), maxCapturedPackets);
-        }
 
-        public FilterDraft withMaxCapturedPackets(int value) {
-            return new FilterDraft(config, whitelist, blacklist, clamp(value, 100, 10000));
-        }
 
         public void save() {
             config.whitelistFilters = new ArrayList<>(whitelist);

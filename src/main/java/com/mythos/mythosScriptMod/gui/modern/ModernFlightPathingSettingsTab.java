@@ -186,10 +186,10 @@ public final class ModernFlightPathingSettingsTab {
             flightMaxAltitude = settings.flightMaxAltitude.value;
             flightSpeed = settings.flightSpeed.value;
             flightAutoDescend = settings.flightAutoDescend.value;
-            autoEnableFly = FlightPathingConfig.autoEnableFly;
-            autoDisableFlyOnArrival = FlightPathingConfig.autoDisableFlyOnArrival;
-            keepFlyEnabledOnDisconnect = FlightPathingConfig.keepFlyEnabledOnDisconnect;
-            arrivalRange = FlightPathingConfig.arrivalRange;
+            autoEnableFly = FlightPathingConfig.cfg().autoEnableFly;
+            autoDisableFlyOnArrival = FlightPathingConfig.cfg().autoDisableFlyOnArrival;
+            keepFlyEnabledOnDisconnect = FlightPathingConfig.cfg().keepFlyEnabledOnDisconnect;
+            arrivalRange = FlightPathingConfig.cfg().arrivalRange;
         }
 
         private State(State source) {
@@ -253,10 +253,10 @@ public final class ModernFlightPathingSettingsTab {
             settings.flightMaxAltitude.value = flightMaxAltitude;
             settings.flightSpeed.value = flightSpeed;
             settings.flightAutoDescend.value = flightAutoDescend;
-            FlightPathingConfig.autoEnableFly = autoEnableFly;
-            FlightPathingConfig.autoDisableFlyOnArrival = autoDisableFlyOnArrival;
-            FlightPathingConfig.keepFlyEnabledOnDisconnect = keepFlyEnabledOnDisconnect;
-            FlightPathingConfig.arrivalRange = arrivalRange;
+            FlightPathingConfig.cfg().autoEnableFly = autoEnableFly;
+            FlightPathingConfig.cfg().autoDisableFlyOnArrival = autoDisableFlyOnArrival;
+            FlightPathingConfig.cfg().keepFlyEnabledOnDisconnect = keepFlyEnabledOnDisconnect;
+            FlightPathingConfig.cfg().arrivalRange = arrivalRange;
             normalize(settings);
         }
 
@@ -266,9 +266,9 @@ public final class ModernFlightPathingSettingsTab {
             if ("flightDirectLine".equals(key)) return settings.flightDirectLine.value;
             if ("flightEntityCorridor".equals(key)) return settings.flightEntityCorridor.value;
             if ("flightAutoDescend".equals(key)) return settings.flightAutoDescend.value;
-            if ("autoEnableFly".equals(key)) return FlightPathingConfig.autoEnableFly;
-            if ("autoDisableFlyOnArrival".equals(key)) return FlightPathingConfig.autoDisableFlyOnArrival;
-            if ("keepFlyEnabledOnDisconnect".equals(key)) return FlightPathingConfig.keepFlyEnabledOnDisconnect;
+            if ("autoEnableFly".equals(key)) return FlightPathingConfig.cfg().autoEnableFly;
+            if ("autoDisableFlyOnArrival".equals(key)) return FlightPathingConfig.cfg().autoDisableFlyOnArrival;
+            if ("keepFlyEnabledOnDisconnect".equals(key)) return FlightPathingConfig.cfg().keepFlyEnabledOnDisconnect;
             return false;
         }
 
@@ -283,9 +283,9 @@ public final class ModernFlightPathingSettingsTab {
             else if ("flightDirectLine".equals(key)) settings.flightDirectLine.value = value;
             else if ("flightEntityCorridor".equals(key)) settings.flightEntityCorridor.value = value;
             else if ("flightAutoDescend".equals(key)) settings.flightAutoDescend.value = value;
-            else if ("autoEnableFly".equals(key)) FlightPathingConfig.autoEnableFly = value;
-            else if ("autoDisableFlyOnArrival".equals(key)) FlightPathingConfig.autoDisableFlyOnArrival = value;
-            else if ("keepFlyEnabledOnDisconnect".equals(key)) FlightPathingConfig.keepFlyEnabledOnDisconnect = value;
+            else if ("autoEnableFly".equals(key)) FlightPathingConfig.cfg().autoEnableFly = value;
+            else if ("autoDisableFlyOnArrival".equals(key)) FlightPathingConfig.cfg().autoDisableFlyOnArrival = value;
+            else if ("keepFlyEnabledOnDisconnect".equals(key)) FlightPathingConfig.cfg().keepFlyEnabledOnDisconnect = value;
         }
 
         private static int getInt(String key) {
@@ -294,7 +294,7 @@ public final class ModernFlightPathingSettingsTab {
             if ("flightCorridorWidth".equals(key)) return settings.flightCorridorWidth.value;
             if ("flightMinAltitude".equals(key)) return settings.flightMinAltitude.value;
             if ("flightMaxAltitude".equals(key)) return settings.flightMaxAltitude.value;
-            if ("arrivalRange".equals(key)) return FlightPathingConfig.arrivalRange;
+            if ("arrivalRange".equals(key)) return FlightPathingConfig.cfg().arrivalRange;
             return 0;
         }
 
@@ -304,7 +304,7 @@ public final class ModernFlightPathingSettingsTab {
             else if ("flightCorridorWidth".equals(key)) settings.flightCorridorWidth.value = value;
             else if ("flightMinAltitude".equals(key)) settings.flightMinAltitude.value = value;
             else if ("flightMaxAltitude".equals(key)) settings.flightMaxAltitude.value = value;
-            else if ("arrivalRange".equals(key)) FlightPathingConfig.arrivalRange = value;
+            else if ("arrivalRange".equals(key)) FlightPathingConfig.cfg().arrivalRange = value;
             normalize(settings);
         }
 

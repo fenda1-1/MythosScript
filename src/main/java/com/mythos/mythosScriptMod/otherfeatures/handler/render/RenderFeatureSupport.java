@@ -130,12 +130,12 @@ final class RenderFeatureSupport {
         float attackPenalty = mc.player == null ? 0.0F : 1.0F - mc.player.getCooledAttackStrength(0.0F);
         double motion = mc.player == null ? 0.0D
                 : Math.sqrt(mc.player.motionX * mc.player.motionX + mc.player.motionZ * mc.player.motionZ);
-        int gap = RenderFeatureManager.crosshairDynamicGap
+        int gap = RenderFeatureManager.cfg().crosshairDynamicGap
                 ? 4 + Math.round((float) Math.min(3.0D, motion * 10.0D) + attackPenalty * 4.0F)
                 : 4;
-        int size = Math.round(RenderFeatureManager.crosshairSize);
-        int thickness = Math.max(1, Math.round(RenderFeatureManager.crosshairThickness));
-        int color = 0xFF000000 | (RenderFeatureManager.crosshairColorRgb & 0xFFFFFF);
+        int size = Math.round(RenderFeatureManager.cfg().crosshairSize);
+        int thickness = Math.max(1, Math.round(RenderFeatureManager.cfg().crosshairThickness));
+        int color = 0xFF000000 | (RenderFeatureManager.cfg().crosshairColorRgb & 0xFFFFFF);
 
         Gui.drawRect(centerX - thickness / 2, centerY - gap - size, centerX + (thickness + 1) / 2, centerY - gap, color);
         Gui.drawRect(centerX - thickness / 2, centerY + gap, centerX + (thickness + 1) / 2, centerY + gap + size, color);
@@ -151,13 +151,13 @@ final class RenderFeatureSupport {
         RenderFrameData frameData = getRenderFrameData(mc);
 
         ScaledResolution scaledResolution = new ScaledResolution(mc);
-        int radarSize = clampInt(RenderFeatureManager.radarSize, 60, 180);
+        int radarSize = clampInt(RenderFeatureManager.cfg().radarSize, 60, 180);
         int x = scaledResolution.getScaledWidth() - radarSize - 12;
         int y = 12;
         int centerX = x + radarSize / 2;
         int centerY = y + radarSize / 2;
         int radius = radarSize / 2 - 7;
-        float maxDistance = Math.max(8.0F, RenderFeatureManager.radarMaxDistance);
+        float maxDistance = Math.max(8.0F, RenderFeatureManager.cfg().radarMaxDistance);
         double scale = radius / maxDistance;
 
         Gui.drawRect(x, y, x + radarSize, y + radarSize, 0x8A0E141C);
@@ -180,8 +180,8 @@ final class RenderFeatureSupport {
 
         double maxDistanceSq = maxDistance * maxDistance;
         for (EntityRenderSample sample : frameData.livingEntities) {
-            if (!sample.matches(RenderFeatureManager.radarPlayers, RenderFeatureManager.radarMonsters,
-                    RenderFeatureManager.radarAnimals, maxDistanceSq)) {
+            if (!sample.matches(RenderFeatureManager.cfg().radarPlayers, RenderFeatureManager.cfg().radarMonsters,
+                    RenderFeatureManager.cfg().radarAnimals, maxDistanceSq)) {
                 continue;
             }
             Entity entity = sample.entity;
@@ -189,7 +189,7 @@ final class RenderFeatureSupport {
             double dz = interpolate(entity.lastTickPosZ, entity.posZ, 1.0F) - playerZ;
             double localX;
             double localZ;
-            if (RenderFeatureManager.radarRotateWithView) {
+            if (RenderFeatureManager.cfg().radarRotateWithView) {
                 localX = dx * cos + dz * sin;
                 localZ = dz * cos - dx * sin;
             } else {
@@ -213,19 +213,19 @@ final class RenderFeatureSupport {
 
         ScaledResolution scaledResolution = new ScaledResolution(mc);
         int radarSize = RenderFeatureManager.isEnabled("radar")
-                ? clampInt(RenderFeatureManager.radarSize, 60, 180)
+                ? clampInt(RenderFeatureManager.cfg().radarSize, 60, 180)
                 : 0;
         double deltaX = mc.player.posX - mc.player.lastTickPosX;
         double deltaZ = mc.player.posZ - mc.player.lastTickPosZ;
         float groundSpeed = (float) (Math.sqrt(deltaX * deltaX + deltaZ * deltaZ) * 20.0D);
         String title = "地速";
         String value = RenderFeatureManager.formatGroundSpeed(groundSpeed)
-                + (RenderFeatureManager.groundSpeedShowUnit ? " 格/秒" : "");
+                + (RenderFeatureManager.cfg().groundSpeedShowUnit ? " 格/秒" : "");
         int panelWidth = Math.max(72,
-                Math.max(RenderFeatureManager.groundSpeedShowTitle ? mc.fontRenderer.getStringWidth(title) : 0,
+                Math.max(RenderFeatureManager.cfg().groundSpeedShowTitle ? mc.fontRenderer.getStringWidth(title) : 0,
                         mc.fontRenderer.getStringWidth(value)) + 10);
-        int lineCount = RenderFeatureManager.groundSpeedShowTitle ? 2 : 1;
-        int panelHeight = mc.fontRenderer.FONT_HEIGHT * lineCount + 8 + (RenderFeatureManager.groundSpeedShowTitle ? 2 : 0);
+        int lineCount = RenderFeatureManager.cfg().groundSpeedShowTitle ? 2 : 1;
+        int panelHeight = mc.fontRenderer.FONT_HEIGHT * lineCount + 8 + (RenderFeatureManager.cfg().groundSpeedShowTitle ? 2 : 0);
         int x = scaledResolution.getScaledWidth() - panelWidth - 12;
         int y = 12 + (radarSize > 0 ? radarSize + 8 : 0);
         y = Math.min(y, Math.max(12, scaledResolution.getScaledHeight() - panelHeight - 12));
@@ -235,7 +235,7 @@ final class RenderFeatureSupport {
         Gui.drawRect(x, y + panelHeight - 1, x + panelWidth, y + panelHeight, 0xFF35536C);
         Gui.drawRect(x, y, x + 1, y + panelHeight, 0xFF35536C);
         Gui.drawRect(x + panelWidth - 1, y, x + panelWidth, y + panelHeight, 0xFF35536C);
-        if (RenderFeatureManager.groundSpeedShowTitle) {
+        if (RenderFeatureManager.cfg().groundSpeedShowTitle) {
             mc.fontRenderer.drawStringWithShadow(title, x + 5, y + 3, 0xFFEAF6FF);
             mc.fontRenderer.drawStringWithShadow(value, x + 5, y + 5 + mc.fontRenderer.FONT_HEIGHT, 0xFFFFFFFF);
         } else {
@@ -254,18 +254,18 @@ final class RenderFeatureSupport {
 
         List<String> lines = new ArrayList<>();
         lines.add("§b" + entity.getName() + " §7[" + entity.getClass().getSimpleName() + "]");
-        if (RenderFeatureManager.entityInfoShowHealth && entity instanceof EntityLivingBase) {
+        if (RenderFeatureManager.cfg().entityInfoShowHealth && entity instanceof EntityLivingBase) {
             EntityLivingBase living = (EntityLivingBase) entity;
             lines.add("§c生命: §f" + formatFloat(Math.max(0.0F, living.getHealth())));
         }
-        if (RenderFeatureManager.entityInfoShowDistance) {
+        if (RenderFeatureManager.cfg().entityInfoShowDistance) {
             lines.add("§e距离: §f" + formatFloat(mc.player.getDistance(entity)) + "m");
         }
-        if (RenderFeatureManager.entityInfoShowPosition) {
+        if (RenderFeatureManager.cfg().entityInfoShowPosition) {
             lines.add("§a坐标: §f" + formatFloat((float) entity.posX) + ", "
                     + formatFloat((float) entity.posY) + ", " + formatFloat((float) entity.posZ));
         }
-        if (RenderFeatureManager.entityInfoShowHeldItem && entity instanceof EntityLivingBase) {
+        if (RenderFeatureManager.cfg().entityInfoShowHeldItem && entity instanceof EntityLivingBase) {
             ItemStack heldItem = ((EntityLivingBase) entity).getHeldItemMainhand();
             if (heldItem != null && !heldItem.isEmpty()) {
                 lines.add("§d手持: §f" + heldItem.getDisplayName());
@@ -364,10 +364,10 @@ final class RenderFeatureSupport {
 
         double maxLivingDistanceSq = getMaxLivingDistanceSq();
         double maxSkeletonDistanceSq = RenderFeatureManager.isEnabled("player_skeleton")
-                ? RenderFeatureManager.skeletonMaxDistance * RenderFeatureManager.skeletonMaxDistance
+                ? RenderFeatureManager.cfg().skeletonMaxDistance * RenderFeatureManager.cfg().skeletonMaxDistance
                 : 0.0D;
         double maxItemDistanceSq = RenderFeatureManager.isEnabled("item_esp")
-                ? RenderFeatureManager.itemEspMaxDistance * RenderFeatureManager.itemEspMaxDistance
+                ? RenderFeatureManager.cfg().itemEspMaxDistance * RenderFeatureManager.cfg().itemEspMaxDistance
                 : 0.0D;
 
         boolean needLivingScan = maxLivingDistanceSq > 0.0D || maxSkeletonDistanceSq > 0.0D;
@@ -425,13 +425,13 @@ final class RenderFeatureSupport {
     private static double getMaxLivingDistanceSq() {
         double maxDistance = 0.0D;
         if (RenderFeatureManager.isEnabled("radar")) {
-            maxDistance = Math.max(maxDistance, RenderFeatureManager.radarMaxDistance);
+            maxDistance = Math.max(maxDistance, RenderFeatureManager.cfg().radarMaxDistance);
         }
         if (RenderFeatureManager.isEnabled("entity_visual")) {
-            maxDistance = Math.max(maxDistance, RenderFeatureManager.entityVisualMaxDistance);
+            maxDistance = Math.max(maxDistance, RenderFeatureManager.cfg().entityVisualMaxDistance);
         }
         if (RenderFeatureManager.isEnabled("tracer_line")) {
-            maxDistance = Math.max(maxDistance, RenderFeatureManager.tracerMaxDistance);
+            maxDistance = Math.max(maxDistance, RenderFeatureManager.cfg().tracerMaxDistance);
         }
         if (RenderFeatureManager.isEnabled("entity_tags")) {
             maxDistance = Math.max(maxDistance, RenderFeatureManager.getEntityTagMaxDistance());
@@ -489,13 +489,13 @@ final class RenderFeatureSupport {
         EntityLivingBase living = (EntityLivingBase) entity;
         List<String> lines = new ArrayList<>();
         lines.add(entity.getName());
-        if (RenderFeatureManager.entityTagShowHealth) {
+        if (RenderFeatureManager.cfg().entityTagShowHealth) {
             lines.add("§cHP: §f" + formatFloat(Math.max(0.0F, living.getHealth())));
         }
-        if (RenderFeatureManager.entityTagShowDistance) {
+        if (RenderFeatureManager.cfg().entityTagShowDistance) {
             lines.add("§b距离: §f" + formatFloat(mc.player.getDistance(entity)) + "m");
         }
-        if (RenderFeatureManager.entityTagShowHeldItem) {
+        if (RenderFeatureManager.cfg().entityTagShowHeldItem) {
             ItemStack held = living.getHeldItemMainhand();
             if (held != null && !held.isEmpty()) {
                 lines.add("§e手持: §f" + held.getDisplayName());
@@ -507,18 +507,18 @@ final class RenderFeatureSupport {
 
     private static void renderItemLabel(Minecraft mc, EntityItem entityItem, float partialTicks) {
         List<String> lines = new ArrayList<>();
-        if (RenderFeatureManager.itemEspShowName) {
+        if (RenderFeatureManager.cfg().itemEspShowName) {
             ItemStack stack = entityItem.getItem();
             lines.add(stack == null || stack.isEmpty() ? entityItem.getName() : stack.getDisplayName());
         }
-        if (RenderFeatureManager.itemEspShowDistance) {
+        if (RenderFeatureManager.cfg().itemEspShowDistance) {
             lines.add("§e距离: §f" + formatFloat(mc.player.getDistance(entityItem)) + "m");
         }
         if (lines.isEmpty()) {
             return;
         }
         drawWorldLabel(mc, getEntityCenter(entityItem, partialTicks).addVector(0.0D, 0.35D, 0.0D),
-                lines, 0xFFFFFFAA, RenderFeatureManager.itemEspThroughWalls, false);
+                lines, 0xFFFFFFAA, RenderFeatureManager.cfg().itemEspThroughWalls, false);
     }
 
     private static void drawWorldLabel(Minecraft mc, Vec3d worldPos, List<String> lines, int textColor,
@@ -607,28 +607,28 @@ final class RenderFeatureSupport {
         GlStateManager.disableTexture2D();
         GlStateManager.disableLighting();
         GlStateManager.depthMask(false);
-        if (RenderFeatureManager.entityVisualThroughWalls) {
+        if (RenderFeatureManager.cfg().entityVisualThroughWalls) {
             GlStateManager.disableDepth();
         }
         GlStateManager.glLineWidth(1.8F);
 
-        double maxDistanceSq = RenderFeatureManager.entityVisualMaxDistance * RenderFeatureManager.entityVisualMaxDistance;
+        double maxDistanceSq = RenderFeatureManager.cfg().entityVisualMaxDistance * RenderFeatureManager.cfg().entityVisualMaxDistance;
         for (EntityRenderSample sample : frameData.livingEntities) {
-            if (!sample.matches(RenderFeatureManager.entityVisualPlayers, RenderFeatureManager.entityVisualMonsters,
-                    RenderFeatureManager.entityVisualAnimals, maxDistanceSq)) {
+            if (!sample.matches(RenderFeatureManager.cfg().entityVisualPlayers, RenderFeatureManager.cfg().entityVisualMonsters,
+                    RenderFeatureManager.cfg().entityVisualAnimals, maxDistanceSq)) {
                 continue;
             }
             Entity entity = sample.entity;
             float[] color = getEntityColor(entity);
             AxisAlignedBB box = entity.getEntityBoundingBox().grow(0.05D).offset(-viewerX, -viewerY, -viewerZ);
-            if (RenderFeatureManager.entityVisualFilledBox) {
+            if (RenderFeatureManager.cfg().entityVisualFilledBox) {
                 RenderGlobal.renderFilledBox(box, color[0], color[1], color[2], 0.12F);
             }
             RenderGlobal.drawSelectionBoundingBox(box, color[0], color[1], color[2], 0.88F);
         }
 
         GlStateManager.glLineWidth(1.0F);
-        if (RenderFeatureManager.entityVisualThroughWalls) {
+        if (RenderFeatureManager.cfg().entityVisualThroughWalls) {
             GlStateManager.enableDepth();
         }
         GlStateManager.depthMask(true);
@@ -658,10 +658,10 @@ final class RenderFeatureSupport {
         GlStateManager.disableTexture2D();
         GlStateManager.disableLighting();
         GlStateManager.depthMask(false);
-        if (RenderFeatureManager.skeletonThroughWalls) {
+        if (RenderFeatureManager.cfg().skeletonThroughWalls) {
             GlStateManager.disableDepth();
         }
-        GlStateManager.glLineWidth(Math.max(1.0F, RenderFeatureManager.skeletonLineWidth));
+        GlStateManager.glLineWidth(Math.max(1.0F, RenderFeatureManager.cfg().skeletonLineWidth));
 
         buffer.begin(GL11.GL_LINES, DefaultVertexFormats.POSITION_COLOR);
         for (EntityRenderSample sample : frameData.playerEntities) {
@@ -712,7 +712,7 @@ final class RenderFeatureSupport {
         tessellator.draw();
 
         GlStateManager.glLineWidth(1.0F);
-        if (RenderFeatureManager.skeletonThroughWalls) {
+        if (RenderFeatureManager.cfg().skeletonThroughWalls) {
             GlStateManager.enableDepth();
         }
         GlStateManager.depthMask(true);
@@ -756,16 +756,16 @@ final class RenderFeatureSupport {
         GlStateManager.disableTexture2D();
         GlStateManager.disableLighting();
         GlStateManager.depthMask(false);
-        if (RenderFeatureManager.tracerThroughWalls) {
+        if (RenderFeatureManager.cfg().tracerThroughWalls) {
             GlStateManager.disableDepth();
         }
-        GlStateManager.glLineWidth(RenderFeatureManager.tracerLineWidth);
+        GlStateManager.glLineWidth(RenderFeatureManager.cfg().tracerLineWidth);
 
         buffer.begin(GL11.GL_LINES, DefaultVertexFormats.POSITION_COLOR);
-        double maxDistanceSq = RenderFeatureManager.tracerMaxDistance * RenderFeatureManager.tracerMaxDistance;
+        double maxDistanceSq = RenderFeatureManager.cfg().tracerMaxDistance * RenderFeatureManager.cfg().tracerMaxDistance;
         for (EntityRenderSample sample : frameData.livingEntities) {
-            if (!sample.matches(RenderFeatureManager.tracerPlayers, RenderFeatureManager.tracerMonsters,
-                    RenderFeatureManager.tracerAnimals, maxDistanceSq)) {
+            if (!sample.matches(RenderFeatureManager.cfg().tracerPlayers, RenderFeatureManager.cfg().tracerMonsters,
+                    RenderFeatureManager.cfg().tracerAnimals, maxDistanceSq)) {
                 continue;
             }
             Entity entity = sample.entity;
@@ -779,7 +779,7 @@ final class RenderFeatureSupport {
         tessellator.draw();
 
         GlStateManager.glLineWidth(1.0F);
-        if (RenderFeatureManager.tracerThroughWalls) {
+        if (RenderFeatureManager.cfg().tracerThroughWalls) {
             GlStateManager.enableDepth();
         }
         GlStateManager.depthMask(true);
@@ -793,8 +793,8 @@ final class RenderFeatureSupport {
         double maxDistance = RenderFeatureManager.getEntityTagMaxDistance();
         double maxDistanceSq = maxDistance * maxDistance;
         for (EntityRenderSample sample : frameData.livingEntities) {
-            if (sample.matches(RenderFeatureManager.entityTagPlayers, RenderFeatureManager.entityTagMonsters,
-                    RenderFeatureManager.entityTagAnimals, maxDistanceSq)) {
+            if (sample.matches(RenderFeatureManager.cfg().entityTagPlayers, RenderFeatureManager.cfg().entityTagMonsters,
+                    RenderFeatureManager.cfg().entityTagAnimals, maxDistanceSq)) {
                 renderEntityLabel(mc, sample.entity, partialTicks);
             }
         }
@@ -818,7 +818,7 @@ final class RenderFeatureSupport {
         GlStateManager.disableTexture2D();
         GlStateManager.disableLighting();
         GlStateManager.depthMask(false);
-        if (RenderFeatureManager.itemEspThroughWalls) {
+        if (RenderFeatureManager.cfg().itemEspThroughWalls) {
             GlStateManager.disableDepth();
         }
         GlStateManager.glLineWidth(1.6F);
@@ -830,7 +830,7 @@ final class RenderFeatureSupport {
         }
 
         GlStateManager.glLineWidth(1.0F);
-        if (RenderFeatureManager.itemEspThroughWalls) {
+        if (RenderFeatureManager.cfg().itemEspThroughWalls) {
             GlStateManager.enableDepth();
         }
         GlStateManager.depthMask(true);
@@ -852,24 +852,24 @@ final class RenderFeatureSupport {
             return;
         }
 
-        float maxDistance = RenderFeatureManager.blockHighlightMaxDistance;
+        float maxDistance = RenderFeatureManager.cfg().blockHighlightMaxDistance;
         double maxDistanceSq = maxDistance * maxDistance;
 
-        if (RenderFeatureManager.blockHighlightStorages || RenderFeatureManager.blockHighlightSpawners) {
+        if (RenderFeatureManager.cfg().blockHighlightStorages || RenderFeatureManager.cfg().blockHighlightSpawners) {
             for (TileEntity tileEntity : mc.world.loadedTileEntityList) {
                 if (tileEntity == null || tileEntity.getPos() == null
                         || player.getDistanceSqToCenter(tileEntity.getPos()) > maxDistanceSq) {
                     continue;
                 }
-                if (RenderFeatureManager.blockHighlightStorages && isStorageTile(tileEntity)) {
+                if (RenderFeatureManager.cfg().blockHighlightStorages && isStorageTile(tileEntity)) {
                     addBlockHighlight(tileEntity.getPos(), 1.0F, 0.74F, 0.20F);
-                } else if (RenderFeatureManager.blockHighlightSpawners && tileEntity instanceof TileEntityMobSpawner) {
+                } else if (RenderFeatureManager.cfg().blockHighlightSpawners && tileEntity instanceof TileEntityMobSpawner) {
                     addBlockHighlight(tileEntity.getPos(), 1.0F, 0.28F, 0.88F);
                 }
             }
         }
 
-        if (RenderFeatureManager.blockHighlightOres) {
+        if (RenderFeatureManager.cfg().blockHighlightOres) {
             updateOreHighlights(mc, player, maxDistanceSq);
             for (BlockHighlightEntry entry : ORE_BLOCK_HIGHLIGHTS) {
                 if (BLOCK_HIGHLIGHTS.size() >= MAX_BLOCK_SCAN_RESULTS) {
@@ -885,7 +885,7 @@ final class RenderFeatureSupport {
 
     private static void updateOreHighlights(Minecraft mc, EntityPlayerSP player, double maxDistanceSq) {
         BlockPos center = player.getPosition();
-        int radius = Math.max(4, Math.round(RenderFeatureManager.blockHighlightMaxDistance));
+        int radius = Math.max(4, Math.round(RenderFeatureManager.cfg().blockHighlightMaxDistance));
         int verticalRadius = Math.min(radius, ORE_SCAN_VERTICAL_RADIUS_LIMIT);
         int configKey = buildOreScanConfigKey(radius, verticalRadius);
         int tick = player.ticksExisted;
@@ -951,14 +951,14 @@ final class RenderFeatureSupport {
         int result = 17;
         result = 31 * result + radius;
         result = 31 * result + verticalRadius;
-        result = 31 * result + Boolean.valueOf(RenderFeatureManager.blockHighlightOres).hashCode();
-        result = 31 * result + Float.valueOf(RenderFeatureManager.blockHighlightMaxDistance).hashCode();
+        result = 31 * result + Boolean.valueOf(RenderFeatureManager.cfg().blockHighlightOres).hashCode();
+        result = 31 * result + Float.valueOf(RenderFeatureManager.cfg().blockHighlightMaxDistance).hashCode();
         return result;
     }
 
     private static boolean isOreScanPending() {
         return RenderFeatureManager.isEnabled("block_highlight")
-                && RenderFeatureManager.blockHighlightOres
+                && RenderFeatureManager.cfg().blockHighlightOres
                 && oreScanState != OreScanState.EMPTY
                 && !oreScanState.completed;
     }
@@ -981,21 +981,21 @@ final class RenderFeatureSupport {
         GlStateManager.disableTexture2D();
         GlStateManager.disableLighting();
         GlStateManager.depthMask(false);
-        if (RenderFeatureManager.blockHighlightThroughWalls) {
+        if (RenderFeatureManager.cfg().blockHighlightThroughWalls) {
             GlStateManager.disableDepth();
         }
         GlStateManager.glLineWidth(1.8F);
 
         for (BlockHighlightEntry entry : BLOCK_HIGHLIGHTS) {
             AxisAlignedBB box = new AxisAlignedBB(entry.pos).grow(0.003D).offset(-viewerX, -viewerY, -viewerZ);
-            if (RenderFeatureManager.blockHighlightFilledBox) {
+            if (RenderFeatureManager.cfg().blockHighlightFilledBox) {
                 RenderGlobal.renderFilledBox(box, entry.red, entry.green, entry.blue, 0.12F);
             }
             RenderGlobal.drawSelectionBoundingBox(box, entry.red, entry.green, entry.blue, 0.92F);
         }
 
         GlStateManager.glLineWidth(1.0F);
-        if (RenderFeatureManager.blockHighlightThroughWalls) {
+        if (RenderFeatureManager.cfg().blockHighlightThroughWalls) {
             GlStateManager.enableDepth();
         }
         GlStateManager.depthMask(true);
@@ -1041,8 +1041,8 @@ final class RenderFeatureSupport {
         GlStateManager.disableTexture2D();
         GlStateManager.disableLighting();
         GlStateManager.depthMask(false);
-        GlStateManager.glLineWidth(Math.max(1.0F, RenderFeatureManager.blockOutlineLineWidth));
-        if (RenderFeatureManager.blockOutlineFilledBox) {
+        GlStateManager.glLineWidth(Math.max(1.0F, RenderFeatureManager.cfg().blockOutlineLineWidth));
+        if (RenderFeatureManager.cfg().blockOutlineFilledBox) {
             RenderGlobal.renderFilledBox(box, 0.22F, 0.72F, 1.0F, 0.12F);
         }
         RenderGlobal.drawSelectionBoundingBox(box, 0.22F, 0.72F, 1.0F, 0.95F);
@@ -1138,10 +1138,10 @@ final class RenderFeatureSupport {
         boolean pearlItem = item instanceof ItemEnderPearl;
         boolean bowItem = item instanceof ItemBow;
 
-        if ((bowItem && !RenderFeatureManager.trajectoryBows)
-                || (pearlItem && !RenderFeatureManager.trajectoryPearls)
-                || (throwableItem && !RenderFeatureManager.trajectoryThrowables)
-                || (potionItem && !RenderFeatureManager.trajectoryPotions)
+        if ((bowItem && !RenderFeatureManager.cfg().trajectoryBows)
+                || (pearlItem && !RenderFeatureManager.cfg().trajectoryPearls)
+                || (throwableItem && !RenderFeatureManager.cfg().trajectoryThrowables)
+                || (potionItem && !RenderFeatureManager.cfg().trajectoryPotions)
                 || (!bowItem && !pearlItem && !throwableItem && !potionItem)) {
             return null;
         }
@@ -1180,7 +1180,7 @@ final class RenderFeatureSupport {
         List<Vec3d> points = new ArrayList<>();
         points.add(currentPos);
         Vec3d hitPos = null;
-        for (int i = 0; i < RenderFeatureManager.trajectoryMaxSteps; i++) {
+        for (int i = 0; i < RenderFeatureManager.cfg().trajectoryMaxSteps; i++) {
             Vec3d nextPos = currentPos.add(motion);
             RayTraceResult hit = player.world.rayTraceBlocks(currentPos, nextPos, false, true, false);
             if (hit != null && hit.hitVec != null) {

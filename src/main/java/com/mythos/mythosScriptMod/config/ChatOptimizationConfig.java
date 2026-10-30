@@ -18,7 +18,33 @@ import java.util.List;
 public class ChatOptimizationConfig {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    public static ChatOptimizationConfig INSTANCE = new ChatOptimizationConfig();
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用一个 INSTANCE 时
+    // 后台 bot 读到的是当前挂载会话的配置。统一经 instance() 取当前线程所属会话的那份。
+    private static final java.util.concurrent.ConcurrentHashMap<String, ChatOptimizationConfig> INSTANCES =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static ChatOptimizationConfig instance() {
+        String owner = ProfileManager.currentConfigOwner();
+        ChatOptimizationConfig config = INSTANCES.get(owner);
+        return config != null ? config : loadOwnerInstance(owner);
+    }
+
+    // 不能用 computeIfAbsent：load() 里会反复调用 instance()，ConcurrentHashMap 不允许递归更新。
+    private static ChatOptimizationConfig loadOwnerInstance(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            ChatOptimizationConfig existing = INSTANCES.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            INSTANCES.put(owner, new ChatOptimizationConfig());
+            ProfileManager.withConfigOwner(owner, (Runnable) ChatOptimizationConfig::load);
+            return INSTANCES.get(owner);
+        }
+    }
+
+    private static void setInstance(ChatOptimizationConfig config) {
+        INSTANCES.put(ProfileManager.currentConfigOwner(), config != null ? config : new ChatOptimizationConfig());
+    }
 
     public enum ImageQuality {
         ORIGINAL("原始尺寸", "最高内存占用，保留原图分辨率。"),
@@ -92,11 +118,11 @@ public class ChatOptimizationConfig {
     private ChatOptimizationConfig() {}
 
     public static void resetToDefaults() {
-        INSTANCE = new ChatOptimizationConfig();
+        setInstance(new ChatOptimizationConfig());
     }
 
     private static Path getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("chat_optimization.json");
+        return ProfileManager.currentConfigFile("chat_optimization.json");
     }
 
     public static void save() {
@@ -104,7 +130,7 @@ public class ChatOptimizationConfig {
         try {
             Files.createDirectories(configFile.getParent());
             try (BufferedWriter writer = Files.newBufferedWriter(configFile, StandardCharsets.UTF_8)) {
-                GSON.toJson(INSTANCE, writer);
+                GSON.toJson(instance(), writer);
             }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("无法保存聊天优化配置", e);
@@ -115,50 +141,50 @@ public class ChatOptimizationConfig {
         Path configFile = getConfigFile();
         if (Files.exists(configFile)) {
             try (BufferedReader reader = Files.newBufferedReader(configFile, StandardCharsets.UTF_8)) {
-                INSTANCE = GSON.fromJson(reader, ChatOptimizationConfig.class);
-                if (INSTANCE == null) {
-                    INSTANCE = new ChatOptimizationConfig();
+                setInstance(GSON.fromJson(reader, ChatOptimizationConfig.class));
+                if (instance() == null) {
+                    setInstance(new ChatOptimizationConfig());
                 }
                 // 兼容旧配置
-                if (INSTANCE.imageQuality == null) {
-                    INSTANCE.imageQuality = ImageQuality.MEDIUM;
+                if (instance().imageQuality == null) {
+                    instance().imageQuality = ImageQuality.MEDIUM;
                 }
-                if (INSTANCE.backgroundImageScale <= 0) {
-                    INSTANCE.backgroundImageScale = 100;
+                if (instance().backgroundImageScale <= 0) {
+                    instance().backgroundImageScale = 100;
                 }
-                if (INSTANCE.backgroundCropX < 0) {
-                    INSTANCE.backgroundCropX = 0;
+                if (instance().backgroundCropX < 0) {
+                    instance().backgroundCropX = 0;
                 }
-                if (INSTANCE.backgroundCropY < 0) {
-                    INSTANCE.backgroundCropY = 0;
+                if (instance().backgroundCropY < 0) {
+                    instance().backgroundCropY = 0;
                 }
                 // !! 新增：兼容旧配置，为新字段设置默认值 !!
-                if (INSTANCE.timedMessages == null) {
-                    INSTANCE.timedMessages = new ArrayList<>();
+                if (instance().timedMessages == null) {
+                    instance().timedMessages = new ArrayList<>();
                     // 尝试从旧的 timedMessage 字段迁移
                     try {
                         // 使用反射来安全地访问可能存在的旧字段
-                        Object oldMessage = ChatOptimizationConfig.class.getField("timedMessage").get(INSTANCE);
+                        Object oldMessage = ChatOptimizationConfig.class.getField("timedMessage").get(instance());
                         if (oldMessage instanceof String && !((String) oldMessage).isEmpty()) {
-                            INSTANCE.timedMessages.add((String) oldMessage);
+                            instance().timedMessages.add((String) oldMessage);
                         }
                     } catch (Exception ignored) {
                         // 忽略错误，说明旧字段不存在
                     }
                 }
-                if (INSTANCE.timedMessages.isEmpty()) {
-                    INSTANCE.timedMessages.add(""); // 确保至少有一个空字符串用于编辑
+                if (instance().timedMessages.isEmpty()) {
+                    instance().timedMessages.add(""); // 确保至少有一个空字符串用于编辑
                 }
-                if (INSTANCE.timedMessageMode == null) {
-                    INSTANCE.timedMessageMode = TimedMessageMode.SEQUENTIAL;
+                if (instance().timedMessageMode == null) {
+                    instance().timedMessageMode = TimedMessageMode.SEQUENTIAL;
                 }
 
             } catch (Exception e) {
                 mythosScriptMod.LOGGER.error("无法加载聊天优化配置", e);
-                INSTANCE = new ChatOptimizationConfig();
+                setInstance(new ChatOptimizationConfig());
             }
         } else {
-            INSTANCE = new ChatOptimizationConfig();
+            setInstance(new ChatOptimizationConfig());
         }
     }
 }

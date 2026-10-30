@@ -218,6 +218,16 @@ public class WorldProvider implements IWorldProvider {
      * Lol.
      */
     private void detectAndHandleBrokenLoading() {
+        // When Mythos-Nexus is swapping mc.world between bot sessions
+        // (withContext push/pop), mcWorld briefly points at a different
+        // session's WorldClient — not a real load/unload. Skip detection
+        // so we don't teardown/reinit the cache on every packet dispatch.
+        // SessionPlayerContext's world() is a pinned Supplier (not mc.world),
+        // so no swap can happen on a bot tick thread — let it detect normally
+        // or worldData stays null forever and bsi.isLoaded() returns false
+        // for every chunk, starving A* to 2-5 node paths.
+        if (ctx instanceof com.mythos.mythosScriptMod.shadowbaritone.utils.player.BaritonePlayerContext
+                && com.mythos.mythosScriptMod.mythosScriptMod.nexusInBackgroundContext()) return;
         if (this.mcWorld != ctx.world()) {
             if (this.currentWorld != null) {
                 System.out.println("mc.world unloaded unnoticed! Unloading Baritone cache now.");

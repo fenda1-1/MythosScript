@@ -3,49 +3,63 @@ package com.mythos.mythosScriptMod.system;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 
 public class MemorySnapshot {
-    public final String name;
-    public final long timestamp;
-    public final long totalMemory;
-    public final long freeMemory;
-    public final long usedMemory;
-    public final Map<String, Integer> entityCounts;
-    public final Map<String, Integer> tileEntityCounts;
-    // --- 核心修改：新增用于存储区块和其他对象的Map ---
-    public final Map<String, Integer> chunkCounts;
-    public final Map<String, Integer> renderChunkCounts;
-    // --- 修改结束 ---
-    public final Map<String, Long> entityMemoryUsage;
-    public final Map<String, Long> tileEntityMemoryUsage;
-    // --- 核心修改：新增用于存储区块和其他对象内存占用的Map ---
-    public final Map<String, Long> chunkMemoryUsage;
-    public final Map<String, Long> renderChunkMemoryUsage;
-    // --- 修改结束 ---
+    public String name;
+    public long timestamp;
+    public long totalMemory;
+    public long freeMemory;
+    public long usedMemory;
+    public Map<String, Integer> entityCounts;
+    public Map<String, Integer> tileEntityCounts;
+    public Map<String, Integer> chunkCounts;
+    public Map<String, Integer> renderChunkCounts;
+    public Map<String, Long> entityMemoryUsage;
+    public Map<String, Long> tileEntityMemoryUsage;
+    public Map<String, Long> chunkMemoryUsage;
+    public Map<String, Long> renderChunkMemoryUsage;
+    // 按 mod 分组的估算字节与对象计数（key 为 modId，未识别的归入 "unknown"）
+    public Map<String, Long> modMemoryUsage;
+    public Map<String, Integer> modObjectCounts;
+
+    public MemorySnapshot() {
+        // Gson 反序列化需要无参构造器
+    }
 
     public MemorySnapshot(String name, long total, long free,
                           Map<String, Integer> entities, Map<String, Integer> tileEntities,
-                          Map<String, Integer> chunks, Map<String, Integer> renderChunks, // 新增参数
+                          Map<String, Integer> chunks, Map<String, Integer> renderChunks,
                           Map<String, Long> entityMemory, Map<String, Long> tileEntityMemory,
-                          Map<String, Long> chunkMemory, Map<String, Long> renderChunkMemory) { // 新增参数
+                          Map<String, Long> chunkMemory, Map<String, Long> renderChunkMemory) {
+        this(name, System.currentTimeMillis(), total, free,
+                entities, tileEntities, chunks, renderChunks,
+                entityMemory, tileEntityMemory, chunkMemory, renderChunkMemory,
+                new HashMap<String, Long>(), new HashMap<String, Integer>());
+    }
+
+    public MemorySnapshot(String name, long timestamp, long total, long free,
+                          Map<String, Integer> entities, Map<String, Integer> tileEntities,
+                          Map<String, Integer> chunks, Map<String, Integer> renderChunks,
+                          Map<String, Long> entityMemory, Map<String, Long> tileEntityMemory,
+                          Map<String, Long> chunkMemory, Map<String, Long> renderChunkMemory,
+                          Map<String, Long> modMemoryUsage, Map<String, Integer> modObjectCounts) {
         this.name = name;
-        this.timestamp = System.currentTimeMillis();
+        this.timestamp = timestamp;
         this.totalMemory = total;
         this.freeMemory = free;
         this.usedMemory = total - free;
         this.entityCounts = entities;
         this.tileEntityCounts = tileEntities;
-        // --- 核心修改：初始化新字段 ---
         this.chunkCounts = chunks;
         this.renderChunkCounts = renderChunks;
-        // --- 修改结束 ---
         this.entityMemoryUsage = entityMemory;
         this.tileEntityMemoryUsage = tileEntityMemory;
-        // --- 核心修改：初始化新字段 ---
         this.chunkMemoryUsage = chunkMemory;
         this.renderChunkMemoryUsage = renderChunkMemory;
-        // --- 修改结束 ---
+        this.modMemoryUsage = modMemoryUsage == null ? new HashMap<String, Long>() : modMemoryUsage;
+        this.modObjectCounts = modObjectCounts == null ? new HashMap<String, Integer>() : modObjectCounts;
     }
 
     public String getFormattedTimestamp() {

@@ -54,6 +54,18 @@ public final class McpClientHub {
             takePid(stripped);
             return list(takePlayer(stripped));
         }
+        if ("mythos_stats".equals(name)) {
+            takePid(stripped); takePlayer(stripped);
+            return McpCallHistory.INSTANCE.statsJson();
+        }
+        // Hub-local tools that don't target a specific client — execute on the
+        // local backend instead of routing to a remote worker (which would
+        // deadlock: the remote's local.call -> McpGameService.call ->
+        // FutureTask.get waits for a worker that never answers).
+        if (name != null && name.startsWith("nexus.")) {
+            takePid(stripped); takePlayer(stripped);
+            return local.call(name, stripped);
+        }
         Integer pid = takePid(stripped);
         String player = takePlayer(stripped);
         JsonObject data = route(pid, player, name, stripped);
@@ -151,6 +163,9 @@ public final class McpClientHub {
             if (slot.info.has("player")) row.add("player", slot.info.get("player"));
             if (slot.info.has("server")) row.add("server", slot.info.get("server"));
             if (slot.info.has("inWorld")) row.add("inWorld", slot.info.get("inWorld"));
+            // Nexus multibox: every session the client owns, not just mounted.
+            if (slot.info.has("sessions")) row.add("sessions", slot.info.get("sessions"));
+            if (slot.info.has("mounted")) row.add("mounted", slot.info.get("mounted"));
         }
         return row;
     }

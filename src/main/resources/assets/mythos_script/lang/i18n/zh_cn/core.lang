@@ -124,3 +124,9 @@ gui.modern.notes.deleted=分组已删除
 gui.modern.notes.rename_error=重命名失败，目标分组可能已存在
 gui.modern.notes.delete_error=删除失败
 gui.mcp.event_filter=g=entities,gui id=实体ID from=毫秒 to=毫秒
+
+key.categories.mythosnexus=Mythos 多开
+key.mythosnexus.manager=打开 Nexus 管理器
+key.mythosnexus.mountNext=切换到下一个机器人
+key.mythosnexus.mountPrev=切换到上一个机器人
+key.mythosnexus.mountHuman=切换到真人视角

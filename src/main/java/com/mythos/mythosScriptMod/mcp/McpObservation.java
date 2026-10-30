@@ -316,6 +316,32 @@ public final class McpObservation {
         return result;
     }
     public JsonObject snapshot(JsonObject p) {
+        if (p.has("bounds")) {
+            if (p.has("regions") || p.has("origin") || p.has("size"))
+                throw new IllegalArgumentException("Use either bounds or regions/origin/size");
+            int[][] boxed = box(p.get("bounds"));
+            int[] min = boxed[0], max = boxed[1];
+            long total = (long) (max[0] - min[0] + 1) * (max[1] - min[1] + 1) * (max[2] - min[2] + 1);
+            if (total > 16777216) throw new IllegalArgumentException("bounds too large (max 16777216 blocks = 256^3); split in client");
+            JsonArray captures = new JsonArray();
+            int idx = 0;
+            for (int y = min[1]; y <= max[1]; y += 32)
+                for (int z = min[2]; z <= max[2]; z += 32)
+                    for (int x = min[0]; x <= max[0]; x += 32) {
+                        int sx = Math.min(32, max[0] - x + 1), sy = Math.min(32, max[1] - y + 1), sz = Math.min(32, max[2] - z + 1);
+                        int[] minOff = {-sx / 2, -sy / 2, -sz / 2};
+                        JsonObject request = copy(p);
+                        request.remove("bounds");
+                        request.add("origin", GSON.toJsonTree(new int[]{x - minOff[0], y - minOff[1], z - minOff[2]}));
+                        request.add("size", GSON.toJsonTree(new int[]{sx, sy, sz}));
+                        JsonObject captured = snapshot(request, 32);
+                        captured.addProperty("id", "b" + (idx++));
+                        captures.add(captured);
+                    }
+            return object("schemaVersion", 1, "sessionId", journal.sessionId(), "tick", tick,
+                    "inWorld", Minecraft.getMinecraft().world != null, "regions", captures,
+                    "regionCount", captures.size(), "boundsMin", GSON.toJsonTree(min), "boundsMax", GSON.toJsonTree(max));
+        }
         if (p.has("regions")) {
             if (p.has("origin") || p.has("size"))
                 throw new IllegalArgumentException("Use either regions or origin/size");
@@ -427,6 +453,132 @@ public final class McpObservation {
             result.add("world",volume);
         }
         return result;
+    }
+    /**
+     * Flat, filtered block/entity search inside one box. Snapshots answer "what is here" and
+     * force the caller to walk regions and filter by hand; this answers "where is X" directly.
+     */
+    public JsonObject find(JsonObject p) {
+        Minecraft mc=Minecraft.getMinecraft();
+        int[][] boxed=box(p.get("bounds"));
+        int[] min=boxed[0], max=boxed[1];
+        long volume=(long)(max[0]-min[0]+1)*(max[1]-min[1]+1)*(max[2]-min[2]+1);
+        if(volume>4194304) throw new IllegalArgumentException("search volume too large (max 4194304 blocks = 128^3); narrow bounds");
+        Set<String> blockFilters=McpEventJournal.strings(p,"blocks");
+        Set<String> entityFilters=McpEventJournal.strings(p,"entities");
+        int limit=integer(p,"limit",256,1,4096);
+        boolean aliveOnly=bool(p,"alive",true);
+        JsonArray fields=p.has("fields")?p.getAsJsonArray("fields"):null;
+        JsonObject result=object("sessionId",journal.sessionId(),"timestampMs",System.currentTimeMillis(),"tick",tick,
+                "inWorld",mc.player!=null && mc.world!=null,"boundsMin",GSON.toJsonTree(min),"boundsMax",GSON.toJsonTree(max),
+                "volume",volume,"coordinates","Absolute block coordinates; bounds inclusive; only loaded chunks are searched");
+        if(mc.world==null) {
+            result.add("blocks",new JsonArray());result.add("entities",new JsonArray());
+            result.addProperty("blockMatches",0);result.addProperty("entityCount",0);
+            return result;
+        }
+        AxisAlignedBB area=new AxisAlignedBB(min[0],min[1],min[2],max[0]+1,max[1]+1,max[2]+1);
+        JsonArray entityList=new JsonArray();
+        int entityCount=0;
+        for(Entity e:mc.world.loadedEntityList) {
+            if(e==null || e.isDead || !e.getEntityBoundingBox().intersects(area)) continue;
+            if(aliveOnly && !e.isEntityAlive()) continue;
+            if(!matchesEntity(e,entityFilters)) continue;
+            entityCount++;
+            if(entityList.size()<limit) entityList.add(fields==null?entity(e):select(entity(e),fields));
+        }
+        result.add("entities",entityList);result.addProperty("entityCount",entityCount);
+        result.addProperty("entitiesTruncated",entityCount>entityList.size());
+        JsonArray blockGroups=new JsonArray();
+        long scanned=0;int blockMatches=0;
+        if(!blockFilters.isEmpty()) {
+            Map<String,Integer> counts=new LinkedHashMap<>();
+            Map<String,JsonArray> positions=new LinkedHashMap<>();
+            for(int y=min[1];y<=max[1];y++) for(int z=min[2];z<=max[2];z++) for(int x=min[0];x<=max[0];x++) {
+                BlockPos position=new BlockPos(x,y,z);
+                if(!mc.world.isBlockLoaded(position,false)) continue;
+                scanned++;
+                String id=blockId(mc.world,position);
+                if(!matchesBlock(id,blockFilters)) continue;
+                blockMatches++;
+                Integer seen=counts.get(id);
+                counts.put(id,seen==null?1:seen+1);
+                JsonArray where=positions.get(id);
+                if(where==null) { where=new JsonArray();positions.put(id,where); }
+                if(where.size()<limit) where.add(GSON.toJsonTree(new int[]{x,y,z}));
+            }
+            List<Map.Entry<String,Integer>> ordered=new ArrayList<>(counts.entrySet());
+            ordered.sort((a,b)->b.getValue()-a.getValue());
+            for(Map.Entry<String,Integer> entry:ordered) {
+                JsonArray where=positions.get(entry.getKey());
+                blockGroups.add(object("id",entry.getKey(),"count",entry.getValue(),"positions",where,
+                        "positionsTruncated",entry.getValue()>where.size()));
+            }
+        }
+        result.add("blocks",blockGroups);result.addProperty("blockMatches",blockMatches);result.addProperty("blocksScanned",scanned);
+        return result;
+    }
+    /** bounds accepts {min:[x,y,z],max:[x,y,z]} or [[x,y,z],[x,y,z]]; returns {min,max} with range checks. */
+    static int[][] box(JsonElement element) {
+        if(element==null || element.isJsonNull() || (!element.isJsonObject() && !element.isJsonArray()))
+            throw new IllegalArgumentException("bounds must be {min:[x,y,z],max:[x,y,z]} or [[x,y,z],[x,y,z]]");
+        JsonObject bounds=new JsonObject();
+        if(element.isJsonObject()) bounds=element.getAsJsonObject();
+        else {
+            JsonArray array=element.getAsJsonArray();
+            if(array.size()!=2) throw new IllegalArgumentException("bounds array must be [[minX,minY,minZ],[maxX,maxY,maxZ]]");
+            bounds.add("min",array.get(0));bounds.add("max",array.get(1));
+        }
+        double[] lo=McpEventJournal.vector(bounds,"min"), hi=McpEventJournal.vector(bounds,"max");
+        int[] min=new int[3], max=new int[3];
+        for(int i=0;i<3;i++) {
+            if(lo[i]!=Math.rint(lo[i]) || hi[i]!=Math.rint(hi[i])) throw new IllegalArgumentException("bounds.min/max must be integer block coords");
+            min[i]=(int)lo[i];max[i]=(int)hi[i];
+            if(min[i]<-30000000 || max[i]>30000000) throw new IllegalArgumentException("bounds outside world bounds");
+            if(min[i]>max[i]) throw new IllegalArgumentException("bounds.min exceeds bounds.max on axis "+i);
+        }
+        return new int[][]{min,max};
+    }
+    private static String blockId(World source,BlockPos position) {
+        net.minecraft.util.ResourceLocation id=net.minecraft.block.Block.REGISTRY.getNameForObject(source.getBlockState(position).getBlock());
+        return id==null?"unknown":id.toString();
+    }
+    private static boolean matchesBlock(String id,Set<String> filters) {
+        if(filters.isEmpty()) return true;
+        String path=id.startsWith("minecraft:")?id.substring(10):id;
+        for(String raw:filters) {
+            String filter=raw==null?"":raw.trim();
+            if(filter.isEmpty()) continue;
+            if(filter.equalsIgnoreCase(id) || path.equalsIgnoreCase(filter)) return true;
+            if(filter.indexOf('[')>=0) {
+                String bare=filter.substring(0,filter.indexOf('['));
+                if(bare.startsWith("minecraft:")) bare=bare.substring(10);
+                if(path.equalsIgnoreCase(bare)) return true;
+            } else if(path.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT))) return true;
+        }
+        return false;
+    }
+    private static boolean matchesEntity(Entity e,Set<String> filters) {
+        if(filters.isEmpty()) return true;
+        String type=e.getClass().getSimpleName(), name=e.getName()==null?"":e.getName();
+        net.minecraft.util.ResourceLocation key=EntityList.getKey(e);
+        String registry=key==null?"":key.toString();
+        for(String raw:filters) {
+            String filter=raw==null?"":raw.trim();
+            if(filter.isEmpty()) continue;
+            if(type.equalsIgnoreCase(filter) || registry.equalsIgnoreCase(filter) || registry.endsWith(":"+filter)) return true;
+            if(name.equalsIgnoreCase(filter) || name.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT))) return true;
+        }
+        return false;
+    }
+    private static JsonObject select(JsonObject source,JsonArray fields) {
+        JsonObject out=new JsonObject();
+        if(source.has("entityId")) out.add("entityId",source.get("entityId"));
+        for(JsonElement element:fields) {
+            String key=element.getAsString();
+            if(source.has(key)) out.add(key,source.get(key));
+        }
+        return out;
     }
     private static double[] aabb(AxisAlignedBB box) {
         return new double[]{box.minX,box.minY,box.minZ,box.maxX,box.maxY,box.maxZ};

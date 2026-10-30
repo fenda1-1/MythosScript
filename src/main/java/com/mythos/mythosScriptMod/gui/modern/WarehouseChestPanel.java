@@ -312,7 +312,7 @@ public final class WarehouseChestPanel {
             for (ItemStack stack : mc.player.inventory.mainInventory) addCandidate(stack);
             if (mc.player.openContainer != null) for (net.minecraft.inventory.Slot slot : mc.player.openContainer.inventorySlots) addCandidate(slot.getStack());
         }
-        for (Warehouse warehouse : WarehouseManager.warehouses) {
+        for (Warehouse warehouse : WarehouseManager.cfg().warehouses) {
             if (warehouse.chests == null) continue;
             for (ChestData data : warehouse.chests) if (data != null && data.hasBeenScanned)
                 for (ItemStack stack : data.getSnapshotContents(54)) addCandidate(stack);

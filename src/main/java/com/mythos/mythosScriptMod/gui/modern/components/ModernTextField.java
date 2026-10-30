@@ -25,6 +25,16 @@ public class ModernTextField extends GuiTextField implements ModernComponent {
     private boolean componentEnabled = true;
     private Consumer<String> changeListener;
     private String lastNotifiedText = "";
+    /**
+     * The single text field that currently owns caret/keyboard focus across the
+     * whole UI.  The EditBox delegate can keep its own focused flag set when a
+     * field is focused through a path that bypasses setFocused() (for example
+     * delegate.setFocused(true) inside GuiTextField.mouseClicked), so a second
+     * input could keep drawing a blinking caret after focus moved on.  Tracking
+     * the owning field here makes isFocused() authoritative: only the granted
+     * field reports focused, regardless of stale delegate state.
+     */
+    private static ModernTextField focusedInstance;
 
     public ModernTextField(int id, FontRenderer fontRenderer, int x, int y, int width, int height) {
         super(id, fontRenderer, x, y, width, height);
@@ -92,6 +102,9 @@ public class ModernTextField extends GuiTextField implements ModernComponent {
         componentVisible = visible;
         super.setVisible(visible);
         if (!visible) {
+            if (focusedInstance == this) {
+                focusedInstance = null;
+            }
             super.setFocused(false);
         }
     }
@@ -106,6 +119,9 @@ public class ModernTextField extends GuiTextField implements ModernComponent {
         componentEnabled = enabled;
         super.setEnabled(enabled);
         if (!enabled) {
+            if (focusedInstance == this) {
+                focusedInstance = null;
+            }
             super.setFocused(false);
         }
     }
@@ -122,16 +138,28 @@ public class ModernTextField extends GuiTextField implements ModernComponent {
 
     @Override
     public boolean isFocused() {
-        return super.isFocused();
+        // Only the granted focus owner reports focused; a stale EditBox
+        // delegate flag on another field must not produce a second caret or
+        // swallow keystrokes.
+        return this == focusedInstance && super.isFocused();
     }
 
     @Override
     public void setFocused(boolean focused) {
-        super.setFocused(focused && isVisible() && isEnabled());
+        boolean grant = focused && isVisible() && isEnabled();
+        if (grant) {
+            focusedInstance = this;
+        } else if (focusedInstance == this) {
+            focusedInstance = null;
+        }
+        super.setFocused(grant);
     }
 
     @Override
     public void clearFocus() {
+        if (focusedInstance == this) {
+            focusedInstance = null;
+        }
         super.setFocused(false);
     }
 
@@ -184,7 +212,7 @@ public class ModernTextField extends GuiTextField implements ModernComponent {
         int nativeX = Math.max(content.x, Math.min(content.right() - 1, mouseX));
         int nativeY = Math.max(content.y, Math.min(content.bottom() - 1, mouseY));
         super.mouseClicked(nativeX, nativeY, mouseButton);
-        super.setFocused(true);
+        setFocused(true);
         ModernUiRenderer.moveTextFieldCursorTo(this, nativeX);
         return true;
     }
@@ -196,7 +224,7 @@ public class ModernTextField extends GuiTextField implements ModernComponent {
             if (contains(mouseX, mouseY)) {
                 return click(mouseX, mouseY, mouseButton);
             } else {
-                super.setFocused(false);
+                setFocused(false);
             }
             return false;
         }

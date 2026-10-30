@@ -58,6 +58,9 @@ public class WarehouseEventHandler extends Gui {
     private static boolean scanRouteRunning = false;
     private static BlockPos scanRouteCurrentTarget = null;
     private static int scanRouteWaitTicks = 0;
+    /** Wall-clock anchors — elapsed ticks derived from real ms so throttled bot
+     *  sessions don't stretch scan/open timeouts. */
+    private static long scanRouteWaitStartMillis = 0L;
     private static final java.util.LinkedHashSet<ChestData> completedDepositPolicies = new java.util.LinkedHashSet<>();
     private static final Deque<com.google.gson.JsonObject> postDepositSpreads = new ArrayDeque<>();
     private static final Deque<String> postDepositSequences = new ArrayDeque<>();
@@ -71,7 +74,7 @@ public class WarehouseEventHandler extends Gui {
 
     private static Map<String, Integer> inventoryCounts() {
         Map<String, Integer> counts = new HashMap<>();
-        if (mc.player != null) for (ItemStack stack : mc.player.inventory.mainInventory) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) for (ItemStack stack : com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventory.mainInventory) {
             if (!stack.isEmpty()) counts.merge(INSTANCE.getUniqueItemKey(stack) + ":" + stack.getMetadata(), stack.getCount(), Integer::sum);
         }
         return counts;
@@ -109,7 +112,7 @@ public class WarehouseEventHandler extends Gui {
                 && !reservedNames.contains(stack.getDisplayName())) return stack.getCount();
         int reserved = stack.getMaxStackSize();
         for (int i = 0; i < raw && reserved > 0; i++) {
-            ItemStack previous = mc.player.inventory.getStackInSlot(i);
+            ItemStack previous = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventory.getStackInSlot(i);
             if (!previous.isEmpty() && previous.getDisplayName().equals(stack.getDisplayName())) {
                 reserved -= previous.getCount();
             }
@@ -142,7 +145,7 @@ public class WarehouseEventHandler extends Gui {
         completedDepositPolicies.clear();
         for (String name : pendingSpreadNames) postDepositStacks.add(spreadParams(name));
         postDepositRunning = !postDepositStacks.isEmpty() || !postDepositSequences.isEmpty();
-        spreadWindowId = mc.player.openContainer.windowId;
+        spreadWindowId = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer.windowId;
         completedInventory = inventoryCounts();
     }
 
@@ -152,9 +155,9 @@ public class WarehouseEventHandler extends Gui {
             activePostSequence = "";
         }
         if (ItemSpreadHandler.isSpreadInProgress() || ItemSpreadHandler.isStackInProgress()) return;
-        if (!mc.player.inventory.getItemStack().isEmpty()
+        if (!com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventory.getItemStack().isEmpty()
                 || (!postDepositStacks.isEmpty() || !postDepositSpreads.isEmpty() || !pendingSpreadNames.isEmpty())
-                && mc.player.openContainer.windowId != spreadWindowId) {
+                && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer.windowId != spreadWindowId) {
             postDepositStacks.clear();
             postDepositSpreads.clear();
             pendingSpreadNames.clear();
@@ -168,7 +171,7 @@ public class WarehouseEventHandler extends Gui {
         }
         if (!pendingSpreadNames.isEmpty()) {
             java.util.List<Integer> empty = new ArrayList<>();
-            for (int i = 0; i < 36; i++) if (mc.player.inventory.getStackInSlot(i).isEmpty()) empty.add(i);
+            for (int i = 0; i < 36; i++) if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventory.getStackInSlot(i).isEmpty()) empty.add(i);
             int index = 0;
             List<List<Integer>> groups = WarehouseDepositPolicy.divideSlots(empty, pendingSpreadNames.size());
             for (String name : pendingSpreadNames) {
@@ -194,7 +197,7 @@ public class WarehouseEventHandler extends Gui {
                 activePostSequence = sequence;
                 com.google.gson.JsonObject params = new com.google.gson.JsonObject();
                 params.addProperty("sequenceName", sequence);
-                com.mythos.mythosScriptMod.path.PathSequenceManager.parseAction("run_sequence", params).accept(mc.player);
+                com.mythos.mythosScriptMod.path.PathSequenceManager.parseAction("run_sequence", params).accept(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer());
             }
             return;
         }
@@ -203,6 +206,7 @@ public class WarehouseEventHandler extends Gui {
     }
     private static BlockPos autoDepositCurrentTarget = null;
     private static int autoDepositOpenWaitTicks = 0;
+    private static long autoDepositOpenWaitStartMillis = 0L;
 
     private static ChestData currentOpenChestData = null;
     private static boolean isStandardChestGui = false;
@@ -219,11 +223,11 @@ public class WarehouseEventHandler extends Gui {
 
     /** Starts a one-click route that opens every recorded unscanned chest. */
     public static boolean startScanUnscannedChests(Warehouse warehouse) {
-        if (mc.player == null || mc.world == null || warehouse == null) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null || warehouse == null) {
             return false;
         }
         if (scanRouteRunning || autoDepositRouteRunning || postDepositRunning) {
-            mc.player.sendMessage(new TextComponentString("§e[仓库] 已有自动仓库流程正在运行。"));
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§e[仓库] 已有自动仓库流程正在运行。"));
             return false;
         }
 
@@ -243,12 +247,13 @@ public class WarehouseEventHandler extends Gui {
         scanRouteRunning = true;
         scanRouteCurrentTarget = null;
         scanRouteWaitTicks = 0;
+        scanRouteWaitStartMillis = 0L;
         startNextScanRouteChest();
         return true;
     }
 
     private static void startNextScanRouteChest() {
-        if (!scanRouteRunning || mc.player == null) {
+        if (!scanRouteRunning || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null) {
             return;
         }
         while (!scanRouteQueue.isEmpty()) {
@@ -263,26 +268,27 @@ public class WarehouseEventHandler extends Gui {
             }
             scanRouteCurrentTarget = next;
             scanRouteWaitTicks = 0;
-            mc.player.sendMessage(new TextComponentString("§b[仓库] 前往扫描箱子: " + next));
+            scanRouteWaitStartMillis = 0L;
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§b[仓库] 前往扫描箱子: " + next));
             return;
         }
         scanRouteRunning = false;
         scanRouteCurrentTarget = null;
-        mc.player.sendMessage(new TextComponentString("§a[仓库] 未扫描箱子处理完成。"));
+        com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§a[仓库] 未扫描箱子处理完成。"));
     }
 
     public static void startAutoDepositByHighlights() {
-        if (mc.player == null || mc.world == null) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null) {
             return;
         }
         if (isAutoDepositRouteRunning()) {
-            mc.player.sendMessage(new TextComponentString("§e[仓库] 自动存入流程已在运行中。"));
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§e[仓库] 自动存入流程已在运行中。"));
             return;
         }
 
         WarehouseManager.updateCurrentWarehouse();
-        if (WarehouseManager.currentWarehouse == null) {
-            mc.player.sendMessage(new TextComponentString("§c[仓库] 当前不在激活仓库区域内。"));
+        if (WarehouseManager.cfg().currentWarehouse == null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§c[仓库] 当前不在激活仓库区域内。"));
             return;
         }
 
@@ -292,17 +298,17 @@ public class WarehouseEventHandler extends Gui {
         INSTANCE.updateHighlightList();
 
         if (playerItemKeys.isEmpty()) {
-            mc.player.sendMessage(new TextComponentString("§e[仓库] 背包中没有可自动存入的目标物品。"));
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§e[仓库] 背包中没有可自动存入的目标物品。"));
             return;
         }
         if (chestsToHighlight.isEmpty()) {
-            mc.player.sendMessage(new TextComponentString("§e[仓库] 没有可用的高亮箱子。"));
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§e[仓库] 没有可用的高亮箱子。"));
             return;
         }
 
         List<BlockPos> sorted = new ArrayList<>(chestsToHighlight);
         sorted.sort(Comparator.comparingDouble(pos -> {
-            Vec3d p = mc.player.getPositionVector();
+            Vec3d p = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().getPositionVector();
             double dx = (pos.getX() + 0.5) - p.x;
             double dz = (pos.getZ() + 0.5) - p.z;
             return dx * dx + dz * dz;
@@ -312,14 +318,15 @@ public class WarehouseEventHandler extends Gui {
         completedDepositPolicies.clear();
         routeSpreadNames.clear();
         for (BlockPos pos : sorted) {
-            ChestData policy = WarehouseManager.currentWarehouse.getChestAt(pos);
+            ChestData policy = WarehouseManager.cfg().currentWarehouse.getChestAt(pos);
             if (policy != null) routeSpreadNames.addAll(spreadNames(policy));
         }
         autoDepositRouteQueue.addAll(sorted);
         autoDepositRouteRunning = true;
         autoDepositCurrentTarget = null;
         autoDepositOpenWaitTicks = 0;
-        mc.player.sendMessage(new TextComponentString("§a[仓库] 已启动自动存入流程，目标箱子数: " + sorted.size()));
+        autoDepositOpenWaitStartMillis = 0L;
+        com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§a[仓库] 已启动自动存入流程，目标箱子数: " + sorted.size()));
         INSTANCE.startNextAutoDepositTarget();
     }
 
@@ -328,18 +335,19 @@ public class WarehouseEventHandler extends Gui {
     }
 
     private void stopAutoDepositRoute(String reason) {
-        if (mc.player != null && reason != null && !reason.isEmpty()) {
-            mc.player.sendMessage(new TextComponentString(reason));
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null && reason != null && !reason.isEmpty()) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(reason));
         }
         autoDepositRouteRunning = false;
         autoDepositCurrentTarget = null;
         autoDepositOpenWaitTicks = 0;
+        autoDepositOpenWaitStartMillis = 0L;
         autoDepositRouteQueue.clear();
         beginPostDeposit();
     }
 
     private void startNextAutoDepositTarget() {
-        if (!autoDepositRouteRunning || mc.player == null) {
+        if (!autoDepositRouteRunning || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null) {
             return;
         }
 
@@ -365,8 +373,9 @@ public class WarehouseEventHandler extends Gui {
             }
             autoDepositCurrentTarget = next;
             autoDepositOpenWaitTicks = 0;
-            if (mc.player != null) {
-                mc.player.sendMessage(new TextComponentString("§b[仓库] 前往箱子: " + next));
+            autoDepositOpenWaitStartMillis = 0L;
+            if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§b[仓库] 前往箱子: " + next));
             }
             return;
         }
@@ -380,8 +389,8 @@ public class WarehouseEventHandler extends Gui {
         }
         if (chestData.depositItemsConfigured || chestData.designatedItems != null && !chestData.designatedItems.isEmpty()) {
             List<String> names = orderedDepositNames(chestData);
-            for (Slot slot : mc.player.inventoryContainer.inventorySlots) {
-                if (slot.inventory == mc.player.inventory && slot.getHasStack()
+            for (Slot slot : com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventoryContainer.inventorySlots) {
+                if (slot.inventory == com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventory && slot.getHasStack()
                         && slot.getSlotIndex() >= 0 && slot.getSlotIndex() < 36
                         && (depositableCount(chestData, slot) > 0 || spreadNames(chestData).contains(slot.getStack().getDisplayName()))
                         && depositPriority(slot.getStack(), names) != Integer.MAX_VALUE) return true;
@@ -405,7 +414,7 @@ public class WarehouseEventHandler extends Gui {
     }
 
     private boolean hasDepositableItemsInOpenContainer(ContainerChest container) {
-        if (mc.player == null || currentOpenChestData == null || container == null) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || currentOpenChestData == null || container == null) {
             return false;
         }
         if (currentOpenChestData.designatedItems == null || currentOpenChestData.designatedItems.isEmpty()) {
@@ -413,7 +422,7 @@ public class WarehouseEventHandler extends Gui {
         }
 
         for (Slot slot : container.inventorySlots) {
-            if (slot.inventory != mc.player.inventory || !slot.getHasStack()) {
+            if (slot.inventory != com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventory || !slot.getHasStack()) {
                 continue;
             }
             if (depositableCount(currentOpenChestData, slot) <= 0) continue;
@@ -463,14 +472,16 @@ public class WarehouseEventHandler extends Gui {
     public void onPlayerTick(TickEvent.PlayerTickEvent event) {
         PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("warehouse");
         try {
-        if (event.phase != TickEvent.Phase.END || mc.player == null || event.player != mc.player)
+        if (event.phase != TickEvent.Phase.END || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || event.player != com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer())
             return;
         if (scanRouteRunning && scanRouteCurrentTarget != null) {
-            scanRouteWaitTicks++;
+            if (scanRouteWaitStartMillis == 0L) scanRouteWaitStartMillis = System.currentTimeMillis();
+            scanRouteWaitTicks = (int) ((System.currentTimeMillis() - scanRouteWaitStartMillis) / 50L);
             if (scanRouteWaitTicks > 700) {
-                mc.player.sendMessage(new TextComponentString("§e[仓库] 扫描箱子超时，尝试下一个目标。"));
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§e[仓库] 扫描箱子超时，尝试下一个目标。"));
                 scanRouteCurrentTarget = null;
                 scanRouteWaitTicks = 0;
+                scanRouteWaitStartMillis = 0L;
                 startNextScanRouteChest();
             }
         }
@@ -482,12 +493,12 @@ public class WarehouseEventHandler extends Gui {
             openChestPolicyCompleted = false;
         }
 
-        if (mc.player.ticksExisted % 20 == 0) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().ticksExisted % 20 == 0) {
             WarehouseManager.updateCurrentWarehouse();
         }
 
-        if (oneClickDepositMode && WarehouseManager.currentWarehouse != null) {
-            if (mc.player.ticksExisted % 5 == 0) {
+        if (oneClickDepositMode && WarehouseManager.cfg().currentWarehouse != null) {
+            if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().ticksExisted % 5 == 0) {
                 updatePlayerItemKeys();
                 updateHighlightList();
             }
@@ -497,17 +508,17 @@ public class WarehouseEventHandler extends Gui {
 
         if (isStandardChestGui && currentOpenChestData != null && currentOpenChestData.autoDepositEnabled
                 && !openChestPolicyCompleted
-                && mc.player.openContainer instanceof ContainerChest) {
+                && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer instanceof ContainerChest) {
             if (autoDepositCooldown > 0) {
                 autoDepositCooldown--;
             } else {
                 Map<String, Integer> before = inventoryCounts();
-                executeAutoDeposit((ContainerChest) mc.player.openContainer);
+                executeAutoDeposit((ContainerChest) com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer);
                 depositIdleTicks = before.equals(inventoryCounts()) ? depositIdleTicks + AUTO_DEPOSIT_INTERVAL_TICKS : 0;
                 // 需求：固定每 2 tick 执行一次存入
                 autoDepositCooldown = Math.max(0, AUTO_DEPOSIT_INTERVAL_TICKS - 1);
             }
-            if (!hasDepositableItemsInOpenContainer((ContainerChest) mc.player.openContainer)) {
+            if (!hasDepositableItemsInOpenContainer((ContainerChest) com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer)) {
                 openChestPolicyCompleted = true;
                 completedDepositPolicies.add(currentOpenChestData);
                 if (!autoDepositRouteRunning) beginPostDeposit();
@@ -518,31 +529,33 @@ public class WarehouseEventHandler extends Gui {
                 autoDepositCurrentTarget = null;
                 autoDepositRouteQueue.clear();
                 completedDepositPolicies.clear();
-                mc.player.sendMessage(new TextComponentString(net.minecraft.client.resources.I18n.format("gui.modern.warehouse.deposit_stalled")));
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(net.minecraft.client.resources.I18n.format("gui.modern.warehouse.deposit_stalled")));
             }
         }
 
         if (autoDepositRouteRunning) {
             // 等待目标箱子打开
-            if (autoDepositCurrentTarget != null && !(mc.currentScreen instanceof GuiChest)) {
-                autoDepositOpenWaitTicks++;
+            if (autoDepositCurrentTarget != null && !(com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen() instanceof GuiChest)) {
+                if (autoDepositOpenWaitStartMillis == 0L) autoDepositOpenWaitStartMillis = System.currentTimeMillis();
+                autoDepositOpenWaitTicks = (int) ((System.currentTimeMillis() - autoDepositOpenWaitStartMillis) / 50L);
                 if (autoDepositOpenWaitTicks > 200) {
-                    if (mc.player != null) {
-                        mc.player.sendMessage(new TextComponentString("§e[仓库] 打开箱子超时，尝试下一个目标。"));
+                    if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                        com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§e[仓库] 打开箱子超时，尝试下一个目标。"));
                     }
                     startNextAutoDepositTarget();
                 }
             }
 
             // 目标箱子已打开并处理完毕后，关闭并前往下一个
-            if (mc.currentScreen instanceof GuiChest && mc.player.openContainer instanceof ContainerChest
+            if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen() instanceof GuiChest && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer instanceof ContainerChest
                     && autoDepositCurrentTarget != null) {
                 // 仅在当前箱子数据已就绪后再判断“是否处理完毕”，避免刚开箱即被误判跳过
                 if (currentOpenChestData != null
-                        && !hasDepositableItemsInOpenContainer((ContainerChest) mc.player.openContainer)) {
+                        && !hasDepositableItemsInOpenContainer((ContainerChest) com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer)) {
                     mc.displayGuiScreen(null);
                     autoDepositCurrentTarget = null;
                     autoDepositOpenWaitTicks = 0;
+                    autoDepositOpenWaitStartMillis = 0L;
                     ModUtils.DelayScheduler.instance.schedule(this::startNextAutoDepositTarget, 6);
                 }
             }
@@ -587,7 +600,7 @@ public class WarehouseEventHandler extends Gui {
             RayTraceResult rayTrace = mc.objectMouseOver;
             if (rayTrace != null && rayTrace.typeOfHit == RayTraceResult.Type.BLOCK) {
                 BlockPos hitPos = rayTrace.getBlockPos();
-                if (mc.world.getBlockState(hitPos).getBlock() instanceof BlockChest) {
+                if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().getBlockState(hitPos).getBlock() instanceof BlockChest) {
                     chestPos = hitPos;
                 }
             }
@@ -603,13 +616,13 @@ public class WarehouseEventHandler extends Gui {
         ModUtils.DelayScheduler.instance.schedule(() -> {
             PerformanceMonitor.PerformanceTimer delayedTimer = PerformanceMonitor.startTimer("warehouse");
             try {
-            if (!(mc.currentScreen instanceof GuiChest) || mc.player == null || mc.player.openContainer != container)
+            if (!(com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen() instanceof GuiChest) || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().openContainer != container)
                 return;
 
             Warehouse targetWarehouse = WarehouseManager.findWarehouseForPos(finalChestPos);
             if (targetWarehouse == null) {
                 WarehouseManager.updateCurrentWarehouse();
-                targetWarehouse = WarehouseManager.currentWarehouse;
+                targetWarehouse = WarehouseManager.cfg().currentWarehouse;
             }
 
             if (targetWarehouse != null) {
@@ -630,7 +643,7 @@ public class WarehouseEventHandler extends Gui {
                     scanRouteCurrentTarget = null;
                     scanRouteWaitTicks = 0;
                     ModUtils.DelayScheduler.instance.schedule(() -> {
-                        if (mc.currentScreen instanceof GuiChest) {
+                        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen() instanceof GuiChest) {
                             mc.displayGuiScreen(null);
                         }
                         startNextScanRouteChest();
@@ -662,9 +675,9 @@ public class WarehouseEventHandler extends Gui {
 
     private void updatePlayerItemKeys() {
         playerItemKeys.clear();
-        if (mc.player == null)
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null)
             return;
-        for (ItemStack stack : mc.player.inventory.mainInventory) {
+        for (ItemStack stack : com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventory.mainInventory) {
             if (stack.isEmpty())
                 continue;
 
@@ -687,7 +700,7 @@ public class WarehouseEventHandler extends Gui {
 
     private void updateHighlightList() {
         if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS)) {
-            if (WarehouseManager.currentWarehouse == null)
+            if (WarehouseManager.cfg().currentWarehouse == null)
                 return;
             if (playerItemKeys.isEmpty()) {
                 mythosScriptMod.LOGGER.info("[高亮调试] 退出：玩家背包中未检测到可识别的物品。");
@@ -697,10 +710,10 @@ public class WarehouseEventHandler extends Gui {
         }
 
         chestsToHighlight.clear();
-        if (WarehouseManager.currentWarehouse == null || playerItemKeys.isEmpty())
+        if (WarehouseManager.cfg().currentWarehouse == null || playerItemKeys.isEmpty())
             return;
 
-        for (ChestData chestData : WarehouseManager.currentWarehouse.chests) {
+        for (ChestData chestData : WarehouseManager.cfg().currentWarehouse.chests) {
             if (chestData.depositItemsConfigured || chestData.designatedItems != null && !chestData.designatedItems.isEmpty()) {
                 if (hasAnyDepositableForChest(chestData)) chestsToHighlight.add(chestData.pos);
                 continue;
@@ -774,16 +787,16 @@ public class WarehouseEventHandler extends Gui {
     }
 
     private void updateDesignatedItems(ChestData chest, ContainerChest container) {
-        if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && mc.player != null) {
-            mc.player.sendMessage(new TextComponentString("§d[调试] §7开始更新箱子指定物品列表..."));
+        if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§d[调试] §7开始更新箱子指定物品列表..."));
         }
 
         Set<String> foundItems = new HashSet<>();
         IInventory chestInventory = container.getLowerChestInventory();
         int inventorySize = chestInventory.getSizeInventory();
 
-        if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && mc.player != null) {
-            mc.player.sendMessage(new TextComponentString(String.format("§d[调试] §7检测到箱子大小为: %d 格", inventorySize)));
+        if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(String.format("§d[调试] §7检测到箱子大小为: %d 格", inventorySize)));
         }
 
         for (int i = 0; i < inventorySize; i++) {
@@ -791,8 +804,8 @@ public class WarehouseEventHandler extends Gui {
             if (stack.isEmpty())
                 continue;
 
-            if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && mc.player != null) {
-                mc.player.sendMessage(new TextComponentString(String.format("§d[调试] §7 -> 在槽位 %d 找到物品: %s * %d", i,
+            if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(String.format("§d[调试] §7 -> 在槽位 %d 找到物品: %s * %d", i,
                         stack.getDisplayName(), stack.getCount())));
             }
 
@@ -813,22 +826,22 @@ public class WarehouseEventHandler extends Gui {
         }
         chest.designatedItems = foundItems;
 
-        if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && mc.player != null) {
-            mc.player.sendMessage(new TextComponentString("§d[调试] §7检测到箱子中储存物品: " + String.join(", ", foundItems)));
+        if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString("§d[调试] §7检测到箱子中储存物品: " + String.join(", ", foundItems)));
         }
 
         WarehouseManager.saveWarehouses();
     }
 
     private void executeAutoDeposit(ContainerChest container) {
-        if (mc.player == null || currentOpenChestData == null || currentOpenChestData.designatedItems.isEmpty()) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || currentOpenChestData == null || currentOpenChestData.designatedItems.isEmpty()) {
             return;
         }
 
         List<Integer> slotsToClick = new ArrayList<>();
 
         for (Slot slot : container.inventorySlots) {
-            if (slot.inventory == mc.player.inventory && slot.getHasStack()) {
+            if (slot.inventory == com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventory && slot.getHasStack()) {
                 if (depositableCount(currentOpenChestData, slot) <= 0) continue;
                 ItemStack playerStack = slot.getStack();
                 String playerItemName = playerStack.getDisplayName();
@@ -845,8 +858,8 @@ public class WarehouseEventHandler extends Gui {
                             if (!shulkerItem.isEmpty()
                                     && currentOpenChestData.designatedItems.contains(shulkerItem.getDisplayName())) {
                                 shouldDeposit = true;
-                                if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && mc.player != null) {
-                                    mc.player.sendMessage(new TextComponentString(
+                                if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
                                             String.format("§d[调试] §a潜影盒匹配！§7因其内部含有 [%s]，将存入潜影盒 [%s]。",
                                                     shulkerItem.getDisplayName(), playerItemName)));
                                 }
@@ -857,8 +870,8 @@ public class WarehouseEventHandler extends Gui {
                 } else {
                     if (currentOpenChestData.designatedItems.contains(playerItemName)) {
                         shouldDeposit = true;
-                        if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && mc.player != null) {
-                            mc.player.sendMessage(new TextComponentString(
+                        if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
                                     String.format("§d[调试] §a散件匹配！§7将存入物品 [%s]。", playerItemName)));
                         }
                     }
@@ -877,29 +890,29 @@ public class WarehouseEventHandler extends Gui {
             Slot source = container.getSlot(slotToClick);
             int count = depositableCount(currentOpenChestData, source);
             if (count >= source.getStack().getCount()) {
-                mc.playerController.windowClick(container.windowId, slotToClick, 0, ClickType.QUICK_MOVE, mc.player);
-            } else if (mc.player.inventory.getItemStack().isEmpty()) {
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(container.windowId, slotToClick, 0, ClickType.QUICK_MOVE, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer());
+            } else if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventory.getItemStack().isEmpty()) {
                 // Keep the reserved part in its original slot while moving only the excess.
                 int reserve = source.getStack().getCount() - count;
-                mc.playerController.windowClick(container.windowId, slotToClick, 0, ClickType.PICKUP, mc.player);
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(container.windowId, slotToClick, 0, ClickType.PICKUP, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer());
                 for (int i = 0; i < reserve; i++) {
-                    mc.playerController.windowClick(container.windowId, slotToClick, 1, ClickType.PICKUP, mc.player);
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(container.windowId, slotToClick, 1, ClickType.PICKUP, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer());
                 }
                 for (Slot target : container.inventorySlots) {
-                    if (target.inventory == mc.player.inventory || mc.player.inventory.getItemStack().isEmpty()) continue;
-                    ItemStack cursor = mc.player.inventory.getItemStack();
+                    if (target.inventory == com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventory || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventory.getItemStack().isEmpty()) continue;
+                    ItemStack cursor = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventory.getItemStack();
                     if (target.isItemValid(cursor) && (!target.getHasStack()
                             || ItemStack.areItemsEqual(target.getStack(), cursor)
                             && ItemStack.areItemStackTagsEqual(target.getStack(), cursor))) {
-                        mc.playerController.windowClick(container.windowId, target.slotNumber, 0, ClickType.PICKUP, mc.player);
+                        com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(container.windowId, target.slotNumber, 0, ClickType.PICKUP, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer());
                     }
                 }
-                if (!mc.player.inventory.getItemStack().isEmpty()) {
-                    mc.playerController.windowClick(container.windowId, slotToClick, 0, ClickType.PICKUP, mc.player);
+                if (!com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().inventory.getItemStack().isEmpty()) {
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(container.windowId, slotToClick, 0, ClickType.PICKUP, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer());
                 }
             }
-            if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && mc.player != null) {
-                mc.player.sendMessage(new TextComponentString(String.format("§d[调试] §b执行存入操作，点击槽位: %d", slotToClick)));
+            if (ModConfig.isDebugFlagEnabled(DebugModule.WAREHOUSE_ANALYSIS) && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(String.format("§d[调试] §b执行存入操作，点击槽位: %d", slotToClick)));
             }
         }
     }

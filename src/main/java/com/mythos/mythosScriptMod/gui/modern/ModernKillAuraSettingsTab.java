@@ -4,12 +4,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 import org.lwjgl.input.Keyboard;
 
+import com.mythos.mythosScriptMod.config.session.SessionConfigSync;
 import com.mythos.mythosScriptMod.gui.MainUiLayoutManager;
 import com.mythos.mythosScriptMod.handlers.KillAuraHandler;
 import com.mythos.mythosScriptMod.handlers.KillAuraHandler.HuntPickupRule;
@@ -50,15 +52,53 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     private static final int CONTENT_TOP_INSET = 3;
     private static final int LIST_CARD_HEIGHT = 25;
     private static final int LIST_CARD_GAP = 4;
+    private static final int NAME_GROUP_HEADER_HEIGHT = 26;
+    private static final int CARD_HEADER_HEIGHT = 26;
+    private static final int CARD_PADDING = 6;
+
+    private static final String[] ATTACK_MODES = {
+            KillAuraHandler.ATTACK_MODE_NORMAL,
+            KillAuraHandler.ATTACK_MODE_PACKET,
+            KillAuraHandler.ATTACK_MODE_TELEPORT,
+            KillAuraHandler.ATTACK_MODE_SEQUENCE,
+            KillAuraHandler.ATTACK_MODE_MOUSE_CLICK };
+    private static final String KEY_RANGE = "attackRange";
+    private static final String KEY_INTERVAL = "minAttackIntervalTicks";
+    private static final String KEY_STRENGTH = "minAttackStrength";
+    private static final String KEY_TARGETS = "targetsPerAttack";
+    private static final String KEY_DELAY = "attackSequenceDelayTicksSpec";
+    private static final String KEY_TP_ROTATION = "teleportAttackRotationPackets";
+    /**
+     * 内核在非活动模式下不读取这些字段，所以每种模式只保存自己卡片里出现的键；
+     * 若把五套全量参数互相覆盖，切模式时会把别的模式无效的值带过去。
+     */
+    private static final Map<String, List<String>> MODE_PROFILE_KEYS = new java.util.LinkedHashMap<>();
+    /**
+     * 非当前模式的档案只活在这里；当前模式的真值始终是 KillAuraHandler 的静态字段，
+     * 这样内核、预设与 MCP 改动当前参数时不需要知道档案的存在。
+     */
+    private static final Map<String, Map<String, String>> MODE_PROFILES = new java.util.LinkedHashMap<>();
+
+    static {
+        List<String> base = Arrays.asList(KEY_RANGE, KEY_INTERVAL, KEY_STRENGTH, KEY_TARGETS);
+        MODE_PROFILE_KEYS.put(KillAuraHandler.ATTACK_MODE_NORMAL, base);
+        MODE_PROFILE_KEYS.put(KillAuraHandler.ATTACK_MODE_PACKET, base);
+        List<String> teleport = new ArrayList<>(base);
+        teleport.addAll(Arrays.asList("teleportStepDistance", "teleportStationAttackRadius", "teleportActionsPerTick",
+                "teleportStepDistancePerAction", KEY_TP_ROTATION, "teleportViewMode"));
+        MODE_PROFILE_KEYS.put(KillAuraHandler.ATTACK_MODE_TELEPORT, teleport);
+        MODE_PROFILE_KEYS.put(KillAuraHandler.ATTACK_MODE_SEQUENCE, Arrays.asList(KEY_RANGE, KEY_DELAY));
+        MODE_PROFILE_KEYS.put(KillAuraHandler.ATTACK_MODE_MOUSE_CLICK, Arrays.asList(KEY_RANGE, KEY_STRENGTH, KEY_DELAY));
+    }
 
     private enum Group {
         PRESET("gui.modern.killaura.u001", "gui.modern.killaura.u002"),
         ATTACK("gui.modern.killaura.u003", "gui.modern.killaura.u004"),
+        ROTATION("gui.modern.killaura.u064", "gui.modern.killaura.u065"),
         TARGET("gui.modern.killaura.u005", "gui.modern.killaura.u006"),
         NAME_FILTER("gui.modern.killaura.u007", "gui.modern.killaura.u008"),
         HUNT("gui.modern.killaura.u009", "gui.modern.killaura.u010"),
-        PROTECTION("gui.modern.killaura.u011", "gui.modern.killaura.u012"),
-        STATS("gui.modern.killaura.u013", "gui.modern.killaura.u014" );
+        PROTECTION("gui.modern.killaura.u011", "gui.modern.killaura.u012" );
 
         private final String label;
         private final String tooltip;
@@ -80,9 +120,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     }
 
     private enum NameListKind {
-        NEARBY,
-        WHITELIST,
-        BLACKLIST
+        NEARBY
     }
 
     private enum RuleInputKey {
@@ -203,10 +241,26 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         private final String title;
         private final String tooltip;
         private final List<Field> fields = new ArrayList<>();
+        private String modeCard;
+        private boolean collapsible;
+        private boolean expanded = true;
+        private ModernMainLayout.Rect headerBounds;
+        private ModernMainLayout.Rect activateBounds;
 
         private Section(String title, String tooltip) {
             this.title = title == null ? "" : title;
             this.tooltip = tooltip == null ? "" : tooltip;
+        }
+
+        private Section collapsed() {
+            this.collapsible = true;
+            this.expanded = false;
+            return this;
+        }
+
+        private Section modeCard(String mode) {
+            this.modeCard = mode;
+            return collapsed();
         }
     }
 
@@ -250,6 +304,29 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         }
     }
 
+    private static final class NameGroupCard {
+        private final int index;
+        private final ModernMainLayout.Rect bounds;
+        private final ModernMainLayout.Rect typeBounds;
+        private final ModernMainLayout.Rect enabledBounds;
+        private final ModernMainLayout.Rect moveUpBounds;
+        private final ModernMainLayout.Rect moveDownBounds;
+        private final ModernMainLayout.Rect removeBounds;
+        private final List<NameRowHit> rows = new ArrayList<>();
+
+        private NameGroupCard(int index, ModernMainLayout.Rect bounds, ModernMainLayout.Rect typeBounds,
+                ModernMainLayout.Rect enabledBounds, ModernMainLayout.Rect moveUpBounds,
+                ModernMainLayout.Rect moveDownBounds, ModernMainLayout.Rect removeBounds) {
+            this.index = index;
+            this.bounds = bounds;
+            this.typeBounds = typeBounds;
+            this.enabledBounds = enabledBounds;
+            this.moveUpBounds = moveUpBounds;
+            this.moveDownBounds = moveDownBounds;
+            this.removeBounds = removeBounds;
+        }
+    }
+
     private static final class RuleCardHit {
         private final int index;
         private final ModernMainLayout.Rect bounds;
@@ -276,6 +353,8 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     }
 
     private final Map<Group, List<Section>> sections = new EnumMap<>(Group.class);
+    private String expandedForMode = "";
+    private final Map<String, Section> modeCards = new java.util.LinkedHashMap<>();
     private final List<SectionLayout> sectionLayouts = new ArrayList<>();
     private final List<PresetCardHit> presetCardHits = new ArrayList<>();
     private final List<NameRowHit> nameRowHits = new ArrayList<>();
@@ -309,11 +388,12 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
     private ModernMainLayout.Rect nameEntryBounds;
     private ModernMainLayout.Rect scanNamesBounds;
-    private ModernMainLayout.Rect addWhitelistBounds;
-    private ModernMainLayout.Rect addBlacklistBounds;
+    private ModernMainLayout.Rect addToNameGroupBounds;
+    private ModernMainLayout.Rect newNameGroupBounds;
+    private ModernMainLayout.Rect renameNameGroupBounds;
     private ModernMainLayout.Rect nearbyListBounds;
-    private ModernMainLayout.Rect whitelistListBounds;
-    private ModernMainLayout.Rect blacklistListBounds;
+    private ModernMainLayout.Rect nameGroupsBounds;
+    private final List<NameGroupCard> nameGroupCards = new ArrayList<>();
 
     private ModernMainLayout.Rect addRuleBounds;
     private ModernMainLayout.Rect deleteRuleBounds;
@@ -327,7 +407,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     private ModernTextField presetNameField;
     private ModernTextField nameEntryField;
     private int selectedPresetIndex = -1;
-    private int selectedWhitelistIndex = -1;
+    private int selectedNameGroupIndex = -1;
     private int selectedRuleIndex = -1;
     private int selectedRuleExpressionIndex = -1;
     private int scrollOffset;
@@ -350,11 +430,24 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     private boolean immediatePersistenceOccurred;
     private boolean draftDirty;
     private State savedState;
+    /**
+     * Nexus 切换挂载会话时，静态配置字段会整套换成另一个 bot 的，但这个页签实例和它的
+     * 草稿（基线、输入框文字、模式档案）还留着上一个 bot 的。所以草稿按会话分开：
+     * 切走时停放，切回来原样恢复，保存/取消也只作用于当前会话。
+     */
+    private final Map<String, ParkedDraft> parkedDrafts = new HashMap<>();
+    private String draftOwner = "";
+    private int draftGeneration;
+    /**
+     * 当前会话草稿的最近快照。切换被察觉时静态字段已经是新会话的了，没法再从里面
+     * 取旧草稿，只能靠每次交互后记下的这份。
+     */
+    private ParkedDraft liveDraft;
     private final ModernExpressionEditorPanel ruleExpressionEditor = new ModernExpressionEditorPanel();
     private final ModernPathSequencePicker attackSequencePicker = new ModernPathSequencePicker(new ModernPathSequencePicker.Selection() {
         @Override
         public void accept(String name) {
-            KillAuraHandler.attackSequenceName = safe(name).trim();
+            KillAuraHandler.cfg().attackSequenceName = safe(name).trim();
             draftDirty = true;
         }
     });
@@ -371,46 +464,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     }
 
     private void buildFields() {
-        Section attackCore = section(Group.ATTACK, "gui.modern.killaura.u031", "gui.modern.killaura.u032");
-        attackCore.fields.add(choice("attackMode", "gui.modern.killaura.u031", "gui.modern.killaura.u033",
-                choices(new Choice(KillAuraHandler.ATTACK_MODE_NORMAL, "gui.modern.killaura.u034"),
-                        new Choice(KillAuraHandler.ATTACK_MODE_PACKET, "gui.modern.killaura.u035"),
-                        new Choice(KillAuraHandler.ATTACK_MODE_TELEPORT, "gui.modern.killaura.u036"),
-                        new Choice(KillAuraHandler.ATTACK_MODE_SEQUENCE, "gui.modern.killaura.u037"),
-                        new Choice(KillAuraHandler.ATTACK_MODE_MOUSE_CLICK, "gui.modern.killaura.u038"))).fullWidth()
-                .enabledWhen(condition("notAimOnly")));
-        attackCore.fields.add(integer("teleportAttackPacketLimitPerTick", "gui.modern.killaura.u039",
-                "gui.modern.killaura.u040",
-                KillAuraHandler.MIN_TELEPORT_ATTACK_PACKET_LIMIT_PER_TICK,
-                KillAuraHandler.MAX_TELEPORT_ATTACK_PACKET_LIMIT_PER_TICK)
-                .visibleWhen(condition("teleportMode")).enabledWhen(condition("notAimOnly")));
-        attackCore.fields.add(decimal("teleportStepDistance", "gui.modern.killaura.u041",
-                "gui.modern.killaura.u042", 0, 200)
-                .visibleWhen(condition("teleportMode")).enabledWhen(condition("notAimOnly")));
-        attackCore.fields.add(decimal("teleportStationAttackRadius", "gui.modern.killaura.u043",
-                "gui.modern.killaura.u044", 0, 200)
-                .visibleWhen(condition("teleportMode")).enabledWhen(condition("notAimOnly")));
-        attackCore.fields.add(toggle("aimOnlyMode", "gui.modern.killaura.u045", "gui.modern.killaura.u046"));
-        attackCore.fields.add(sequence("attackSequenceName", "gui.modern.killaura.u047", "gui.modern.killaura.u048", "gui.modern.killaura.u049")
-                .fullWidth().visibleWhen(condition("sequenceMode")));
-        attackCore.fields.add(text("attackSequenceDelayTicksSpec", "gui.modern.killaura.u050", "gui.modern.killaura.u051", "1-6")
-                .visibleWhen(condition("delayMode")));
-        attackCore.fields.add(action("gui.modern.killaura.u052", "gui.modern.killaura.u053", "gui.modern.killaura.u054", new FieldAction() {
-            @Override
-            public void execute() {
-                PathSequenceManager.initializePathSequences();
-                showStatus("gui.modern.killaura.u055");
-            }
-        }).visibleWhen(condition("sequenceMode")));
-        attackCore.fields.add(toggle("onlyWeapon", "gui.modern.killaura.u056", "gui.modern.killaura.u057")
-                .enabledWhen(condition("weaponApplicable")));
-        attackCore.fields.add(toggle("requireLineOfSight", "gui.modern.killaura.u058", "gui.modern.killaura.u059"));
-        attackCore.fields.add(toggle("throughWallAttack", "gui.modern.killaura.u060", "gui.modern.killaura.u061"));
-        attackCore.fields.add(toggle("focusSingleTarget", "gui.modern.killaura.u062", "gui.modern.killaura.u063"));
-        attackCore.fields.add(toggle("blockWhileAttacking", "gui.modern.killaura.block_while_attacking",
-                "gui.modern.killaura.block_while_attacking_desc").enabledWhen(condition("notAimOnly")));
-
-        Section rotation = section(Group.ATTACK, "gui.modern.killaura.u064", "gui.modern.killaura.u065");
+        Section rotation = section(Group.ROTATION, "gui.modern.killaura.u064", "gui.modern.killaura.u065");
         rotation.fields.add(toggle("rotateToTarget", "gui.modern.killaura.u066", "gui.modern.killaura.u067")
                 .enabledWhen(condition("rotationAvailable")));
         rotation.fields.add(toggle("smoothRotation", "gui.modern.killaura.u068", "gui.modern.killaura.u069")
@@ -427,6 +481,75 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                 .enabledWhen(condition("rotationAvailable")));
         rotation.fields.add(text("aimPitchOffsetSpec", "gui.modern.killaura.u080", "gui.modern.killaura.u081", "0")
                 .enabledWhen(condition("rotationAvailable")));
+        rotation.fields.add(decimal("minTurnSpeed", "gui.modern.killaura.u166", "gui.modern.killaura.u167", 1, 40)
+                .enabledWhen(condition("smoothRotation")));
+        rotation.fields.add(decimal("maxTurnSpeed", "gui.modern.killaura.u168", "gui.modern.killaura.u169", 1, 60)
+                .enabledWhen(condition("smoothRotation")));
+
+        Section normalCard = modeCard(KillAuraHandler.ATTACK_MODE_NORMAL, "gui.modern.killaura.u034");
+        addCadenceFields(normalCard, KillAuraHandler.ATTACK_MODE_NORMAL);
+
+        Section packetCard = modeCard(KillAuraHandler.ATTACK_MODE_PACKET, "gui.modern.killaura.u035");
+        addCadenceFields(packetCard, KillAuraHandler.ATTACK_MODE_PACKET);
+
+        String tp = KillAuraHandler.ATTACK_MODE_TELEPORT;
+        Section teleportCard = modeCard(tp, "gui.modern.killaura.u036");
+        addCadenceFields(teleportCard, tp);
+        teleportCard.fields.add(decimal(profileKey(tp, "teleportStepDistance"), "gui.modern.killaura.u041",
+                "gui.modern.killaura.u042", 0, 200).enabledWhen(condition("notAimOnly")));
+        teleportCard.fields.add(decimal(profileKey(tp, "teleportStationAttackRadius"), "gui.modern.killaura.u043",
+                "gui.modern.killaura.u044", 0, 200).enabledWhen(condition("notAimOnly")));
+        teleportCard.fields.add(integer(profileKey(tp, "teleportActionsPerTick"), "gui.modern.killaura.u261",
+                "gui.modern.killaura.u262", 1, 5).enabledWhen(condition("notAimOnly")));
+        teleportCard.fields.add(decimal(profileKey(tp, "teleportStepDistancePerAction"), "gui.modern.killaura.u263",
+                "gui.modern.killaura.u264", 0, 10).enabledWhen(condition("notAimOnly")));
+        teleportCard.fields.add(toggle(profileKey(tp, KEY_TP_ROTATION), "gui.modern.killaura.u265",
+                "gui.modern.killaura.u266").enabledWhen(condition("notAimOnly")));
+        teleportCard.fields.add(choice(profileKey(tp, "teleportViewMode"), "gui.modern.killaura.u256",
+                "gui.modern.killaura.u257",
+                choices(new Choice(KillAuraHandler.TELEPORT_VIEW_FOLLOW, "gui.modern.killaura.u258"),
+                        new Choice(KillAuraHandler.TELEPORT_VIEW_LOCK, "gui.modern.killaura.u259"),
+                        new Choice(KillAuraHandler.TELEPORT_VIEW_AVATAR, "gui.modern.killaura.u260")))
+                .fullWidth().enabledWhen(condition("notAimOnly")));
+
+        // 序列模式下内核跳过间隔、蓄力与目标数判定，放进卡里只会让人以为它们生效。
+        String sequenceMode = KillAuraHandler.ATTACK_MODE_SEQUENCE;
+        Section sequenceCard = modeCard(sequenceMode, "gui.modern.killaura.u037");
+        sequenceCard.fields.add(decimal(profileKey(sequenceMode, KEY_RANGE), "gui.modern.killaura.u162",
+                "gui.modern.killaura.u163", 1, 100));
+        sequenceCard.fields.add(text(profileKey(sequenceMode, KEY_DELAY), "gui.modern.killaura.u280",
+                "gui.modern.killaura.u281", "1-6"));
+        sequenceCard.fields.add(sequence("attackSequenceName", "gui.modern.killaura.u047", "gui.modern.killaura.u048",
+                "gui.modern.killaura.u049").fullWidth());
+        sequenceCard.fields.add(action("gui.modern.killaura.u052", "gui.modern.killaura.u053", "gui.modern.killaura.u054",
+                new FieldAction() {
+                    @Override
+                    public void execute() {
+                        PathSequenceManager.initializePathSequences();
+                        showStatus("gui.modern.killaura.u055");
+                    }
+                }).fullWidth());
+
+        // 模拟点击一次只点准星下的那个实体，目标数在内核里固定为 1。
+        String click = KillAuraHandler.ATTACK_MODE_MOUSE_CLICK;
+        Section clickCard = modeCard(click, "gui.modern.killaura.u038");
+        clickCard.fields.add(decimal(profileKey(click, KEY_RANGE), "gui.modern.killaura.u162",
+                "gui.modern.killaura.u163", 1, 100).enabledWhen(condition("notAimOnly")));
+        clickCard.fields.add(decimal(profileKey(click, KEY_STRENGTH), "gui.modern.killaura.u164",
+                "gui.modern.killaura.u165", 0, 1).enabledWhen(condition("notAimOnly")));
+        clickCard.fields.add(text(profileKey(click, KEY_DELAY), "gui.modern.killaura.u278",
+                "gui.modern.killaura.u279", "1-6").enabledWhen(condition("notAimOnly")));
+
+        // 先选攻击方式再看通用开关；攻击方式的切换只由卡片完成，顶部不再保留重复的五选一。
+        Section attackCore = section(Group.ATTACK, "gui.modern.killaura.u267", "gui.modern.killaura.u268");
+        attackCore.fields.add(toggle("aimOnlyMode", "gui.modern.killaura.u045", "gui.modern.killaura.u046"));
+        attackCore.fields.add(toggle("onlyWeapon", "gui.modern.killaura.u056", "gui.modern.killaura.u057")
+                .enabledWhen(condition("weaponApplicable")));
+        attackCore.fields.add(toggle("requireLineOfSight", "gui.modern.killaura.u058", "gui.modern.killaura.u059"));
+        attackCore.fields.add(toggle("throughWallAttack", "gui.modern.killaura.u060", "gui.modern.killaura.u061"));
+        attackCore.fields.add(toggle("focusSingleTarget", "gui.modern.killaura.u062", "gui.modern.killaura.u063"));
+        attackCore.fields.add(toggle("blockWhileAttacking", "gui.modern.killaura.block_while_attacking",
+                "gui.modern.killaura.block_while_attacking_desc").enabledWhen(condition("notAimOnly")));
 
         Section targets = section(Group.TARGET, "gui.modern.killaura.u082", "gui.modern.killaura.u083");
         targets.fields.add(toggle("targetHostile", "gui.modern.killaura.u084", "gui.modern.killaura.u085"));
@@ -456,8 +579,6 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         }));
 
         Section names = section(Group.NAME_FILTER, "gui.modern.killaura.u116", "gui.modern.killaura.u117");
-        names.fields.add(toggle("enableNameWhitelist", "gui.modern.killaura.u118", "gui.modern.killaura.u119"));
-        names.fields.add(toggle("enableNameBlacklist", "gui.modern.killaura.u120", "gui.modern.killaura.u121"));
         names.fields.add(decimal("nearbyEntityScanRange", "gui.modern.killaura.u122", "gui.modern.killaura.u123", 1, 64).fullWidth());
 
         Section hunt = section(Group.HUNT, "gui.modern.killaura.u124", "gui.modern.killaura.u125");
@@ -492,23 +613,33 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         protection.fields.add(toggle("enableFullBrightVision", "gui.modern.killaura.u156", "gui.modern.killaura.u157"));
         protection.fields.add(decimal("fullBrightGamma", "gui.modern.killaura.u158", "gui.modern.killaura.u159", 1, 1000)
                 .enabledWhen(condition("fullBright")));
-
-        Section stats = section(Group.STATS, "gui.modern.killaura.u160", "gui.modern.killaura.u161");
-        stats.fields.add(decimal("attackRange", "gui.modern.killaura.u162", "gui.modern.killaura.u163", 1, 100));
-        stats.fields.add(decimal("minAttackStrength", "gui.modern.killaura.u164", "gui.modern.killaura.u165", 0, 1)
-                .enabledWhen(condition("normalAttackStats")));
-        stats.fields.add(decimal("minTurnSpeed", "gui.modern.killaura.u166", "gui.modern.killaura.u167", 1, 40));
-        stats.fields.add(decimal("maxTurnSpeed", "gui.modern.killaura.u168", "gui.modern.killaura.u169", 1, 60));
-        stats.fields.add(integer("minAttackIntervalTicks", "gui.modern.killaura.u170", "gui.modern.killaura.u171", 0, 20)
-                .enabledWhen(condition("normalAttackStats")));
-        stats.fields.add(integer("targetsPerAttack", "gui.modern.killaura.u172", "gui.modern.killaura.u173", 1, 50)
-                .enabledWhen(condition("normalAttackStats")));
     }
 
     private Section section(Group group, String title, String tooltip) {
         Section section = new Section(title, tooltip);
         sections.get(group).add(section);
         return section;
+    }
+
+    private Section modeCard(String mode, String title) {
+        Section card = section(Group.ATTACK, title, "gui.modern.killaura.u269").modeCard(mode);
+        modeCards.put(mode, card);
+        return card;
+    }
+
+    private void addCadenceFields(Section card, String mode) {
+        card.fields.add(decimal(profileKey(mode, KEY_RANGE), "gui.modern.killaura.u162", "gui.modern.killaura.u163",
+                1, 100).enabledWhen(condition("notAimOnly")));
+        card.fields.add(integer(profileKey(mode, KEY_INTERVAL), "gui.modern.killaura.u170", "gui.modern.killaura.u171",
+                0, 20).enabledWhen(condition("notAimOnly")));
+        card.fields.add(decimal(profileKey(mode, KEY_STRENGTH), "gui.modern.killaura.u164", "gui.modern.killaura.u165",
+                0, 1).enabledWhen(condition("notAimOnly")));
+        card.fields.add(integer(profileKey(mode, KEY_TARGETS), "gui.modern.killaura.u172", "gui.modern.killaura.u173",
+                1, 50).enabledWhen(condition("notAimOnly")));
+    }
+
+    private static String profileKey(String mode, String key) {
+        return mode + ":" + key;
     }
 
     private static Field toggle(String key, String title, String tooltip) {
@@ -555,16 +686,147 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             layoutPreferencesLoaded = true;
         }
         KillAuraHandler.loadConfig();
+        loadModeProfiles();
+        expandActiveModeCard();
         createInputFields(renderer);
         refreshPresetCards("");
         refreshNearbyNames();
         savedState = new State();
         draftDirty = false;
+        draftOwner = SessionConfigSync.loadedOwner();
+        draftGeneration = SessionConfigSync.generation();
+        parkedDrafts.clear();
+        liveDraft = null;
         initialized = true;
+    }
+
+    private static final class ParkedDraft {
+        private final State saved;
+        private final State draft;
+        private final Map<String, String> inputs;
+        private final Map<String, Map<String, String>> profiles;
+        private final boolean dirty;
+        private final boolean immediatePersistence;
+
+        private ParkedDraft(State saved, State draft, Map<String, String> inputs,
+                Map<String, Map<String, String>> profiles, boolean dirty, boolean immediatePersistence) {
+            this.saved = saved;
+            this.draft = draft;
+            this.inputs = inputs;
+            this.profiles = profiles;
+            this.dirty = dirty;
+            this.immediatePersistence = immediatePersistence;
+        }
+    }
+
+    /** 挂载的会话换了：先停放上一个会话的草稿，再显示新会话的（有停放的草稿就恢复它）。 */
+    private void syncDraftOwner() {
+        if (!initialized) {
+            return;
+        }
+        int generation = SessionConfigSync.generation();
+        if (generation == draftGeneration) {
+            return;
+        }
+        draftGeneration = generation;
+        // 同一会话也要走一遍：切走再切回来时静态字段已按配置文件重载，草稿预览得重新套上。
+        String owner = SessionConfigSync.loadedOwner();
+        if (liveDraft != null) {
+            parkedDrafts.put(draftOwner, liveDraft);
+        } else {
+            parkedDrafts.remove(draftOwner);
+        }
+        draftOwner = owner;
+        // 弹窗里编辑的是上一个会话的值，关掉免得确认后写进新会话。
+        if (attackSequencePicker.isOpen()) {
+            attackSequencePicker.handleEscape();
+        }
+        if (ruleExpressionEditor.isOpen()) {
+            ruleExpressionEditor.handleEscape();
+        }
+        clearInputFocus();
+        scrollbar.endDrag();
+        selectedNameGroupIndex = -1;
+        ParkedDraft parked = parkedDrafts.remove(owner);
+        liveDraft = parked;
+        if (parked == null) {
+            // 静态字段刚由 SessionConfigSync 按该会话的配置文件重载过，就是它已保存的值。
+            savedState = new State();
+            loadModeProfiles();
+            draftDirty = false;
+            immediatePersistenceOccurred = false;
+        } else {
+            // 启用状态是会话的运行状态，不属于草稿，保留它现在的值。
+            boolean enabled = KillAuraHandler.enabled();
+            savedState = parked.saved;
+            parked.draft.apply();
+            KillAuraHandler.setEnabledSilently(enabled);
+            MODE_PROFILES.clear();
+            MODE_PROFILES.putAll(copyModeProfiles(parked.profiles));
+            draftDirty = parked.dirty;
+            immediatePersistenceOccurred = parked.immediatePersistence;
+        }
+        expandActiveModeCard();
+        refreshAfterStateChange();
+        if (parked != null) {
+            restoreInputTexts(parked.inputs);
+        }
+    }
+
+    /** 交互结束后记下当前会话的草稿，供切换会话时停放。 */
+    private void rememberDraft() {
+        if (!initialized) {
+            return;
+        }
+        if (!draftDirty && !immediatePersistenceOccurred) {
+            liveDraft = null;
+            return;
+        }
+        liveDraft = new ParkedDraft(savedState, new State(), captureInputTexts(),
+                copyModeProfiles(MODE_PROFILES), draftDirty, immediatePersistenceOccurred);
+    }
+
+    private Map<String, String> captureInputTexts() {
+        Map<String, String> texts = new HashMap<>();
+        for (List<Section> groupSections : sections.values()) {
+            for (Section section : groupSections) {
+                for (Field field : section.fields) {
+                    if (field.usesInput() && field.input != null) {
+                        texts.put(field.key, field.input.getText());
+                    }
+                }
+            }
+        }
+        return texts;
+    }
+
+    private void restoreInputTexts(Map<String, String> texts) {
+        if (texts == null) {
+            return;
+        }
+        for (List<Section> groupSections : sections.values()) {
+            for (Section section : groupSections) {
+                for (Field field : section.fields) {
+                    String text = texts.get(field.key);
+                    if (text != null && field.usesInput() && field.input != null) {
+                        field.input.setText(text);
+                    }
+                }
+            }
+        }
+    }
+
+    private static Map<String, Map<String, String>> copyModeProfiles(Map<String, Map<String, String>> source) {
+        Map<String, Map<String, String>> copy = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, Map<String, String>> entry : source.entrySet()) {
+            copy.put(entry.getKey(), new java.util.LinkedHashMap<>(entry.getValue()));
+        }
+        return copy;
     }
 
     @Override
     public void updateScreen() {
+        syncDraftOwner();
         attackSequencePicker.updateScreen();
         ruleExpressionEditor.updateScreen();
         forEachInput(new InputVisitor() {
@@ -578,7 +840,9 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     @Override
     public void draw(FontRenderer renderer, ModernMainLayout.Rect contentBounds, int mouseX, int mouseY) {
         ensureInitialized(renderer);
+        syncDraftOwner();
         this.fontRenderer = renderer;
+        syncExpandedModeCard();
         focusedInputBeforeLayoutReset = findFocusedInput();
         hoveredTooltip = "";
         drawingContent = false;
@@ -662,6 +926,13 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
     @Override
     public boolean mouseClicked(int mouseX, int mouseY, int mouseButton) {
+        syncDraftOwner();
+        boolean handled = handleMouseClicked(mouseX, mouseY, mouseButton);
+        rememberDraft();
+        return handled;
+    }
+
+    private boolean handleMouseClicked(int mouseX, int mouseY, int mouseButton) {
         if (attackSequencePicker.isOpen()) {
             if (mouseButton == 0) {
                 attackSequencePicker.mouseClicked(mouseX, mouseY);
@@ -675,9 +946,9 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             return false;
         }
         if (contains(headerToggleBounds, mouseX, mouseY)) {
-            KillAuraHandler.INSTANCE.setEnabled(!KillAuraHandler.enabled);
+            KillAuraHandler.INSTANCE.setEnabled(!KillAuraHandler.enabled());
             immediatePersistenceOccurred = true;
-            showStatus(KillAuraHandler.enabled ? "gui.modern.killaura.u174" : "gui.modern.killaura.u175");
+            showStatus(KillAuraHandler.enabled() ? "gui.modern.killaura.u174" : "gui.modern.killaura.u175");
             return true;
         }
         if (contains(saveBounds, mouseX, mouseY)) {
@@ -719,6 +990,13 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
     @Override
     public boolean keyTyped(char typedChar, int keyCode) {
+        syncDraftOwner();
+        boolean handled = handleKeyTyped(typedChar, keyCode);
+        rememberDraft();
+        return handled;
+    }
+
+    private boolean handleKeyTyped(char typedChar, int keyCode) {
         if (attackSequencePicker.isOpen()) {
             return attackSequencePicker.keyTyped(typedChar, keyCode);
         }
@@ -758,6 +1036,13 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
     @Override
     public boolean mouseReleased(int mouseX, int mouseY, int state) {
+        syncDraftOwner();
+        boolean handled = handleMouseReleased(mouseX, mouseY, state);
+        rememberDraft();
+        return handled;
+    }
+
+    private boolean handleMouseReleased(int mouseX, int mouseY, int state) {
         if (attackSequencePicker.isOpen()) {
             return attackSequencePicker.mouseReleased(mouseX, mouseY, state);
         }
@@ -846,6 +1131,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
      */
     @Override
     public List<GuiElementInspector.GuiElementInfo> getMcpGuiElements() {
+        syncDraftOwner();
         List<GuiElementInspector.GuiElementInfo> result = new ArrayList<>();
         if (panelBounds == null) {
             return result;
@@ -859,6 +1145,18 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
         for (SectionLayout sectionLayout : sectionLayouts) {
             if (sectionLayout == null || sectionLayout.section == null) {
+                continue;
+            }
+            Section mcpSection = sectionLayout.section;
+            if (mcpSection.modeCard != null && mcpSection.headerBounds != null) {
+                String cardPath = "screen/GuiModernMainScreen/tab/toggle_kill_aura/mode/" + mcpSection.modeCard;
+                addMcpElement(result, cardPath + "/header", t(mcpSection.title), mcpSection.headerBounds);
+                if (mcpSection.activateBounds != null) {
+                    addMcpElement(result, cardPath + "/activate", t("gui.modern.killaura.u274"),
+                            mcpSection.activateBounds);
+                }
+            }
+            if (mcpSection.collapsible && !mcpSection.expanded) {
                 continue;
             }
             for (Field field : sectionLayout.section.fields) {
@@ -882,8 +1180,8 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         }
 
         addMcpElement(result, "screen/GuiModernMainScreen/tab/toggle_kill_aura/footer/enabled",
-                t(KillAuraHandler.enabled ? "gui.modern.killaura.u180" : "gui.modern.killaura.u181"),
-                headerToggleBounds, "toggle", String.valueOf(KillAuraHandler.enabled), true, true,
+                t(KillAuraHandler.enabled() ? "gui.modern.killaura.u180" : "gui.modern.killaura.u181"),
+                headerToggleBounds, "toggle", String.valueOf(KillAuraHandler.enabled()), true, true,
                 java.util.Arrays.asList("click", "set"), Collections.<String>emptyList());
         addMcpElement(result, "screen/GuiModernMainScreen/tab/toggle_kill_aura/footer/save",
                 t("gui.modern.killaura.u221"), saveBounds, "action", "", true, false,
@@ -920,15 +1218,41 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                     t("gui.modern.killaura.u194"), nameEntryBounds);
             addMcpElement(result, "screen/GuiModernMainScreen/tab/toggle_kill_aura/special/name/scan",
                     t("gui.modern.killaura.u197"), scanNamesBounds);
-            addMcpElement(result, "screen/GuiModernMainScreen/tab/toggle_kill_aura/special/name/add_whitelist",
-                    t("gui.modern.killaura.u198"), addWhitelistBounds);
-            addMcpElement(result, "screen/GuiModernMainScreen/tab/toggle_kill_aura/special/name/add_blacklist",
-                    t("gui.modern.killaura.u199"), addBlacklistBounds);
+            addMcpElement(result, "screen/GuiModernMainScreen/tab/toggle_kill_aura/special/name/add_to_group",
+                    t("gui.modern.killaura.u282"), addToNameGroupBounds);
+            addMcpElement(result, "screen/GuiModernMainScreen/tab/toggle_kill_aura/special/name/new_group",
+                    t("gui.modern.killaura.u283"), newNameGroupBounds);
+            addMcpElement(result, "screen/GuiModernMainScreen/tab/toggle_kill_aura/special/name/rename_group",
+                    t("gui.modern.killaura.u284"), renameNameGroupBounds);
+            List<KillAuraHandler.NameFilterGroup> groups = nameGroups();
+            for (NameGroupCard card : nameGroupCards) {
+                if (card.index < 0 || card.index >= groups.size()) {
+                    continue;
+                }
+                KillAuraHandler.NameFilterGroup group = groups.get(card.index);
+                String base = "screen/GuiModernMainScreen/tab/toggle_kill_aura/special/name/group/" + card.index;
+                addMcpElement(result, base, nameGroupTitle(group, card.index), card.bounds);
+                addMcpElement(result, base + "/type", t(group.blacklist ? "gui.modern.killaura.u287"
+                        : "gui.modern.killaura.u286"), card.typeBounds);
+                addMcpElement(result, base + "/enabled", t(group.enabled ? "gui.modern.killaura.u288"
+                        : "gui.modern.killaura.u289"), card.enabledBounds);
+                addMcpElement(result, base + "/up", "↑", card.moveUpBounds);
+                addMcpElement(result, base + "/down", "↓", card.moveDownBounds);
+                addMcpElement(result, base + "/remove", "×", card.removeBounds);
+                for (NameRowHit row : card.rows) {
+                    String value = group.names != null && row.index < group.names.size()
+                            ? safe(group.names.get(row.index)) : "";
+                    addMcpElement(result, base + "/row/" + row.index, value, row.rowBounds);
+                    addMcpElement(result, base + "/row/" + row.index + "/up", "↑", row.moveUpBounds);
+                    addMcpElement(result, base + "/row/" + row.index + "/down", "↓", row.moveDownBounds);
+                    addMcpElement(result, base + "/row/" + row.index + "/remove", "×", row.removeBounds);
+                }
+            }
             for (NameRowHit hit : nameRowHits) {
                 if (hit == null || hit.rowBounds == null) {
                     continue;
                 }
-                List<String> values = listFor(hit.kind);
+                List<String> values = nearbyNames;
                 String value = values != null && hit.index >= 0 && hit.index < values.size()
                         ? safe(values.get(hit.index)) : "";
                 addMcpElement(result,
@@ -955,9 +1279,9 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                     t("gui.modern.killaura.u207"), deleteRuleBounds);
             for (RuleCardHit hit : ruleCardHits) {
                 if (hit != null) {
-                    HuntPickupRule rule = hit.index >= 0 && KillAuraHandler.huntPickupRules != null
-                            && hit.index < KillAuraHandler.huntPickupRules.size()
-                                    ? KillAuraHandler.huntPickupRules.get(hit.index) : null;
+                    HuntPickupRule rule = hit.index >= 0 && KillAuraHandler.cfg().huntPickupRules != null
+                            && hit.index < KillAuraHandler.cfg().huntPickupRules.size()
+                                    ? KillAuraHandler.cfg().huntPickupRules.get(hit.index) : null;
                     addMcpElement(result,
                             "screen/GuiModernMainScreen/tab/toggle_kill_aura/special/hunt/rule/" + hit.index,
                             rule == null ? "" : safe(rule.name), hit.bounds);
@@ -1114,6 +1438,13 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
     @Override
     public boolean setMcpText(String target, String text, boolean append) {
+        syncDraftOwner();
+        boolean handled = handleSetMcpText(target, text, append);
+        rememberDraft();
+        return handled;
+    }
+
+    private boolean handleSetMcpText(String target, String text, boolean append) {
         String normalizedTarget = target == null ? "" : target.trim().toLowerCase(Locale.ROOT);
         if (normalizedTarget.contains("/rule/expressions")
                 && !normalizedTarget.endsWith("/add") && !normalizedTarget.endsWith("/edit")
@@ -1163,12 +1494,30 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
     @Override
     public boolean setMcpValue(String target, String value) {
+        syncDraftOwner();
+        boolean handled = handleSetMcpValue(target, value);
+        rememberDraft();
+        return handled;
+    }
+
+    private boolean handleSetMcpValue(String target, String value) {
         String normalized = target == null ? "" : target.trim().toLowerCase(Locale.ROOT);
         String requested = value == null ? "" : value.trim();
+        if (normalized.endsWith("/field/attackmode") || normalized.equals("attackmode")) {
+            if (KillAuraHandler.aimOnlyMode()) return false;
+            for (String mode : ATTACK_MODES) {
+                if (mode.equalsIgnoreCase(requested)) {
+                    activeGroup = Group.ATTACK;
+                    switchAttackMode(mode);
+                    return true;
+                }
+            }
+            return false;
+        }
         if (normalized.endsWith("/footer/enabled") || normalized.equals("enabled")) {
             Boolean enabled = parseMcpBoolean(requested);
             if (enabled == null) return false;
-            if (KillAuraHandler.enabled != enabled.booleanValue()) {
+            if (KillAuraHandler.enabled() != enabled.booleanValue()) {
                 KillAuraHandler.INSTANCE.setEnabled(enabled.booleanValue());
                 immediatePersistenceOccurred = true;
             }
@@ -1257,6 +1606,10 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         for (PresetCardHit hit : presetCardHits) {
             if (hit != null && normalized.contains("/preset/card/" + hit.index)) return revealRect(hit.bounds);
         }
+        for (NameGroupCard card : nameGroupCards) {
+            String base = "/name/group/" + card.index;
+            if (normalized.endsWith(base) || normalized.contains(base + "/")) return revealRect(card.bounds);
+        }
         for (NameRowHit hit : nameRowHits) {
             if (hit != null && normalized.contains("/name/")
                     && normalized.endsWith("/" + hit.index)) return revealRect(hit.rowBounds);
@@ -1329,10 +1682,15 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         if (!initialized || savedState == null) {
             return;
         }
+        syncDraftOwner();
+        // 其它会话停放的草稿一并丢弃；它们下次挂载时会从自己的配置文件重载。
+        parkedDrafts.clear();
+        liveDraft = null;
         savedState.apply();
         if (immediatePersistenceOccurred) {
             KillAuraHandler.saveConfig();
         }
+        loadModeProfiles();
         immediatePersistenceOccurred = false;
         scrollbar.endDrag();
         draftDirty = false;
@@ -1342,7 +1700,8 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
     @Override
     public boolean isDirty() {
-        return draftDirty || immediatePersistenceOccurred;
+        syncDraftOwner();
+        return draftDirty || immediatePersistenceOccurred || !parkedDrafts.isEmpty();
     }
 
     private ModernMainLayout.Rect buildPanelBounds(ModernMainLayout.Rect contentBounds) {
@@ -1459,10 +1818,29 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                     }
                     continue;
                 }
+                boolean card = section.modeCard != null;
+                boolean open = !section.collapsible || section.expanded;
                 int sectionTop = currentY;
-                currentY += SECTION_HEADER_HEIGHT;
+                int headerHeight = card ? CARD_HEADER_HEIGHT : SECTION_HEADER_HEIGHT;
+                currentY += headerHeight;
+                if (assign) {
+                    section.headerBounds = new ModernMainLayout.Rect(x, sectionTop, width, headerHeight);
+                    section.activateBounds = null;
+                }
+                int sectionX = x;
+                int sectionWidth = width;
+                // 卡片内缩一圈，让边框把字段框在里面；折叠时仍要清掉字段坐标，否则隐藏输入框还能被点中。
+                if (card) {
+                    x = sectionX + CARD_PADDING;
+                    width = Math.max(1, sectionWidth - CARD_PADDING * 2);
+                }
+                if (!open) {
+                    for (Field field : visible) {
+                        field.clearBounds();
+                    }
+                }
                 int rowWidth = Math.max(1, (width - ROW_GAP * Math.max(0, columns - 1)) / columns);
-                int index = 0;
+                int index = open ? 0 : visible.size();
                 while (index < visible.size()) {
                     Field first = visible.get(index);
                     boolean full = first.fullWidth || columns == 1;
@@ -1491,11 +1869,16 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                     currentY += height + ROW_GAP;
                     index += second == null ? 1 : 2;
                 }
+                x = sectionX;
+                width = sectionWidth;
+                if (card && open) {
+                    currentY += CARD_PADDING - ROW_GAP;
+                }
                 if (assign) {
                     sectionLayouts.add(new SectionLayout(section,
                             new ModernMainLayout.Rect(x, sectionTop, width, Math.max(1, currentY - sectionTop))));
                 }
-                currentY += 3;
+                currentY += card ? ROW_GAP : 3;
             }
         }
         if (assign) {
@@ -1601,11 +1984,24 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
     private int nameContentHeight(int width) {
         int nearbyHeight = listPanelHeight(nearbyNames.size());
-        int whitelistHeight = listPanelHeight(nameListSize(NameListKind.WHITELIST));
-        int blacklistHeight = listPanelHeight(nameListSize(NameListKind.BLACKLIST));
-        int listsHeight = width >= 390 ? Math.max(whitelistHeight, blacklistHeight)
-                : whitelistHeight + blacklistHeight + 6;
-        return SPECIAL_TITLE_HEIGHT + 27 + 31 + nearbyHeight + 8 + listsHeight + 4;
+        return SPECIAL_TITLE_HEIGHT + 27 + 31 + nearbyHeight + 8 + nameGroupsPanelHeight() + 4;
+    }
+
+    private int nameGroupCardHeight(KillAuraHandler.NameFilterGroup group) {
+        int rows = group == null || group.names == null ? 0 : group.names.size();
+        return NAME_GROUP_HEADER_HEIGHT + Math.max(1, rows) * (LIST_CARD_HEIGHT + LIST_CARD_GAP) + 3;
+    }
+
+    private int nameGroupsPanelHeight() {
+        List<KillAuraHandler.NameFilterGroup> groups = nameGroups();
+        if (groups.isEmpty()) {
+            return 54;
+        }
+        int height = 24;
+        for (KillAuraHandler.NameFilterGroup group : groups) {
+            height += nameGroupCardHeight(group) + LIST_CARD_GAP;
+        }
+        return height + 3;
     }
 
     private int layoutNameContent(int x, int y, int width) {
@@ -1613,27 +2009,49 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         nameEntryBounds = new ModernMainLayout.Rect(x, y, width, 22);
         y += 27;
         int gap = 4;
-        int third = Math.max(1, (width - gap * 2) / 3);
-        scanNamesBounds = new ModernMainLayout.Rect(x, y, third, 20);
-        addWhitelistBounds = new ModernMainLayout.Rect(x + third + gap, y, third, 20);
-        addBlacklistBounds = new ModernMainLayout.Rect(x + (third + gap) * 2, y,
-                Math.max(1, width - (third + gap) * 2), 20);
+        int quarter = Math.max(1, (width - gap * 3) / 4);
+        scanNamesBounds = new ModernMainLayout.Rect(x, y, quarter, 20);
+        addToNameGroupBounds = new ModernMainLayout.Rect(x + quarter + gap, y, quarter, 20);
+        newNameGroupBounds = new ModernMainLayout.Rect(x + (quarter + gap) * 2, y, quarter, 20);
+        renameNameGroupBounds = new ModernMainLayout.Rect(x + (quarter + gap) * 3, y,
+                Math.max(1, width - (quarter + gap) * 3), 20);
         y += 31;
         nearbyListBounds = new ModernMainLayout.Rect(x, y, width, listPanelHeight(nearbyNames.size()));
         y = nearbyListBounds.bottom() + 8;
-        if (width >= 390) {
-            int half = Math.max(1, (width - gap) / 2);
-            int listHeight = Math.max(listPanelHeight(nameListSize(NameListKind.WHITELIST)),
-                    listPanelHeight(nameListSize(NameListKind.BLACKLIST)));
-            whitelistListBounds = new ModernMainLayout.Rect(x, y, half, listHeight);
-            blacklistListBounds = new ModernMainLayout.Rect(x + half + gap, y, Math.max(1, width - half - gap),
-                    listHeight);
-            return y + listHeight + 4;
+        nameGroupsBounds = new ModernMainLayout.Rect(x, y, width, nameGroupsPanelHeight());
+        nameGroupCards.clear();
+        List<KillAuraHandler.NameFilterGroup> groups = nameGroups();
+        int cardY = nameGroupsBounds.y + 20;
+        for (int i = 0; i < groups.size(); i++) {
+            KillAuraHandler.NameFilterGroup group = groups.get(i);
+            ModernMainLayout.Rect card = new ModernMainLayout.Rect(x + 7, cardY, Math.max(1, width - 14),
+                    nameGroupCardHeight(group));
+            int buttonY = card.y + 4;
+            int right = card.right() - 6;
+            ModernMainLayout.Rect remove = new ModernMainLayout.Rect(right - 15, buttonY, 15, 18);
+            ModernMainLayout.Rect down = new ModernMainLayout.Rect(right - 33, buttonY, 15, 18);
+            ModernMainLayout.Rect up = new ModernMainLayout.Rect(right - 51, buttonY, 15, 18);
+            ModernMainLayout.Rect enabledBounds = new ModernMainLayout.Rect(up.x - 4 - 40, buttonY, 40, 18);
+            ModernMainLayout.Rect typeBounds = new ModernMainLayout.Rect(enabledBounds.x - 4 - 52, buttonY, 52, 18);
+            NameGroupCard groupCard = new NameGroupCard(i, card, typeBounds, enabledBounds, up, down, remove);
+            int rowY = card.y + NAME_GROUP_HEADER_HEIGHT;
+            int rowCount = group.names == null ? 0 : group.names.size();
+            for (int row = 0; row < rowCount; row++) {
+                ModernMainLayout.Rect rowBounds = new ModernMainLayout.Rect(card.x + 6, rowY,
+                        Math.max(1, card.width - 12), LIST_CARD_HEIGHT);
+                ModernMainLayout.Rect rowRemove = new ModernMainLayout.Rect(rowBounds.right() - 18, rowBounds.y + 3, 15, 19);
+                // 只有白名单的先后有意义（目标优先级），黑名单不给排序按钮，免得误以为有优先级。
+                ModernMainLayout.Rect rowUp = group.blacklist ? null
+                        : new ModernMainLayout.Rect(rowBounds.right() - 54, rowBounds.y + 3, 15, 19);
+                ModernMainLayout.Rect rowDown = group.blacklist ? null
+                        : new ModernMainLayout.Rect(rowBounds.right() - 36, rowBounds.y + 3, 15, 19);
+                groupCard.rows.add(new NameRowHit(NameListKind.NEARBY, row, rowBounds, rowUp, rowDown, rowRemove));
+                rowY += LIST_CARD_HEIGHT + LIST_CARD_GAP;
+            }
+            nameGroupCards.add(groupCard);
+            cardY += card.height + LIST_CARD_GAP;
         }
-        whitelistListBounds = new ModernMainLayout.Rect(x, y, width, listPanelHeight(nameListSize(NameListKind.WHITELIST)));
-        y = whitelistListBounds.bottom() + 6;
-        blacklistListBounds = new ModernMainLayout.Rect(x, y, width, listPanelHeight(nameListSize(NameListKind.BLACKLIST)));
-        return blacklistListBounds.bottom() + 4;
+        return nameGroupsBounds.bottom() + 4;
     }
 
     private int pickupContentHeight(int width, int columns) {
@@ -1836,16 +2254,75 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                 "gui.modern.killaura.u195", mouseX, mouseY);
         drawInput(nameEntryField, nameEntryBounds, "gui.modern.killaura.u196", true, mouseX, mouseY);
         drawActionButton(scanNamesBounds, "gui.modern.killaura.u197", true, mouseX, mouseY, false);
-        drawActionButton(addWhitelistBounds, "gui.modern.killaura.u198", hasNameEntry(), mouseX, mouseY, false);
-        drawActionButton(addBlacklistBounds, "gui.modern.killaura.u199", hasNameEntry(), mouseX, mouseY, true);
+        drawActionButton(addToNameGroupBounds, "gui.modern.killaura.u282", hasNameEntry(), mouseX, mouseY, false);
+        drawActionButton(newNameGroupBounds, "gui.modern.killaura.u283", true, mouseX, mouseY, false);
+        drawActionButton(renameNameGroupBounds, "gui.modern.killaura.u284",
+                hasNameEntry() && selectedNameGroup() != null, mouseX, mouseY, false);
         drawNameListPanel("gui.modern.killaura.u200", nearbyNames, nearbyListBounds, NameListKind.NEARBY, mouseX, mouseY);
-        if (whitelistListBounds != null) {
-            drawNameListPanel("gui.modern.killaura.u201", KillAuraHandler.nameWhitelist, whitelistListBounds, NameListKind.WHITELIST, mouseX,
-                    mouseY);
+        drawNameGroups(mouseX, mouseY);
+    }
+
+    private void drawNameGroups(int mouseX, int mouseY) {
+        if (nameGroupsBounds == null) {
+            return;
         }
-        if (blacklistListBounds != null) {
-            drawNameListPanel("gui.modern.killaura.u202", KillAuraHandler.nameBlacklist, blacklistListBounds, NameListKind.BLACKLIST,
-                    mouseX, mouseY);
+        List<KillAuraHandler.NameFilterGroup> groups = nameGroups();
+        ModernUiRenderer.drawSubtlePanel(nameGroupsBounds.x, nameGroupsBounds.y, nameGroupsBounds.width,
+                nameGroupsBounds.height, 5, 0xFF111A22, ModernUiRenderer.BORDER_SUBTLE);
+        ModernUiRenderer.drawText(fontRenderer, t("gui.modern.killaura.u285") + "  " + groups.size(),
+                nameGroupsBounds.x + 8, nameGroupsBounds.y + 5, ModernUiRenderer.MUTED_TEXT,
+                Math.max(30, nameGroupsBounds.width - 16));
+        if (groups.isEmpty()) {
+            ModernUiRenderer.drawText(fontRenderer, "gui.modern.killaura.u290", nameGroupsBounds.x + 8,
+                    nameGroupsBounds.y + 27, ModernUiRenderer.MUTED_TEXT, nameGroupsBounds.width - 16);
+            return;
+        }
+        for (NameGroupCard card : nameGroupCards) {
+            if (card.index < 0 || card.index >= groups.size()) {
+                continue;
+            }
+            KillAuraHandler.NameFilterGroup group = groups.get(card.index);
+            boolean selected = card.index == selectedNameGroupIndex;
+            ModernMainLayout.Rect bounds = card.bounds;
+            ModernUiRenderer.drawSubtlePanel(bounds.x, bounds.y, bounds.width, bounds.height, 5,
+                    selected ? ModernUiRenderer.SELECTED_SURFACE : ModernUiRenderer.SHELL_RAISED,
+                    selected ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
+            int titleRight = card.typeBounds.x - 6;
+            ModernUiRenderer.drawText(fontRenderer, nameGroupTitle(group, card.index) + "  "
+                            + (group.names == null ? 0 : group.names.size()),
+                    bounds.x + 8, bounds.y + (NAME_GROUP_HEADER_HEIGHT - fontRenderer.FONT_HEIGHT) / 2,
+                    group.enabled ? selected ? ModernUiRenderer.SELECTED_TEXT : ModernUiRenderer.TEXT
+                            : ModernUiRenderer.MUTED_TEXT,
+                    Math.max(24, titleRight - bounds.x - 8));
+            drawActionButton(card.typeBounds, group.blacklist ? "gui.modern.killaura.u287" : "gui.modern.killaura.u286",
+                    true, mouseX, mouseY, group.blacklist);
+            drawActionButton(card.enabledBounds, group.enabled ? "gui.modern.killaura.u288" : "gui.modern.killaura.u289",
+                    true, mouseX, mouseY, false);
+            drawTinyButton(card.moveUpBounds, "↑", card.index > 0, mouseX, mouseY);
+            drawTinyButton(card.moveDownBounds, "↓", card.index + 1 < groups.size(), mouseX, mouseY);
+            drawTinyButton(card.removeBounds, "×", true, mouseX, mouseY);
+            if (card.rows.isEmpty()) {
+                ModernUiRenderer.drawText(fontRenderer, "gui.modern.killaura.u203", bounds.x + 12,
+                        bounds.y + NAME_GROUP_HEADER_HEIGHT + 8, ModernUiRenderer.MUTED_TEXT, bounds.width - 24);
+                continue;
+            }
+            for (NameRowHit row : card.rows) {
+                String value = row.index < group.names.size() && group.names.get(row.index) != null
+                        ? group.names.get(row.index) : "";
+                ModernMainLayout.Rect rowBounds = row.rowBounds;
+                boolean hovered = rowBounds.contains(mouseX, mouseY);
+                ModernUiRenderer.drawSubtlePanel(rowBounds.x, rowBounds.y, rowBounds.width, rowBounds.height, 4,
+                        hovered ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SURFACE,
+                        ModernUiRenderer.BORDER_SUBTLE);
+                int actionWidth = group.blacklist ? 21 : 58;
+                ModernUiRenderer.drawText(fontRenderer, (row.index + 1) + ". " + value, rowBounds.x + 7,
+                        rowBounds.y + (rowBounds.height - fontRenderer.FONT_HEIGHT) / 2,
+                        group.enabled ? ModernUiRenderer.TEXT : ModernUiRenderer.MUTED_TEXT,
+                        Math.max(24, rowBounds.width - actionWidth - 14));
+                drawTinyButton(row.moveUpBounds, "↑", row.index > 0, mouseX, mouseY);
+                drawTinyButton(row.moveDownBounds, "↓", row.index + 1 < group.names.size(), mouseX, mouseY);
+                drawTinyButton(row.removeBounds, "×", true, mouseX, mouseY);
+            }
         }
     }
 
@@ -1870,41 +2347,23 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             String value = values.get(i) == null ? "" : values.get(i);
             ModernMainLayout.Rect row = new ModernMainLayout.Rect(bounds.x + 7, cardY,
                     Math.max(1, bounds.width - 14), LIST_CARD_HEIGHT);
-            boolean selected = kind == NameListKind.WHITELIST && i == selectedWhitelistIndex;
             boolean hovered = row.contains(mouseX, mouseY);
             ModernUiRenderer.drawSubtlePanel(row.x, row.y, row.width, row.height, 4,
-                    selected ? ModernUiRenderer.SELECTED_SURFACE
-                            : hovered ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SURFACE,
-                    selected ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
-            String typeLabel = kind == NameListKind.NEARBY && i < nearbyNameTypes.size()
-                    ? nearbyNameTypes.get(i) : "";
+                    hovered ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SURFACE,
+                    ModernUiRenderer.BORDER_SUBTLE);
+            String typeLabel = i < nearbyNameTypes.size() ? nearbyNameTypes.get(i) : "";
             int typeWidth = typeLabel.isEmpty() ? 0 : fontRenderer.getStringWidth(typeLabel) + 10;
-            int actionWidth = kind == NameListKind.WHITELIST ? 58 : kind == NameListKind.NEARBY ? 0 : 21;
-            int textRight = row.right() - actionWidth - 4 - typeWidth;
+            int textRight = row.right() - 4 - typeWidth;
             ModernUiRenderer.drawText(fontRenderer, (i + 1) + ". " + value, row.x + 7,
-                    row.y + (row.height - fontRenderer.FONT_HEIGHT) / 2,
-                    selected ? ModernUiRenderer.SELECTED_TEXT : ModernUiRenderer.TEXT,
+                    row.y + (row.height - fontRenderer.FONT_HEIGHT) / 2, ModernUiRenderer.TEXT,
                     Math.max(24, textRight - row.x - 10));
             if (!typeLabel.isEmpty()) {
                 int labelWidth = fontRenderer.getStringWidth(typeLabel);
-                ModernUiRenderer.drawText(fontRenderer, typeLabel, row.right() - actionWidth - 4 - labelWidth,
+                ModernUiRenderer.drawText(fontRenderer, typeLabel, row.right() - 4 - labelWidth,
                         row.y + (row.height - fontRenderer.FONT_HEIGHT) / 2, ModernUiRenderer.MUTED_TEXT,
                         labelWidth + 4);
             }
-            ModernMainLayout.Rect remove = kind == NameListKind.NEARBY ? null
-                    : new ModernMainLayout.Rect(row.right() - 18, row.y + 3, 15, 19);
-            ModernMainLayout.Rect moveUp = null;
-            ModernMainLayout.Rect moveDown = null;
-            if (kind == NameListKind.WHITELIST) {
-                moveUp = new ModernMainLayout.Rect(row.right() - 54, row.y + 3, 15, 19);
-                moveDown = new ModernMainLayout.Rect(row.right() - 36, row.y + 3, 15, 19);
-                drawTinyButton(moveUp, "↑", i > 0, mouseX, mouseY);
-                drawTinyButton(moveDown, "↓", i + 1 < values.size(), mouseX, mouseY);
-            }
-            if (remove != null) {
-                drawTinyButton(remove, "×", true, mouseX, mouseY);
-            }
-            nameRowHits.add(new NameRowHit(kind, i, row, moveUp, moveDown, remove));
+            nameRowHits.add(new NameRowHit(kind, i, row, null, null, null));
             cardY += LIST_CARD_HEIGHT + LIST_CARD_GAP;
         }
         if (values.size() > maxRows) {
@@ -1967,7 +2426,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         ModernUiRenderer.drawText(fontRenderer, t("gui.modern.killaura.fmt.rule_list", String.valueOf(ruleCount())), ruleListBounds.x + 8, ruleListBounds.y + 5,
                 ModernUiRenderer.MUTED_TEXT, ruleListBounds.width - 16);
         ruleCardHits.clear();
-        if (KillAuraHandler.huntPickupRules == null || KillAuraHandler.huntPickupRules.isEmpty()) {
+        if (KillAuraHandler.cfg().huntPickupRules == null || KillAuraHandler.cfg().huntPickupRules.isEmpty()) {
             ModernUiRenderer.drawText(fontRenderer, "gui.modern.killaura.u210", ruleListBounds.x + 8,
                     ruleListBounds.y + 29, ModernUiRenderer.MUTED_TEXT, ruleListBounds.width - 16);
             return;
@@ -1975,8 +2434,8 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         int cardY = ruleListBounds.y + 20;
         int maxRows = Math.max(1, (ruleListBounds.height - 24) / (LIST_CARD_HEIGHT + LIST_CARD_GAP));
         int displayed = 0;
-        for (int index = 0; index < KillAuraHandler.huntPickupRules.size() && displayed < maxRows; index++) {
-            HuntPickupRule rule = KillAuraHandler.huntPickupRules.get(index);
+        for (int index = 0; index < KillAuraHandler.cfg().huntPickupRules.size() && displayed < maxRows; index++) {
+            HuntPickupRule rule = KillAuraHandler.cfg().huntPickupRules.get(index);
             if (rule == null) {
                 continue;
             }
@@ -1998,9 +2457,9 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             cardY += LIST_CARD_HEIGHT + LIST_CARD_GAP;
             displayed++;
         }
-        if (KillAuraHandler.huntPickupRules.size() > displayed) {
+        if (KillAuraHandler.cfg().huntPickupRules.size() > displayed) {
             String extra = t("gui.modern.killaura.fmt.more",
-                    String.valueOf(KillAuraHandler.huntPickupRules.size() - displayed));
+                    String.valueOf(KillAuraHandler.cfg().huntPickupRules.size() - displayed));
             int extraWidth = fontRenderer.getStringWidth(extra);
             ModernUiRenderer.drawText(fontRenderer, extra, ruleListBounds.right() - extraWidth - 7,
                     ruleListBounds.y + 5, ModernUiRenderer.MUTED_TEXT, extraWidth);
@@ -2036,7 +2495,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             boolean selected = rule.rarityFilters != null && rule.rarityFilters.contains(token);
             boolean hovered = bounds.contains(mouseX, mouseY);
             ModernUiRenderer.drawSubtlePanel(bounds.x, bounds.y, bounds.width, bounds.height, 4,
-                    selected ? ModernUiRenderer.ACCENT_DIM : hovered ? ModernUiRenderer.SURFACE_HOVER : 0xFF111A22,
+                    selected ? ModernUiRenderer.ACCENT_DIM : hovered ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SHELL_RAISED,
                     selected ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
             ModernUiRenderer.drawText(fontRenderer, KillAuraHandler.getHuntPickupRarityDisplayName(token), bounds.x + 6,
                     bounds.y + (bounds.height - fontRenderer.FONT_HEIGHT) / 2,
@@ -2152,10 +2611,10 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         headerToggleBounds = new ModernMainLayout.Rect(panelBounds.x + 14 + width - toggleWidth - 4,
                 y + 3, toggleWidth, 16);
         ModernUiRenderer.drawToggle(headerToggleBounds.x, headerToggleBounds.y, toggleWidth, 16,
-                KillAuraHandler.enabled, headerToggleBounds.contains(mouseX, mouseY));
-        ModernUiRenderer.drawText(fontRenderer, KillAuraHandler.enabled ? "gui.modern.killaura.u180"
+                KillAuraHandler.enabled(), headerToggleBounds.contains(mouseX, mouseY));
+        ModernUiRenderer.drawText(fontRenderer, KillAuraHandler.enabled() ? "gui.modern.killaura.u180"
                 : "gui.modern.killaura.u181", panelBounds.x + 18, y + 6,
-                KillAuraHandler.enabled ? ModernUiRenderer.SUCCESS : ModernUiRenderer.MUTED_TEXT,
+                KillAuraHandler.enabled() ? ModernUiRenderer.SUCCESS : ModernUiRenderer.MUTED_TEXT,
                 Math.max(1, width - toggleWidth - 24));
         drawInfoIcon(headerToggleBounds.x - 15, y + 5, "gui.modern.killaura.u182", mouseX, mouseY);
         if (statusVisible()) {
@@ -2230,6 +2689,19 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         if (activeSections == null) {
             return false;
         }
+        for (SectionLayout layout : sectionLayouts) {
+            Section section = layout.section;
+            if (!section.collapsible || !contains(section.headerBounds, mouseX, mouseY)) {
+                continue;
+            }
+            if (section.modeCard != null && contains(section.activateBounds, mouseX, mouseY)) {
+                switchAttackMode(section.modeCard);
+                return true;
+            }
+            clearInputFocus();
+            section.expanded = !section.expanded;
+            return true;
+        }
         for (Section section : activeSections) {
             for (Field field : section.fields) {
                 if (!field.visible() || field.rowBounds == null || !field.rowBounds.contains(mouseX, mouseY)) {
@@ -2242,21 +2714,22 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                     return true;
                 }
                 if (field.type == FieldType.TOGGLE) {
-                    State.setBoolean(field.key, !State.getBoolean(field.key));
+                    boolean value = !State.getBoolean(field.key);
+                    // 只瞄准会把模式强制改成序列；先走切换流程，把当前模式的参数存回它自己的档案。
+                    if ("aimOnlyMode".equals(field.key) && value) {
+                        switchAttackMode(KillAuraHandler.ATTACK_MODE_SEQUENCE);
+                    }
+                    State.setBoolean(field.key, value);
                     enforceTargetSelection();
                     draftDirty = true;
                     return true;
                 }
                 if (field.type == FieldType.CHOICE) {
                     String selected = findChoiceAt(field, mouseX, mouseY);
-                    if (selected != null) {
+                    if (selected != null && "attackMode".equals(field.key)) {
+                        switchAttackMode(selected);
+                    } else if (selected != null) {
                         State.setText(field.key, selected);
-                        if ("attackMode".equals(field.key) && KillAuraHandler.ATTACK_MODE_PACKET.equalsIgnoreCase(selected)) {
-                            KillAuraHandler.rotateToTarget = false;
-                            KillAuraHandler.smoothRotation = false;
-                            KillAuraHandler.rotateOnlyOnAttack = false;
-                            KillAuraHandler.relockOnlyWhenNoCrosshairTarget = false;
-                        }
                         if ("huntMode".equals(field.key)) {
                             KillAuraHandler.setHuntMode(selected);
                         }
@@ -2411,64 +2884,127 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             showStatus("gui.modern.killaura.u230");
             return true;
         }
-        if (contains(addWhitelistBounds, mouseX, mouseY) && hasNameEntry()) {
-            List<String> whitelist = listFor(NameListKind.WHITELIST);
-            addName(whitelist, nameEntryField.getText());
-            draftDirty = true;
-            selectedWhitelistIndex = Math.max(0, whitelist.size() - 1);
+        if (contains(addToNameGroupBounds, mouseX, mouseY) && hasNameEntry()) {
+            KillAuraHandler.NameFilterGroup group = selectedNameGroup();
+            if (group == null) {
+                // 还没有分组时直接建一个，免得用户先得去点「新建分组」才能加名字。
+                group = createNameGroup("");
+            }
+            addName(group.names, nameEntryField.getText());
             nameEntryField.setText("");
-            refreshAfterStateChange();
+            afterNameGroupsChanged();
             return true;
         }
-        if (contains(addBlacklistBounds, mouseX, mouseY) && hasNameEntry()) {
-            addName(listFor(NameListKind.BLACKLIST), nameEntryField.getText());
-            draftDirty = true;
+        if (contains(newNameGroupBounds, mouseX, mouseY)) {
+            createNameGroup(nameEntryField.getText());
             nameEntryField.setText("");
-            refreshAfterStateChange();
+            afterNameGroupsChanged();
+            showStatus("gui.modern.killaura.u292");
+            return true;
+        }
+        if (contains(renameNameGroupBounds, mouseX, mouseY) && hasNameEntry() && selectedNameGroup() != null) {
+            selectedNameGroup().name = nameEntryField.getText().trim();
+            nameEntryField.setText("");
+            afterNameGroupsChanged();
             return true;
         }
         for (NameRowHit hit : new ArrayList<>(nameRowHits)) {
             if (hit.rowBounds == null || !hit.rowBounds.contains(mouseX, mouseY)) {
                 continue;
             }
-            List<String> values = listFor(hit.kind);
-            if (values == null || hit.index < 0 || hit.index >= values.size()) {
-                return true;
+            if (hit.index >= 0 && hit.index < nearbyNames.size()) {
+                nameEntryField.setText(nearbyNames.get(hit.index));
             }
-            if (hit.kind == NameListKind.NEARBY) {
-                nameEntryField.setText(values.get(hit.index));
-                return true;
+            return true;
+        }
+        List<KillAuraHandler.NameFilterGroup> groups = nameGroups();
+        for (NameGroupCard card : new ArrayList<>(nameGroupCards)) {
+            if (card.bounds == null || !card.bounds.contains(mouseX, mouseY)
+                    || card.index < 0 || card.index >= groups.size()) {
+                continue;
             }
-            if (contains(hit.removeBounds, mouseX, mouseY)) {
-                values.remove(hit.index);
-                draftDirty = true;
-                if (hit.kind == NameListKind.WHITELIST) {
-                    selectedWhitelistIndex = Math.min(selectedWhitelistIndex, values.size() - 1);
-                }
-                refreshAfterStateChange();
-                return true;
-            }
-            if (hit.kind == NameListKind.WHITELIST && contains(hit.moveUpBounds, mouseX, mouseY) && hit.index > 0) {
-                Collections.swap(values, hit.index, hit.index - 1);
-                draftDirty = true;
-                selectedWhitelistIndex = hit.index - 1;
-                refreshAfterStateChange();
-                return true;
-            }
-            if (hit.kind == NameListKind.WHITELIST && contains(hit.moveDownBounds, mouseX, mouseY)
-                    && hit.index + 1 < values.size()) {
-                Collections.swap(values, hit.index, hit.index + 1);
-                draftDirty = true;
-                selectedWhitelistIndex = hit.index + 1;
-                refreshAfterStateChange();
-                return true;
-            }
-            if (hit.kind == NameListKind.WHITELIST) {
-                selectedWhitelistIndex = hit.index;
+            KillAuraHandler.NameFilterGroup group = groups.get(card.index);
+            selectedNameGroupIndex = card.index;
+            if (contains(card.typeBounds, mouseX, mouseY)) {
+                group.blacklist = !group.blacklist;
+                afterNameGroupsChanged();
+            } else if (contains(card.enabledBounds, mouseX, mouseY)) {
+                group.enabled = !group.enabled;
+                afterNameGroupsChanged();
+            } else if (contains(card.moveUpBounds, mouseX, mouseY) && card.index > 0) {
+                Collections.swap(groups, card.index, card.index - 1);
+                selectedNameGroupIndex = card.index - 1;
+                afterNameGroupsChanged();
+            } else if (contains(card.moveDownBounds, mouseX, mouseY) && card.index + 1 < groups.size()) {
+                Collections.swap(groups, card.index, card.index + 1);
+                selectedNameGroupIndex = card.index + 1;
+                afterNameGroupsChanged();
+            } else if (contains(card.removeBounds, mouseX, mouseY)) {
+                groups.remove(card.index);
+                selectedNameGroupIndex = Math.min(card.index, groups.size() - 1);
+                afterNameGroupsChanged();
+            } else {
+                handleNameGroupRowClick(card, group, mouseX, mouseY);
             }
             return true;
         }
         return true;
+    }
+
+    private void handleNameGroupRowClick(NameGroupCard card, KillAuraHandler.NameFilterGroup group,
+            int mouseX, int mouseY) {
+        List<String> values = group.names;
+        for (NameRowHit row : card.rows) {
+            if (values == null || !contains(row.rowBounds, mouseX, mouseY) || row.index >= values.size()) {
+                continue;
+            }
+            if (contains(row.removeBounds, mouseX, mouseY)) {
+                values.remove(row.index);
+                afterNameGroupsChanged();
+            } else if (contains(row.moveUpBounds, mouseX, mouseY) && row.index > 0) {
+                Collections.swap(values, row.index, row.index - 1);
+                afterNameGroupsChanged();
+            } else if (contains(row.moveDownBounds, mouseX, mouseY) && row.index + 1 < values.size()) {
+                Collections.swap(values, row.index, row.index + 1);
+                afterNameGroupsChanged();
+            }
+            return;
+        }
+    }
+
+    private List<KillAuraHandler.NameFilterGroup> nameGroups() {
+        if (KillAuraHandler.cfg().nameFilterGroups == null) {
+            KillAuraHandler.cfg().nameFilterGroups = new ArrayList<>();
+        }
+        return KillAuraHandler.cfg().nameFilterGroups;
+    }
+
+    private KillAuraHandler.NameFilterGroup selectedNameGroup() {
+        List<KillAuraHandler.NameFilterGroup> groups = nameGroups();
+        return selectedNameGroupIndex >= 0 && selectedNameGroupIndex < groups.size()
+                ? groups.get(selectedNameGroupIndex) : null;
+    }
+
+    private KillAuraHandler.NameFilterGroup createNameGroup(String rawName) {
+        List<KillAuraHandler.NameFilterGroup> groups = nameGroups();
+        String name = rawName == null ? "" : rawName.trim();
+        KillAuraHandler.NameFilterGroup group = new KillAuraHandler.NameFilterGroup(name, true, false,
+                new ArrayList<>());
+        groups.add(group);
+        selectedNameGroupIndex = groups.size() - 1;
+        return group;
+    }
+
+    private String nameGroupTitle(KillAuraHandler.NameFilterGroup group, int index) {
+        String name = group == null || group.name == null ? "" : group.name.trim();
+        return name.isEmpty() ? t("gui.modern.killaura.fmt.name_group", String.valueOf(index + 1)) : name;
+    }
+
+    /** 分组改动后立刻重算合并名单，草稿期间目标过滤就按新分组生效，和其它字段的即时预览一致。 */
+    private void afterNameGroupsChanged() {
+        KillAuraHandler.rebuildNameFiltersFromGroups();
+        draftDirty = true;
+        refreshAfterStateChange();
     }
 
     private boolean handlePickupClick(int mouseX, int mouseY) {
@@ -2481,11 +3017,11 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             rule.priority = 0;
             rule.maxDistance = 0.0F;
             rule.itemFilterExpressions = new ArrayList<>(Collections.singletonList("false"));
-            if (KillAuraHandler.huntPickupRules == null) {
-                KillAuraHandler.huntPickupRules = new ArrayList<>();
+            if (KillAuraHandler.cfg().huntPickupRules == null) {
+                KillAuraHandler.cfg().huntPickupRules = new ArrayList<>();
             }
-            KillAuraHandler.huntPickupRules.add(rule);
-            selectedRuleIndex = KillAuraHandler.huntPickupRules.size() - 1;
+            KillAuraHandler.cfg().huntPickupRules.add(rule);
+            selectedRuleIndex = KillAuraHandler.cfg().huntPickupRules.size() - 1;
             selectedRuleExpressionIndex = 0;
             draftDirty = true;
             syncRuleInputs();
@@ -2493,9 +3029,9 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             return true;
         }
         if (contains(deleteRuleBounds, mouseX, mouseY) && selectedRule() != null) {
-            KillAuraHandler.huntPickupRules.remove(selectedRuleIndex);
+            KillAuraHandler.cfg().huntPickupRules.remove(selectedRuleIndex);
             draftDirty = true;
-            selectedRuleIndex = Math.min(selectedRuleIndex, KillAuraHandler.huntPickupRules.size() - 1);
+            selectedRuleIndex = Math.min(selectedRuleIndex, KillAuraHandler.cfg().huntPickupRules.size() - 1);
             selectedRuleExpressionIndex = -1;
             syncRuleInputs();
             showStatus("gui.modern.killaura.u234");
@@ -2631,12 +3167,15 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
 
     @Override
     public void save() {
+        syncDraftOwner();
         saveDraft();
+        rememberDraft();
     }
 
     private void saveDraft() {
         applyEditableValues();
         KillAuraHandler.INSTANCE.resetRuntimeState();
+        storeModeProfiles();
         KillAuraHandler.saveConfig();
         savedState = new State();
         immediatePersistenceOccurred = false;
@@ -2648,65 +3187,70 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     private void applyDefaults() {
         applyEditableValues();
         draftDirty = true;
-        boolean enabled = KillAuraHandler.enabled;
-        KillAuraHandler.rotateToTarget = true;
-        KillAuraHandler.smoothRotation = true;
+        boolean enabled = KillAuraHandler.enabled();
+        KillAuraHandler.cfg().rotateToTarget = true;
+        KillAuraHandler.cfg().smoothRotation = true;
         KillAuraHandler.setSmoothMaxTurnStepSpec(KillAuraHandler.DEFAULT_SMOOTH_MAX_TURN_STEP_SPEC);
-        KillAuraHandler.rotateOnlyOnAttack = true;
-        KillAuraHandler.relockOnlyWhenNoCrosshairTarget = true;
-        KillAuraHandler.onlyAttackWhenLookingAtTarget = true;
-        KillAuraHandler.requireLineOfSight = true;
-        KillAuraHandler.throughWallAttack = false;
-        KillAuraHandler.targetHostile = true;
-        KillAuraHandler.targetPassive = false;
-        KillAuraHandler.targetPlayers = false;
-        KillAuraHandler.targetNpcs = false;
-        KillAuraHandler.targetEnderCrystal = false;
-        KillAuraHandler.onlyWeapon = false;
-        KillAuraHandler.aimOnlyMode = false;
-        KillAuraHandler.focusSingleTarget = true;
-        KillAuraHandler.blockWhileAttacking = false;
-        KillAuraHandler.ignoreInvisible = true;
-        KillAuraHandler.enableNoCollision = true;
-        KillAuraHandler.enableAntiKnockback = true;
-        KillAuraHandler.teleportAttackPacketLimitPerTick = KillAuraHandler.DEFAULT_TELEPORT_ATTACK_PACKET_LIMIT_PER_TICK;
-        KillAuraHandler.teleportStepDistance = KillAuraHandler.DEFAULT_TELEPORT_STEP_DISTANCE;
-        KillAuraHandler.teleportStationAttackRadius = KillAuraHandler.DEFAULT_TELEPORT_STATION_ATTACK_RADIUS;
-        KillAuraHandler.disableOnDisconnect = true;
-        KillAuraHandler.enableFullBrightVision = false;
-        KillAuraHandler.fullBrightGamma = 1000.0F;
-        KillAuraHandler.attackMode = KillAuraHandler.DEFAULT_ATTACK_MODE;
-        KillAuraHandler.attackSequenceName = "";
+        KillAuraHandler.cfg().rotateOnlyOnAttack = true;
+        KillAuraHandler.cfg().relockOnlyWhenNoCrosshairTarget = true;
+        KillAuraHandler.cfg().onlyAttackWhenLookingAtTarget = true;
+        KillAuraHandler.cfg().requireLineOfSight = false;
+        KillAuraHandler.cfg().throughWallAttack = false;
+        KillAuraHandler.cfg().targetHostile = true;
+        KillAuraHandler.cfg().targetPassive = false;
+        KillAuraHandler.cfg().targetPlayers = false;
+        KillAuraHandler.cfg().targetNpcs = false;
+        KillAuraHandler.cfg().targetEnderCrystal = false;
+        KillAuraHandler.cfg().onlyWeapon = false;
+        KillAuraHandler.setAimOnlyMode(false);
+        KillAuraHandler.cfg().focusSingleTarget = true;
+        KillAuraHandler.cfg().blockWhileAttacking = false;
+        KillAuraHandler.cfg().ignoreInvisible = true;
+        KillAuraHandler.cfg().enableNoCollision = true;
+        KillAuraHandler.cfg().enableAntiKnockback = true;
+        // 出厂字段就是 AVATAR；恢复默认同样回到 AVATAR，FOLLOW 只留给用户手动切。
+        KillAuraHandler.cfg().teleportViewMode = KillAuraHandler.TELEPORT_VIEW_AVATAR;
+        KillAuraHandler.cfg().teleportStepDistance = KillAuraHandler.DEFAULT_TELEPORT_STEP_DISTANCE;
+        KillAuraHandler.cfg().teleportStationAttackRadius = KillAuraHandler.DEFAULT_TELEPORT_STATION_ATTACK_RADIUS;
+        KillAuraHandler.cfg().teleportActionsPerTick = KillAuraHandler.DEFAULT_TELEPORT_ACTIONS_PER_TICK;
+        KillAuraHandler.cfg().teleportStepDistancePerAction = KillAuraHandler.DEFAULT_TELEPORT_STEP_DISTANCE_PER_ACTION;
+        KillAuraHandler.cfg().teleportAttackRotationPackets = false;
+        KillAuraHandler.setDisableOnDisconnect(true);
+        KillAuraHandler.cfg().enableFullBrightVision = false;
+        KillAuraHandler.cfg().fullBrightGamma = 1000.0F;
+        KillAuraHandler.cfg().attackMode = KillAuraHandler.DEFAULT_ATTACK_MODE;
+        KillAuraHandler.cfg().attackSequenceName = "";
         KillAuraHandler.setAttackSequenceDelayTicksSpec(KillAuraHandler.DEFAULT_ATTACK_SEQUENCE_DELAY_TICKS_SPEC);
         KillAuraHandler.setAimYawOffsetSpec(KillAuraHandler.DEFAULT_AIM_YAW_OFFSET_SPEC);
         KillAuraHandler.setAimPitchOffsetSpec(KillAuraHandler.DEFAULT_AIM_PITCH_OFFSET_SPEC);
         KillAuraHandler.setHuntMode(KillAuraHandler.HUNT_MODE_APPROACH);
-        KillAuraHandler.huntPickupItemsEnabled = false;
-        KillAuraHandler.huntPickupRules = new ArrayList<>();
-        KillAuraHandler.visualizeHuntRadius = false;
-        KillAuraHandler.huntRadius = 8.0F;
-        KillAuraHandler.huntFixedDistance = 4.2F;
-        KillAuraHandler.huntUpRange = KillAuraHandler.DEFAULT_HUNT_UP_RANGE;
-        KillAuraHandler.huntDownRange = KillAuraHandler.DEFAULT_HUNT_DOWN_RANGE;
-        KillAuraHandler.huntOrbitEnabled = false;
-        KillAuraHandler.huntJumpOrbitEnabled = true;
-        KillAuraHandler.huntOrbitSamplePoints = KillAuraHandler.DEFAULT_HUNT_ORBIT_SAMPLE_POINTS;
-        KillAuraHandler.enableNameWhitelist = false;
-        KillAuraHandler.enableNameBlacklist = false;
-        KillAuraHandler.nameWhitelist = new ArrayList<>();
-        KillAuraHandler.nameBlacklist = new ArrayList<>();
-        KillAuraHandler.nearbyEntityScanRange = 10.0F;
-        KillAuraHandler.attackRange = 4.2F;
+        KillAuraHandler.cfg().huntPickupItemsEnabled = false;
+        KillAuraHandler.cfg().huntPickupRules = new ArrayList<>();
+        KillAuraHandler.setVisualizeHuntRadius(false);
+        KillAuraHandler.cfg().huntRadius = 8.0F;
+        KillAuraHandler.cfg().huntFixedDistance = 4.2F;
+        KillAuraHandler.cfg().huntUpRange = KillAuraHandler.DEFAULT_HUNT_UP_RANGE;
+        KillAuraHandler.cfg().huntDownRange = KillAuraHandler.DEFAULT_HUNT_DOWN_RANGE;
+        KillAuraHandler.cfg().huntOrbitEnabled = false;
+        KillAuraHandler.cfg().huntJumpOrbitEnabled = true;
+        KillAuraHandler.cfg().huntOrbitSamplePoints = KillAuraHandler.DEFAULT_HUNT_ORBIT_SAMPLE_POINTS;
+        KillAuraHandler.cfg().nameFilterGroups = new ArrayList<>();
+        KillAuraHandler.rebuildNameFiltersFromGroups();
+        KillAuraHandler.cfg().nearbyEntityScanRange = 10.0F;
+        KillAuraHandler.cfg().attackRange = 4.2F;
         KillAuraHandler.resetHuntScoreWeights();
-        KillAuraHandler.minAttackStrength = 0.92F;
-        KillAuraHandler.minTurnSpeed = 4.0F;
-        KillAuraHandler.maxTurnSpeed = 18.0F;
-        KillAuraHandler.minAttackIntervalTicks = 2;
-        KillAuraHandler.targetsPerAttack = 1;
-        KillAuraHandler.noDamageAttackLimit = KillAuraHandler.DEFAULT_NO_DAMAGE_ATTACK_LIMIT;
-        KillAuraHandler.enabled = enabled;
+        KillAuraHandler.cfg().minAttackStrength = 0.92F;
+        KillAuraHandler.cfg().minTurnSpeed = 4.0F;
+        KillAuraHandler.cfg().maxTurnSpeed = 18.0F;
+        KillAuraHandler.cfg().minAttackIntervalTicks = 2;
+        KillAuraHandler.cfg().targetsPerAttack = 1;
+        KillAuraHandler.cfg().noDamageAttackLimit = KillAuraHandler.DEFAULT_NO_DAMAGE_ATTACK_LIMIT;
+        KillAuraHandler.setEnabledSilently(enabled);
         KillAuraHandler.INSTANCE.resetRuntimeState();
-        selectedWhitelistIndex = -1;
+        resetModeProfilesToLive();
+        applyTeleportProfileDefaults();
+        expandActiveModeCard();
+        selectedNameGroupIndex = -1;
         selectedRuleIndex = -1;
         selectedRuleExpressionIndex = -1;
         refreshAfterStateChange();
@@ -2721,6 +3265,8 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         if (immediatePersistenceOccurred) {
             KillAuraHandler.saveConfig();
         }
+        loadModeProfiles();
+        expandActiveModeCard();
         immediatePersistenceOccurred = false;
         draftDirty = false;
         refreshAfterStateChange();
@@ -2873,7 +3419,7 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         nearbyNames.clear();
         nearbyNameTypes.clear();
         java.util.LinkedHashMap<String, String> map = KillAuraHandler
-                .getNearbyEntityNameTypeMap(KillAuraHandler.nearbyEntityScanRange);
+                .getNearbyEntityNameTypeMap(KillAuraHandler.cfg().nearbyEntityScanRange);
         nearbyNames.addAll(map.keySet());
         nearbyNameTypes.addAll(map.values());
     }
@@ -2899,27 +3445,6 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         values.add(normalized);
     }
 
-    private List<String> listFor(NameListKind kind) {
-        if (kind == NameListKind.NEARBY) {
-            return nearbyNames;
-        }
-        if (kind == NameListKind.WHITELIST) {
-            if (KillAuraHandler.nameWhitelist == null) {
-                KillAuraHandler.nameWhitelist = new ArrayList<>();
-            }
-            return KillAuraHandler.nameWhitelist;
-        }
-        if (KillAuraHandler.nameBlacklist == null) {
-            KillAuraHandler.nameBlacklist = new ArrayList<>();
-        }
-        return KillAuraHandler.nameBlacklist;
-    }
-
-    private int nameListSize(NameListKind kind) {
-        List<String> values = listFor(kind);
-        return values == null ? 0 : values.size();
-    }
-
     private boolean hasNameEntry() {
         return nameEntryField != null && !KillAuraHandler.normalizeFilterName(nameEntryField.getText()).isEmpty();
     }
@@ -2939,15 +3464,15 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     }
 
     private int ruleCount() {
-        return KillAuraHandler.huntPickupRules == null ? 0 : KillAuraHandler.huntPickupRules.size();
+        return KillAuraHandler.cfg().huntPickupRules == null ? 0 : KillAuraHandler.cfg().huntPickupRules.size();
     }
 
     private HuntPickupRule selectedRule() {
-        if (KillAuraHandler.huntPickupRules == null || selectedRuleIndex < 0
-                || selectedRuleIndex >= KillAuraHandler.huntPickupRules.size()) {
+        if (KillAuraHandler.cfg().huntPickupRules == null || selectedRuleIndex < 0
+                || selectedRuleIndex >= KillAuraHandler.cfg().huntPickupRules.size()) {
             return null;
         }
-        return KillAuraHandler.huntPickupRules.get(selectedRuleIndex);
+        return KillAuraHandler.cfg().huntPickupRules.get(selectedRuleIndex);
     }
 
     private KillAuraPreset selectedPreset() {
@@ -3044,42 +3569,42 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             @Override
             public boolean matches() {
                 if ("notAimOnly".equals(name)) {
-                    return !KillAuraHandler.aimOnlyMode;
+                    return !KillAuraHandler.aimOnlyMode();
                 }
                 if ("sequenceMode".equals(name)) {
-                    return KillAuraHandler.ATTACK_MODE_SEQUENCE.equalsIgnoreCase(KillAuraHandler.attackMode);
+                    return KillAuraHandler.ATTACK_MODE_SEQUENCE.equalsIgnoreCase(KillAuraHandler.cfg().attackMode);
                 }
                 if ("delayMode".equals(name)) {
-                    return KillAuraHandler.ATTACK_MODE_SEQUENCE.equalsIgnoreCase(KillAuraHandler.attackMode)
-                            || KillAuraHandler.ATTACK_MODE_MOUSE_CLICK.equalsIgnoreCase(KillAuraHandler.attackMode);
+                    return KillAuraHandler.ATTACK_MODE_SEQUENCE.equalsIgnoreCase(KillAuraHandler.cfg().attackMode)
+                            || KillAuraHandler.ATTACK_MODE_MOUSE_CLICK.equalsIgnoreCase(KillAuraHandler.cfg().attackMode);
                 }
                 if ("teleportMode".equals(name)) {
-                    return KillAuraHandler.ATTACK_MODE_TELEPORT.equalsIgnoreCase(KillAuraHandler.attackMode);
+                    return KillAuraHandler.ATTACK_MODE_TELEPORT.equalsIgnoreCase(KillAuraHandler.cfg().attackMode);
                 }
                 if ("weaponApplicable".equals(name)) {
-                    return !KillAuraHandler.aimOnlyMode
-                            && !KillAuraHandler.ATTACK_MODE_SEQUENCE.equalsIgnoreCase(KillAuraHandler.attackMode);
+                    return !KillAuraHandler.aimOnlyMode()
+                            && !KillAuraHandler.ATTACK_MODE_SEQUENCE.equalsIgnoreCase(KillAuraHandler.cfg().attackMode);
                 }
                 if ("rotationAvailable".equals(name)) {
-                    return !KillAuraHandler.ATTACK_MODE_PACKET.equalsIgnoreCase(KillAuraHandler.attackMode)
-                            || KillAuraHandler.aimOnlyMode;
+                    return !KillAuraHandler.ATTACK_MODE_PACKET.equalsIgnoreCase(KillAuraHandler.cfg().attackMode)
+                            || KillAuraHandler.aimOnlyMode();
                 }
                 if ("smoothRotation".equals(name)) {
-                    return KillAuraHandler.smoothRotation && (condition("rotationAvailable").matches());
+                    return KillAuraHandler.cfg().smoothRotation && (condition("rotationAvailable").matches());
                 }
                 if ("lookAttackAvailable".equals(name)) {
-                    return !KillAuraHandler.aimOnlyMode
-                            && !KillAuraHandler.ATTACK_MODE_PACKET.equalsIgnoreCase(KillAuraHandler.attackMode)
-                            && KillAuraHandler.rotateToTarget
-                            && !KillAuraHandler.ATTACK_MODE_MOUSE_CLICK.equalsIgnoreCase(KillAuraHandler.attackMode);
+                    return !KillAuraHandler.aimOnlyMode()
+                            && !KillAuraHandler.ATTACK_MODE_PACKET.equalsIgnoreCase(KillAuraHandler.cfg().attackMode)
+                            && KillAuraHandler.cfg().rotateToTarget
+                            && !KillAuraHandler.ATTACK_MODE_MOUSE_CLICK.equalsIgnoreCase(KillAuraHandler.cfg().attackMode);
                 }
                 if ("relockAvailable".equals(name)) {
-                    return KillAuraHandler.aimOnlyMode || KillAuraHandler.rotateToTarget;
+                    return KillAuraHandler.aimOnlyMode() || KillAuraHandler.cfg().rotateToTarget;
                 }
                 if ("rotateOnlyAvailable".equals(name)) {
-                    return !KillAuraHandler.aimOnlyMode
-                            && !KillAuraHandler.ATTACK_MODE_PACKET.equalsIgnoreCase(KillAuraHandler.attackMode)
-                            && KillAuraHandler.rotateToTarget;
+                    return !KillAuraHandler.aimOnlyMode()
+                            && !KillAuraHandler.ATTACK_MODE_PACKET.equalsIgnoreCase(KillAuraHandler.cfg().attackMode)
+                            && KillAuraHandler.cfg().rotateToTarget;
                 }
                 if ("huntEnabled".equals(name)) {
                     return KillAuraHandler.isHuntEnabled();
@@ -3088,14 +3613,14 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                     return KillAuraHandler.isHuntFixedDistanceMode();
                 }
                 if ("orbitEnabled".equals(name)) {
-                    return KillAuraHandler.isHuntFixedDistanceMode() && KillAuraHandler.huntOrbitEnabled;
+                    return KillAuraHandler.isHuntFixedDistanceMode() && KillAuraHandler.cfg().huntOrbitEnabled;
                 }
                 if ("fullBright".equals(name)) {
-                    return KillAuraHandler.enableFullBrightVision;
+                    return KillAuraHandler.cfg().enableFullBrightVision;
                 }
                 if ("normalAttackStats".equals(name)) {
-                    return !KillAuraHandler.aimOnlyMode
-                            && !KillAuraHandler.ATTACK_MODE_SEQUENCE.equalsIgnoreCase(KillAuraHandler.attackMode);
+                    return !KillAuraHandler.aimOnlyMode()
+                            && !KillAuraHandler.ATTACK_MODE_SEQUENCE.equalsIgnoreCase(KillAuraHandler.cfg().attackMode);
                 }
                 return true;
             }
@@ -3225,15 +3750,154 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         return !statusMessage.isEmpty() && System.currentTimeMillis() < statusMessageUntil;
     }
 
+    private void switchAttackMode(String requested) {
+        String mode = canonicalMode(requested);
+        applyEditableValues();
+        String current = canonicalMode(KillAuraHandler.cfg().attackMode);
+        if (!mode.equals(current)) {
+            captureModeProfile(current);
+            KillAuraHandler.cfg().attackMode = mode;
+            applyModeProfile(mode);
+            if (KillAuraHandler.ATTACK_MODE_PACKET.equals(mode)) {
+                KillAuraHandler.cfg().rotateToTarget = false;
+                KillAuraHandler.cfg().smoothRotation = false;
+                KillAuraHandler.cfg().rotateOnlyOnAttack = false;
+                KillAuraHandler.cfg().relockOnlyWhenNoCrosshairTarget = false;
+            }
+        }
+        Section card = modeCards.get(mode);
+        if (card != null) {
+            card.expanded = true;
+        }
+        expandedForMode = mode;
+        draftDirty = true;
+        refreshAfterStateChange();
+        showStatus(t("gui.modern.killaura.u276", t(card == null ? mode : card.title)));
+    }
+
+    private void syncExpandedModeCard() {
+        if (!canonicalMode(KillAuraHandler.cfg().attackMode).equals(expandedForMode)) {
+            expandActiveModeCard();
+        }
+    }
+
+    private void expandActiveModeCard() {
+        String current = canonicalMode(KillAuraHandler.cfg().attackMode);
+        expandedForMode = current;
+        for (Map.Entry<String, Section> entry : modeCards.entrySet()) {
+            entry.getValue().expanded = entry.getKey().equals(current);
+        }
+    }
+
+    private static String canonicalMode(String mode) {
+        for (String candidate : ATTACK_MODES) {
+            if (candidate.equalsIgnoreCase(mode == null ? "" : mode.trim())) {
+                return candidate;
+            }
+        }
+        return KillAuraHandler.ATTACK_MODE_NORMAL;
+    }
+
+    private static String liveProfileValue(String key) {
+        return KEY_TP_ROTATION.equals(key) ? String.valueOf(State.getBoolean(key)) : State.getText(key);
+    }
+
+    private static void captureModeProfile(String mode) {
+        Map<String, String> profile = modeProfile(mode);
+        for (String key : MODE_PROFILE_KEYS.get(mode)) {
+            profile.put(key, liveProfileValue(key));
+        }
+    }
+
+    private static void applyModeProfile(String mode) {
+        Map<String, String> profile = modeProfile(mode);
+        for (String key : MODE_PROFILE_KEYS.get(mode)) {
+            String value = profile.get(key);
+            if (value == null) {
+                continue;
+            }
+            if (KEY_TP_ROTATION.equals(key)) {
+                State.setBoolean(key, Boolean.parseBoolean(value));
+            } else {
+                State.setText(key, value);
+            }
+        }
+    }
+
+    private static Map<String, String> modeProfile(String mode) {
+        Map<String, String> profile = MODE_PROFILES.get(mode);
+        if (profile == null) {
+            profile = new java.util.LinkedHashMap<>();
+            MODE_PROFILES.put(mode, profile);
+        }
+        return profile;
+    }
+
+    /**
+     * 旧配置没有档案块，或只缺某几项时，用当前生效值补齐；当前模式最后再用实时值覆盖，
+     * 因为预设、MCP 和其它保存入口只会改实时字段，不会同步档案。
+     */
+    private static void loadModeProfiles() {
+        MODE_PROFILES.clear();
+        com.google.gson.JsonObject stored = KillAuraHandler.cfg().attackModeProfiles;
+        for (String mode : ATTACK_MODES) {
+            captureModeProfile(mode);
+            if (stored == null || !stored.has(mode) || !stored.get(mode).isJsonObject()) {
+                continue;
+            }
+            com.google.gson.JsonObject block = stored.getAsJsonObject(mode);
+            Map<String, String> profile = modeProfile(mode);
+            for (String key : MODE_PROFILE_KEYS.get(mode)) {
+                if (block.has(key) && block.get(key).isJsonPrimitive()) {
+                    profile.put(key, block.get(key).getAsString());
+                }
+            }
+        }
+        captureModeProfile(canonicalMode(KillAuraHandler.cfg().attackMode));
+    }
+
+    private static void storeModeProfiles() {
+        captureModeProfile(canonicalMode(KillAuraHandler.cfg().attackMode));
+        com.google.gson.JsonObject root = new com.google.gson.JsonObject();
+        for (String mode : ATTACK_MODES) {
+            com.google.gson.JsonObject block = new com.google.gson.JsonObject();
+            for (Map.Entry<String, String> entry : modeProfile(mode).entrySet()) {
+                block.addProperty(entry.getKey(), entry.getValue());
+            }
+            root.add(mode, block);
+        }
+        KillAuraHandler.cfg().attackModeProfiles = root;
+    }
+
+    /** TP 攻击会先位移到目标身边，沿用近战的 4.2 格单目标默认值就浪费了它的作用距离，所以单独给一套默认值。 */
+    private static void applyTeleportProfileDefaults() {
+        String tp = KillAuraHandler.ATTACK_MODE_TELEPORT;
+        Map<String, String> profile = modeProfile(tp);
+        profile.put(KEY_RANGE, "40");
+        profile.put(KEY_INTERVAL, "0");
+        profile.put(KEY_STRENGTH, "0");
+        profile.put(KEY_TARGETS, "5");
+        if (tp.equals(canonicalMode(KillAuraHandler.cfg().attackMode))) {
+            applyModeProfile(tp);
+        }
+    }
+
+    private static void resetModeProfilesToLive() {
+        MODE_PROFILES.clear();
+        for (String mode : ATTACK_MODES) {
+            captureModeProfile(mode);
+        }
+    }
+
     private void showStatus(String message) {
         statusMessage = safe(message);
         statusMessageUntil = System.currentTimeMillis() + 2600L;
     }
 
     private void enforceTargetSelection() {
-        if (!KillAuraHandler.targetHostile && !KillAuraHandler.targetPassive && !KillAuraHandler.targetPlayers
-                && !KillAuraHandler.targetNpcs && !KillAuraHandler.targetEnderCrystal) {
-            KillAuraHandler.targetHostile = true;
+        if (!KillAuraHandler.cfg().targetHostile && !KillAuraHandler.cfg().targetPassive && !KillAuraHandler.cfg().targetPlayers
+                && !KillAuraHandler.cfg().targetNpcs && !KillAuraHandler.cfg().targetEnderCrystal) {
+            KillAuraHandler.cfg().targetHostile = true;
         }
     }
 
@@ -3241,107 +3905,106 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     private static final class State {
         private final boolean enabled;
         private final KillAuraPreset values;
-        private final List<String> whitelist;
-        private final List<String> blacklist;
+        private final List<KillAuraHandler.NameFilterGroup> nameGroups;
         private final List<HuntPickupRule> pickupRules;
         private final List<KillAuraPreset> presets;
 
         private State() {
-            this.enabled = KillAuraHandler.enabled;
+            this.enabled = KillAuraHandler.enabled();
             this.values = captureValues();
-            this.whitelist = copyStrings(KillAuraHandler.nameWhitelist);
-            this.blacklist = copyStrings(KillAuraHandler.nameBlacklist);
-            this.pickupRules = copyRules(KillAuraHandler.huntPickupRules);
+            this.nameGroups = KillAuraHandler.copyNameFilterGroups(KillAuraHandler.cfg().nameFilterGroups);
+            this.pickupRules = copyRules(KillAuraHandler.cfg().huntPickupRules);
             this.presets = copyPresets(KillAuraHandler.getPresetSnapshots());
         }
 
         private State(State source) {
             this.enabled = source.enabled;
             this.values = new KillAuraPreset(source.values);
-            this.whitelist = copyStrings(source.whitelist);
-            this.blacklist = copyStrings(source.blacklist);
+            this.nameGroups = KillAuraHandler.copyNameFilterGroups(source.nameGroups);
             this.pickupRules = copyRules(source.pickupRules);
             this.presets = copyPresets(source.presets);
         }
 
         private void apply() {
             applyValues(values);
-            KillAuraHandler.enabled = enabled;
-            KillAuraHandler.nameWhitelist = copyStrings(whitelist);
-            KillAuraHandler.nameBlacklist = copyStrings(blacklist);
-            KillAuraHandler.huntPickupRules = copyRules(pickupRules);
-            KillAuraHandler.presets.clear();
-            KillAuraHandler.presets.addAll(copyPresets(presets));
+            KillAuraHandler.setEnabledSilently(enabled);
+            KillAuraHandler.cfg().nameFilterGroups = KillAuraHandler.copyNameFilterGroups(nameGroups);
+            KillAuraHandler.rebuildNameFiltersFromGroups();
+            KillAuraHandler.cfg().huntPickupRules = copyRules(pickupRules);
+            KillAuraHandler.cfg().presets.clear();
+            KillAuraHandler.cfg().presets.addAll(copyPresets(presets));
             KillAuraHandler.INSTANCE.resetRuntimeState();
         }
 
         private static KillAuraPreset captureValues() {
             KillAuraPreset value = new KillAuraPreset();
-            value.rotateToTarget = KillAuraHandler.rotateToTarget;
-            value.smoothRotation = KillAuraHandler.smoothRotation;
-            value.smoothMaxTurnStep = KillAuraHandler.smoothMaxTurnStep;
+            value.rotateToTarget = KillAuraHandler.cfg().rotateToTarget;
+            value.smoothRotation = KillAuraHandler.cfg().smoothRotation;
+            value.smoothMaxTurnStep = KillAuraHandler.cfg().smoothMaxTurnStep;
             value.smoothMaxTurnStepSpec = KillAuraHandler.getSmoothMaxTurnStepSpec();
-            value.rotateOnlyOnAttack = KillAuraHandler.rotateOnlyOnAttack;
-            value.relockOnlyWhenNoCrosshairTarget = KillAuraHandler.relockOnlyWhenNoCrosshairTarget;
-            value.onlyAttackWhenLookingAtTarget = KillAuraHandler.onlyAttackWhenLookingAtTarget;
-            value.requireLineOfSight = KillAuraHandler.requireLineOfSight;
-            value.throughWallAttack = KillAuraHandler.throughWallAttack;
-            value.targetHostile = KillAuraHandler.targetHostile;
-            value.targetPassive = KillAuraHandler.targetPassive;
-            value.targetPlayers = KillAuraHandler.targetPlayers;
-            value.targetNpcs = KillAuraHandler.targetNpcs;
-            value.targetEnderCrystal = KillAuraHandler.targetEnderCrystal;
-            value.onlyWeapon = KillAuraHandler.onlyWeapon;
-            value.aimOnlyMode = KillAuraHandler.aimOnlyMode;
-            value.focusSingleTarget = KillAuraHandler.focusSingleTarget;
-            value.blockWhileAttacking = KillAuraHandler.blockWhileAttacking;
-            value.ignoreInvisible = KillAuraHandler.ignoreInvisible;
-            value.enableNoCollision = KillAuraHandler.enableNoCollision;
-            value.enableAntiKnockback = KillAuraHandler.enableAntiKnockback;
-            value.teleportAttackPacketLimitPerTick = KillAuraHandler.teleportAttackPacketLimitPerTick;
-            value.teleportStepDistance = KillAuraHandler.teleportStepDistance;
-            value.teleportStationAttackRadius = KillAuraHandler.teleportStationAttackRadius;
-            value.disableOnDisconnect = KillAuraHandler.disableOnDisconnect;
-            value.enableFullBrightVision = KillAuraHandler.enableFullBrightVision;
-            value.fullBrightGamma = KillAuraHandler.fullBrightGamma;
-            value.attackMode = KillAuraHandler.attackMode;
-            value.attackSequenceName = KillAuraHandler.attackSequenceName;
-            value.attackSequenceDelayTicks = KillAuraHandler.attackSequenceDelayTicks;
+            value.rotateOnlyOnAttack = KillAuraHandler.cfg().rotateOnlyOnAttack;
+            value.relockOnlyWhenNoCrosshairTarget = KillAuraHandler.cfg().relockOnlyWhenNoCrosshairTarget;
+            value.onlyAttackWhenLookingAtTarget = KillAuraHandler.cfg().onlyAttackWhenLookingAtTarget;
+            value.requireLineOfSight = KillAuraHandler.cfg().requireLineOfSight;
+            value.throughWallAttack = KillAuraHandler.cfg().throughWallAttack;
+            value.targetHostile = KillAuraHandler.cfg().targetHostile;
+            value.targetPassive = KillAuraHandler.cfg().targetPassive;
+            value.targetPlayers = KillAuraHandler.cfg().targetPlayers;
+            value.targetNpcs = KillAuraHandler.cfg().targetNpcs;
+            value.targetEnderCrystal = KillAuraHandler.cfg().targetEnderCrystal;
+            value.onlyWeapon = KillAuraHandler.cfg().onlyWeapon;
+            value.aimOnlyMode = KillAuraHandler.aimOnlyMode();
+            value.focusSingleTarget = KillAuraHandler.cfg().focusSingleTarget;
+            value.blockWhileAttacking = KillAuraHandler.cfg().blockWhileAttacking;
+            value.ignoreInvisible = KillAuraHandler.cfg().ignoreInvisible;
+            value.enableNoCollision = KillAuraHandler.cfg().enableNoCollision;
+            value.enableAntiKnockback = KillAuraHandler.cfg().enableAntiKnockback;
+            value.teleportStepDistance = KillAuraHandler.cfg().teleportStepDistance;
+            value.teleportStationAttackRadius = KillAuraHandler.cfg().teleportStationAttackRadius;
+            value.teleportActionsPerTick = KillAuraHandler.cfg().teleportActionsPerTick;
+            value.teleportStepDistancePerAction = KillAuraHandler.cfg().teleportStepDistancePerAction;
+            value.teleportAttackRotationPackets = KillAuraHandler.cfg().teleportAttackRotationPackets;
+            value.disableOnDisconnect = KillAuraHandler.disableOnDisconnect();
+            value.enableFullBrightVision = KillAuraHandler.cfg().enableFullBrightVision;
+            value.fullBrightGamma = KillAuraHandler.cfg().fullBrightGamma;
+            value.attackMode = KillAuraHandler.cfg().attackMode;
+            value.attackSequenceName = KillAuraHandler.cfg().attackSequenceName;
+            value.attackSequenceDelayTicks = KillAuraHandler.cfg().attackSequenceDelayTicks;
             value.attackSequenceDelayTicksSpec = KillAuraHandler.getAttackSequenceDelayTicksSpec();
-            value.aimYawOffset = KillAuraHandler.aimYawOffset;
+            value.aimYawOffset = KillAuraHandler.cfg().aimYawOffset;
             value.aimYawOffsetSpec = KillAuraHandler.getAimYawOffsetSpec();
-            value.aimPitchOffset = KillAuraHandler.aimPitchOffset;
+            value.aimPitchOffset = KillAuraHandler.cfg().aimPitchOffset;
             value.aimPitchOffsetSpec = KillAuraHandler.getAimPitchOffsetSpec();
-            value.huntMode = KillAuraHandler.huntMode;
-            value.huntPickupItemsEnabled = KillAuraHandler.huntPickupItemsEnabled;
-            value.huntPickupRules = copyRules(KillAuraHandler.huntPickupRules);
-            value.visualizeHuntRadius = KillAuraHandler.visualizeHuntRadius;
-            value.huntRadius = KillAuraHandler.huntRadius;
-            value.huntFixedDistance = KillAuraHandler.huntFixedDistance;
-            value.huntUpRange = KillAuraHandler.huntUpRange;
-            value.huntDownRange = KillAuraHandler.huntDownRange;
-            value.huntOrbitEnabled = KillAuraHandler.huntOrbitEnabled;
-            value.huntJumpOrbitEnabled = KillAuraHandler.huntJumpOrbitEnabled;
-            value.huntOrbitSamplePoints = KillAuraHandler.huntOrbitSamplePoints;
-            value.enableNameWhitelist = KillAuraHandler.enableNameWhitelist;
-            value.enableNameBlacklist = KillAuraHandler.enableNameBlacklist;
-            value.nameWhitelist = copyStrings(KillAuraHandler.nameWhitelist);
-            value.nameBlacklist = copyStrings(KillAuraHandler.nameBlacklist);
-            value.nearbyEntityScanRange = KillAuraHandler.nearbyEntityScanRange;
-            value.attackRange = KillAuraHandler.attackRange;
-            value.huntScoreRadiusWeight = KillAuraHandler.huntScoreRadiusWeight;
-            value.huntScorePlayerDistanceWeight = KillAuraHandler.huntScorePlayerDistanceWeight;
-            value.huntScorePlayerPlaneWeight = KillAuraHandler.huntScorePlayerPlaneWeight;
-            value.huntScoreTargetHeightWeight = KillAuraHandler.huntScoreTargetHeightWeight;
-            value.huntScoreAttackRangeWeight = KillAuraHandler.huntScoreAttackRangeWeight;
-            value.huntScoreVisibilityWeight = KillAuraHandler.huntScoreVisibilityWeight;
-            value.huntScoreOpennessWeight = KillAuraHandler.huntScoreOpennessWeight;
-            value.minAttackStrength = KillAuraHandler.minAttackStrength;
-            value.minTurnSpeed = KillAuraHandler.minTurnSpeed;
-            value.maxTurnSpeed = KillAuraHandler.maxTurnSpeed;
-            value.minAttackIntervalTicks = KillAuraHandler.minAttackIntervalTicks;
-            value.targetsPerAttack = KillAuraHandler.targetsPerAttack;
-            value.noDamageAttackLimit = KillAuraHandler.noDamageAttackLimit;
+            value.huntMode = KillAuraHandler.cfg().huntMode;
+            value.huntPickupItemsEnabled = KillAuraHandler.cfg().huntPickupItemsEnabled;
+            value.huntPickupRules = copyRules(KillAuraHandler.cfg().huntPickupRules);
+            value.visualizeHuntRadius = KillAuraHandler.visualizeHuntRadius();
+            value.huntRadius = KillAuraHandler.cfg().huntRadius;
+            value.huntFixedDistance = KillAuraHandler.cfg().huntFixedDistance;
+            value.huntUpRange = KillAuraHandler.cfg().huntUpRange;
+            value.huntDownRange = KillAuraHandler.cfg().huntDownRange;
+            value.huntOrbitEnabled = KillAuraHandler.cfg().huntOrbitEnabled;
+            value.huntJumpOrbitEnabled = KillAuraHandler.cfg().huntJumpOrbitEnabled;
+            value.huntOrbitSamplePoints = KillAuraHandler.cfg().huntOrbitSamplePoints;
+            value.enableNameWhitelist = KillAuraHandler.cfg().enableNameWhitelist;
+            value.enableNameBlacklist = KillAuraHandler.cfg().enableNameBlacklist;
+            value.nameWhitelist = copyStrings(KillAuraHandler.cfg().nameWhitelist);
+            value.nameBlacklist = copyStrings(KillAuraHandler.cfg().nameBlacklist);
+            value.nearbyEntityScanRange = KillAuraHandler.cfg().nearbyEntityScanRange;
+            value.attackRange = KillAuraHandler.cfg().attackRange;
+            value.huntScoreRadiusWeight = KillAuraHandler.cfg().huntScoreRadiusWeight;
+            value.huntScorePlayerDistanceWeight = KillAuraHandler.cfg().huntScorePlayerDistanceWeight;
+            value.huntScorePlayerPlaneWeight = KillAuraHandler.cfg().huntScorePlayerPlaneWeight;
+            value.huntScoreTargetHeightWeight = KillAuraHandler.cfg().huntScoreTargetHeightWeight;
+            value.huntScoreAttackRangeWeight = KillAuraHandler.cfg().huntScoreAttackRangeWeight;
+            value.huntScoreVisibilityWeight = KillAuraHandler.cfg().huntScoreVisibilityWeight;
+            value.huntScoreOpennessWeight = KillAuraHandler.cfg().huntScoreOpennessWeight;
+            value.minAttackStrength = KillAuraHandler.cfg().minAttackStrength;
+            value.minTurnSpeed = KillAuraHandler.cfg().minTurnSpeed;
+            value.maxTurnSpeed = KillAuraHandler.cfg().maxTurnSpeed;
+            value.minAttackIntervalTicks = KillAuraHandler.cfg().minAttackIntervalTicks;
+            value.targetsPerAttack = KillAuraHandler.cfg().targetsPerAttack;
+            value.noDamageAttackLimit = KillAuraHandler.cfg().noDamageAttackLimit;
             return value;
         }
 
@@ -3349,186 +4012,224 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
             if (value == null) {
                 return;
             }
-            KillAuraHandler.rotateToTarget = value.rotateToTarget;
-            KillAuraHandler.smoothRotation = value.smoothRotation;
+            KillAuraHandler.cfg().rotateToTarget = value.rotateToTarget;
+            KillAuraHandler.cfg().smoothRotation = value.smoothRotation;
             KillAuraHandler.setSmoothMaxTurnStepSpec(value.smoothMaxTurnStepSpec);
-            KillAuraHandler.rotateOnlyOnAttack = value.rotateOnlyOnAttack;
-            KillAuraHandler.relockOnlyWhenNoCrosshairTarget = value.relockOnlyWhenNoCrosshairTarget;
-            KillAuraHandler.onlyAttackWhenLookingAtTarget = value.onlyAttackWhenLookingAtTarget;
-            KillAuraHandler.requireLineOfSight = value.requireLineOfSight;
-            KillAuraHandler.throughWallAttack = value.throughWallAttack;
-            KillAuraHandler.targetHostile = value.targetHostile;
-            KillAuraHandler.targetPassive = value.targetPassive;
-            KillAuraHandler.targetPlayers = value.targetPlayers;
-            KillAuraHandler.targetNpcs = value.targetNpcs;
-            KillAuraHandler.targetEnderCrystal = value.targetEnderCrystal;
-            KillAuraHandler.onlyWeapon = value.onlyWeapon;
-            KillAuraHandler.aimOnlyMode = value.aimOnlyMode;
-            KillAuraHandler.focusSingleTarget = value.focusSingleTarget;
-            KillAuraHandler.blockWhileAttacking = value.blockWhileAttacking;
-            KillAuraHandler.ignoreInvisible = value.ignoreInvisible;
-            KillAuraHandler.enableNoCollision = value.enableNoCollision;
-            KillAuraHandler.enableAntiKnockback = value.enableAntiKnockback;
-            KillAuraHandler.teleportAttackPacketLimitPerTick = value.teleportAttackPacketLimitPerTick;
-            KillAuraHandler.teleportStepDistance = value.teleportStepDistance;
-            KillAuraHandler.teleportStationAttackRadius = value.teleportStationAttackRadius;
-            KillAuraHandler.disableOnDisconnect = value.disableOnDisconnect;
-            KillAuraHandler.enableFullBrightVision = value.enableFullBrightVision;
-            KillAuraHandler.fullBrightGamma = value.fullBrightGamma;
-            KillAuraHandler.attackMode = value.attackMode;
-            KillAuraHandler.attackSequenceName = value.attackSequenceName;
+            KillAuraHandler.cfg().rotateOnlyOnAttack = value.rotateOnlyOnAttack;
+            KillAuraHandler.cfg().relockOnlyWhenNoCrosshairTarget = value.relockOnlyWhenNoCrosshairTarget;
+            KillAuraHandler.cfg().onlyAttackWhenLookingAtTarget = value.onlyAttackWhenLookingAtTarget;
+            KillAuraHandler.cfg().requireLineOfSight = value.requireLineOfSight;
+            KillAuraHandler.cfg().throughWallAttack = value.throughWallAttack;
+            KillAuraHandler.cfg().targetHostile = value.targetHostile;
+            KillAuraHandler.cfg().targetPassive = value.targetPassive;
+            KillAuraHandler.cfg().targetPlayers = value.targetPlayers;
+            KillAuraHandler.cfg().targetNpcs = value.targetNpcs;
+            KillAuraHandler.cfg().targetEnderCrystal = value.targetEnderCrystal;
+            KillAuraHandler.cfg().onlyWeapon = value.onlyWeapon;
+            KillAuraHandler.setAimOnlyMode(value.aimOnlyMode);
+            KillAuraHandler.cfg().focusSingleTarget = value.focusSingleTarget;
+            KillAuraHandler.cfg().blockWhileAttacking = value.blockWhileAttacking;
+            KillAuraHandler.cfg().ignoreInvisible = value.ignoreInvisible;
+            KillAuraHandler.cfg().enableNoCollision = value.enableNoCollision;
+            KillAuraHandler.cfg().enableAntiKnockback = value.enableAntiKnockback;
+            KillAuraHandler.cfg().teleportStepDistance = value.teleportStepDistance;
+            KillAuraHandler.cfg().teleportStationAttackRadius = value.teleportStationAttackRadius;
+            KillAuraHandler.cfg().teleportActionsPerTick = value.teleportActionsPerTick;
+            KillAuraHandler.cfg().teleportStepDistancePerAction = value.teleportStepDistancePerAction;
+            KillAuraHandler.cfg().teleportAttackRotationPackets = value.teleportAttackRotationPackets;
+            KillAuraHandler.setDisableOnDisconnect(value.disableOnDisconnect);
+            KillAuraHandler.cfg().enableFullBrightVision = value.enableFullBrightVision;
+            KillAuraHandler.cfg().fullBrightGamma = value.fullBrightGamma;
+            KillAuraHandler.cfg().attackMode = value.attackMode;
+            KillAuraHandler.cfg().attackSequenceName = value.attackSequenceName;
             KillAuraHandler.setAttackSequenceDelayTicksSpec(value.attackSequenceDelayTicksSpec);
             KillAuraHandler.setAimYawOffsetSpec(value.aimYawOffsetSpec);
             KillAuraHandler.setAimPitchOffsetSpec(value.aimPitchOffsetSpec);
             KillAuraHandler.setHuntMode(value.huntMode);
-            KillAuraHandler.huntPickupItemsEnabled = value.huntPickupItemsEnabled;
-            KillAuraHandler.huntPickupRules = copyRules(value.huntPickupRules);
-            KillAuraHandler.visualizeHuntRadius = value.visualizeHuntRadius;
-            KillAuraHandler.huntRadius = value.huntRadius;
-            KillAuraHandler.huntFixedDistance = value.huntFixedDistance;
-            KillAuraHandler.huntUpRange = value.huntUpRange;
-            KillAuraHandler.huntDownRange = value.huntDownRange;
-            KillAuraHandler.huntOrbitEnabled = value.huntOrbitEnabled;
-            KillAuraHandler.huntJumpOrbitEnabled = value.huntJumpOrbitEnabled;
-            KillAuraHandler.huntOrbitSamplePoints = value.huntOrbitSamplePoints;
-            KillAuraHandler.enableNameWhitelist = value.enableNameWhitelist;
-            KillAuraHandler.enableNameBlacklist = value.enableNameBlacklist;
-            KillAuraHandler.nearbyEntityScanRange = value.nearbyEntityScanRange;
-            KillAuraHandler.attackRange = value.attackRange;
-            KillAuraHandler.huntScoreRadiusWeight = value.huntScoreRadiusWeight;
-            KillAuraHandler.huntScorePlayerDistanceWeight = value.huntScorePlayerDistanceWeight;
-            KillAuraHandler.huntScorePlayerPlaneWeight = value.huntScorePlayerPlaneWeight;
-            KillAuraHandler.huntScoreTargetHeightWeight = value.huntScoreTargetHeightWeight;
-            KillAuraHandler.huntScoreAttackRangeWeight = value.huntScoreAttackRangeWeight;
-            KillAuraHandler.huntScoreVisibilityWeight = value.huntScoreVisibilityWeight;
-            KillAuraHandler.huntScoreOpennessWeight = value.huntScoreOpennessWeight;
-            KillAuraHandler.minAttackStrength = value.minAttackStrength;
-            KillAuraHandler.minTurnSpeed = value.minTurnSpeed;
-            KillAuraHandler.maxTurnSpeed = value.maxTurnSpeed;
-            KillAuraHandler.minAttackIntervalTicks = value.minAttackIntervalTicks;
-            KillAuraHandler.targetsPerAttack = value.targetsPerAttack;
-            KillAuraHandler.noDamageAttackLimit = value.noDamageAttackLimit;
+            KillAuraHandler.cfg().huntPickupItemsEnabled = value.huntPickupItemsEnabled;
+            KillAuraHandler.cfg().huntPickupRules = copyRules(value.huntPickupRules);
+            KillAuraHandler.setVisualizeHuntRadius(value.visualizeHuntRadius);
+            KillAuraHandler.cfg().huntRadius = value.huntRadius;
+            KillAuraHandler.cfg().huntFixedDistance = value.huntFixedDistance;
+            KillAuraHandler.cfg().huntUpRange = value.huntUpRange;
+            KillAuraHandler.cfg().huntDownRange = value.huntDownRange;
+            KillAuraHandler.cfg().huntOrbitEnabled = value.huntOrbitEnabled;
+            KillAuraHandler.cfg().huntJumpOrbitEnabled = value.huntJumpOrbitEnabled;
+            KillAuraHandler.cfg().huntOrbitSamplePoints = value.huntOrbitSamplePoints;
+            KillAuraHandler.cfg().enableNameWhitelist = value.enableNameWhitelist;
+            KillAuraHandler.cfg().enableNameBlacklist = value.enableNameBlacklist;
+            KillAuraHandler.cfg().nearbyEntityScanRange = value.nearbyEntityScanRange;
+            KillAuraHandler.cfg().attackRange = value.attackRange;
+            KillAuraHandler.cfg().huntScoreRadiusWeight = value.huntScoreRadiusWeight;
+            KillAuraHandler.cfg().huntScorePlayerDistanceWeight = value.huntScorePlayerDistanceWeight;
+            KillAuraHandler.cfg().huntScorePlayerPlaneWeight = value.huntScorePlayerPlaneWeight;
+            KillAuraHandler.cfg().huntScoreTargetHeightWeight = value.huntScoreTargetHeightWeight;
+            KillAuraHandler.cfg().huntScoreAttackRangeWeight = value.huntScoreAttackRangeWeight;
+            KillAuraHandler.cfg().huntScoreVisibilityWeight = value.huntScoreVisibilityWeight;
+            KillAuraHandler.cfg().huntScoreOpennessWeight = value.huntScoreOpennessWeight;
+            KillAuraHandler.cfg().minAttackStrength = value.minAttackStrength;
+            KillAuraHandler.cfg().minTurnSpeed = value.minTurnSpeed;
+            KillAuraHandler.cfg().maxTurnSpeed = value.maxTurnSpeed;
+            KillAuraHandler.cfg().minAttackIntervalTicks = value.minAttackIntervalTicks;
+            KillAuraHandler.cfg().targetsPerAttack = value.targetsPerAttack;
+            KillAuraHandler.cfg().noDamageAttackLimit = value.noDamageAttackLimit;
+        }
+
+        /** 返回带模式前缀的档案键对应的模式；当前模式的档案键直接读写实时字段。 */
+        private static String profileMode(String key) {
+            int split = key == null ? -1 : key.indexOf(':');
+            return split > 0 ? key.substring(0, split) : null;
         }
 
         private static boolean getBoolean(String key) {
-            if ("enabled".equals(key)) return KillAuraHandler.enabled;
-            if ("rotateToTarget".equals(key)) return KillAuraHandler.rotateToTarget;
-            if ("smoothRotation".equals(key)) return KillAuraHandler.smoothRotation;
-            if ("rotateOnlyOnAttack".equals(key)) return KillAuraHandler.rotateOnlyOnAttack;
-            if ("relockOnlyWhenNoCrosshairTarget".equals(key)) return KillAuraHandler.relockOnlyWhenNoCrosshairTarget;
-            if ("onlyAttackWhenLookingAtTarget".equals(key)) return KillAuraHandler.onlyAttackWhenLookingAtTarget;
-            if ("requireLineOfSight".equals(key)) return KillAuraHandler.requireLineOfSight;
-            if ("throughWallAttack".equals(key)) return KillAuraHandler.throughWallAttack;
-            if ("targetHostile".equals(key)) return KillAuraHandler.targetHostile;
-            if ("targetPassive".equals(key)) return KillAuraHandler.targetPassive;
-            if ("targetPlayers".equals(key)) return KillAuraHandler.targetPlayers;
-            if ("targetNpcs".equals(key)) return KillAuraHandler.targetNpcs;
-            if ("targetEnderCrystal".equals(key)) return KillAuraHandler.targetEnderCrystal;
-            if ("onlyWeapon".equals(key)) return KillAuraHandler.onlyWeapon;
-            if ("aimOnlyMode".equals(key)) return KillAuraHandler.aimOnlyMode;
-            if ("focusSingleTarget".equals(key)) return KillAuraHandler.focusSingleTarget;
-            if ("blockWhileAttacking".equals(key)) return KillAuraHandler.blockWhileAttacking;
-            if ("ignoreInvisible".equals(key)) return KillAuraHandler.ignoreInvisible;
-            if ("enableNoCollision".equals(key)) return KillAuraHandler.enableNoCollision;
-            if ("enableAntiKnockback".equals(key)) return KillAuraHandler.enableAntiKnockback;
-            if ("disableOnDisconnect".equals(key)) return KillAuraHandler.disableOnDisconnect;
-            if ("enableFullBrightVision".equals(key)) return KillAuraHandler.enableFullBrightVision;
-            if ("huntPickupItemsEnabled".equals(key)) return KillAuraHandler.huntPickupItemsEnabled;
-            if ("visualizeHuntRadius".equals(key)) return KillAuraHandler.visualizeHuntRadius;
-            if ("huntOrbitEnabled".equals(key)) return KillAuraHandler.huntOrbitEnabled;
-            if ("huntJumpOrbitEnabled".equals(key)) return KillAuraHandler.huntJumpOrbitEnabled;
-            if ("enableNameWhitelist".equals(key)) return KillAuraHandler.enableNameWhitelist;
-            if ("enableNameBlacklist".equals(key)) return KillAuraHandler.enableNameBlacklist;
+            String mode = profileMode(key);
+            if (mode != null) {
+                String base = key.substring(mode.length() + 1);
+                if (mode.equalsIgnoreCase(KillAuraHandler.cfg().attackMode)) return getBoolean(base);
+                return Boolean.parseBoolean(modeProfile(mode).get(base));
+            }
+            if ("enabled".equals(key)) return KillAuraHandler.enabled();
+            if ("rotateToTarget".equals(key)) return KillAuraHandler.cfg().rotateToTarget;
+            if ("smoothRotation".equals(key)) return KillAuraHandler.cfg().smoothRotation;
+            if ("rotateOnlyOnAttack".equals(key)) return KillAuraHandler.cfg().rotateOnlyOnAttack;
+            if ("relockOnlyWhenNoCrosshairTarget".equals(key)) return KillAuraHandler.cfg().relockOnlyWhenNoCrosshairTarget;
+            if ("onlyAttackWhenLookingAtTarget".equals(key)) return KillAuraHandler.cfg().onlyAttackWhenLookingAtTarget;
+            if ("requireLineOfSight".equals(key)) return KillAuraHandler.cfg().requireLineOfSight;
+            if ("throughWallAttack".equals(key)) return KillAuraHandler.cfg().throughWallAttack;
+            if ("targetHostile".equals(key)) return KillAuraHandler.cfg().targetHostile;
+            if ("targetPassive".equals(key)) return KillAuraHandler.cfg().targetPassive;
+            if ("targetPlayers".equals(key)) return KillAuraHandler.cfg().targetPlayers;
+            if ("targetNpcs".equals(key)) return KillAuraHandler.cfg().targetNpcs;
+            if ("targetEnderCrystal".equals(key)) return KillAuraHandler.cfg().targetEnderCrystal;
+            if ("onlyWeapon".equals(key)) return KillAuraHandler.cfg().onlyWeapon;
+            if ("aimOnlyMode".equals(key)) return KillAuraHandler.aimOnlyMode();
+            if ("focusSingleTarget".equals(key)) return KillAuraHandler.cfg().focusSingleTarget;
+            if ("blockWhileAttacking".equals(key)) return KillAuraHandler.cfg().blockWhileAttacking;
+            if ("ignoreInvisible".equals(key)) return KillAuraHandler.cfg().ignoreInvisible;
+            if ("enableNoCollision".equals(key)) return KillAuraHandler.cfg().enableNoCollision;
+            if ("enableAntiKnockback".equals(key)) return KillAuraHandler.cfg().enableAntiKnockback;
+            if ("disableOnDisconnect".equals(key)) return KillAuraHandler.disableOnDisconnect();
+            if ("enableFullBrightVision".equals(key)) return KillAuraHandler.cfg().enableFullBrightVision;
+            if ("huntPickupItemsEnabled".equals(key)) return KillAuraHandler.cfg().huntPickupItemsEnabled;
+            if ("visualizeHuntRadius".equals(key)) return KillAuraHandler.visualizeHuntRadius();
+            if ("huntOrbitEnabled".equals(key)) return KillAuraHandler.cfg().huntOrbitEnabled;
+            if ("huntJumpOrbitEnabled".equals(key)) return KillAuraHandler.cfg().huntJumpOrbitEnabled;
+            if ("enableNameWhitelist".equals(key)) return KillAuraHandler.cfg().enableNameWhitelist;
+            if ("enableNameBlacklist".equals(key)) return KillAuraHandler.cfg().enableNameBlacklist;
+            if ("teleportAttackRotationPackets".equals(key)) return KillAuraHandler.cfg().teleportAttackRotationPackets;
             return false;
         }
 
         private static void setBoolean(String key, boolean value) {
+            String mode = profileMode(key);
+            if (mode != null) {
+                String base = key.substring(mode.length() + 1);
+                if (mode.equalsIgnoreCase(KillAuraHandler.cfg().attackMode)) setBoolean(base, value);
+                else modeProfile(mode).put(base, String.valueOf(value));
+                return;
+            }
             if ("enabled".equals(key)) {
-                KillAuraHandler.enabled = value;
+                KillAuraHandler.setEnabledSilently(value);
             } else if ("rotateToTarget".equals(key)) {
-                KillAuraHandler.rotateToTarget = value;
+                KillAuraHandler.cfg().rotateToTarget = value;
                 if (!value) {
-                    KillAuraHandler.rotateOnlyOnAttack = false;
-                    KillAuraHandler.relockOnlyWhenNoCrosshairTarget = false;
+                    KillAuraHandler.cfg().rotateOnlyOnAttack = false;
+                    KillAuraHandler.cfg().relockOnlyWhenNoCrosshairTarget = false;
                 }
-            } else if ("smoothRotation".equals(key)) KillAuraHandler.smoothRotation = value;
-            else if ("rotateOnlyOnAttack".equals(key)) KillAuraHandler.rotateOnlyOnAttack = value;
-            else if ("relockOnlyWhenNoCrosshairTarget".equals(key)) KillAuraHandler.relockOnlyWhenNoCrosshairTarget = value;
-            else if ("onlyAttackWhenLookingAtTarget".equals(key)) KillAuraHandler.onlyAttackWhenLookingAtTarget = value;
-            else if ("requireLineOfSight".equals(key)) KillAuraHandler.requireLineOfSight = value;
-            else if ("throughWallAttack".equals(key)) KillAuraHandler.throughWallAttack = value;
-            else if ("targetHostile".equals(key)) KillAuraHandler.targetHostile = value;
-            else if ("targetPassive".equals(key)) KillAuraHandler.targetPassive = value;
-            else if ("targetPlayers".equals(key)) KillAuraHandler.targetPlayers = value;
-            else if ("targetNpcs".equals(key)) KillAuraHandler.targetNpcs = value;
-            else if ("targetEnderCrystal".equals(key)) KillAuraHandler.targetEnderCrystal = value;
-            else if ("onlyWeapon".equals(key)) KillAuraHandler.onlyWeapon = value;
+            } else if ("smoothRotation".equals(key)) KillAuraHandler.cfg().smoothRotation = value;
+            else if ("rotateOnlyOnAttack".equals(key)) KillAuraHandler.cfg().rotateOnlyOnAttack = value;
+            else if ("relockOnlyWhenNoCrosshairTarget".equals(key)) KillAuraHandler.cfg().relockOnlyWhenNoCrosshairTarget = value;
+            else if ("onlyAttackWhenLookingAtTarget".equals(key)) KillAuraHandler.cfg().onlyAttackWhenLookingAtTarget = value;
+            else if ("requireLineOfSight".equals(key)) KillAuraHandler.cfg().requireLineOfSight = value;
+            else if ("throughWallAttack".equals(key)) KillAuraHandler.cfg().throughWallAttack = value;
+            else if ("targetHostile".equals(key)) KillAuraHandler.cfg().targetHostile = value;
+            else if ("targetPassive".equals(key)) KillAuraHandler.cfg().targetPassive = value;
+            else if ("targetPlayers".equals(key)) KillAuraHandler.cfg().targetPlayers = value;
+            else if ("targetNpcs".equals(key)) KillAuraHandler.cfg().targetNpcs = value;
+            else if ("targetEnderCrystal".equals(key)) KillAuraHandler.cfg().targetEnderCrystal = value;
+            else if ("onlyWeapon".equals(key)) KillAuraHandler.cfg().onlyWeapon = value;
             else if ("aimOnlyMode".equals(key)) {
-                KillAuraHandler.aimOnlyMode = value;
+                KillAuraHandler.setAimOnlyMode(value);
                 if (value) {
-                    KillAuraHandler.attackMode = KillAuraHandler.ATTACK_MODE_SEQUENCE;
-                    KillAuraHandler.rotateOnlyOnAttack = false;
+                    KillAuraHandler.cfg().attackMode = KillAuraHandler.ATTACK_MODE_SEQUENCE;
+                    KillAuraHandler.cfg().rotateOnlyOnAttack = false;
                 }
-            } else if ("focusSingleTarget".equals(key)) KillAuraHandler.focusSingleTarget = value;
+            } else if ("focusSingleTarget".equals(key)) KillAuraHandler.cfg().focusSingleTarget = value;
             else if ("blockWhileAttacking".equals(key)) {
-                KillAuraHandler.blockWhileAttacking = value;
+                KillAuraHandler.cfg().blockWhileAttacking = value;
                 if (!value) KillAuraHandler.INSTANCE.stopAttackBlocking();
             }
-            else if ("ignoreInvisible".equals(key)) KillAuraHandler.ignoreInvisible = value;
-            else if ("enableNoCollision".equals(key)) KillAuraHandler.enableNoCollision = value;
-            else if ("enableAntiKnockback".equals(key)) KillAuraHandler.enableAntiKnockback = value;
-            else if ("disableOnDisconnect".equals(key)) KillAuraHandler.disableOnDisconnect = value;
-            else if ("enableFullBrightVision".equals(key)) KillAuraHandler.enableFullBrightVision = value;
-            else if ("huntPickupItemsEnabled".equals(key)) KillAuraHandler.huntPickupItemsEnabled = value;
-            else if ("visualizeHuntRadius".equals(key)) KillAuraHandler.visualizeHuntRadius = value;
-            else if ("huntOrbitEnabled".equals(key)) KillAuraHandler.huntOrbitEnabled = value;
-            else if ("huntJumpOrbitEnabled".equals(key)) KillAuraHandler.huntJumpOrbitEnabled = value;
-            else if ("enableNameWhitelist".equals(key)) KillAuraHandler.enableNameWhitelist = value;
-            else if ("enableNameBlacklist".equals(key)) KillAuraHandler.enableNameBlacklist = value;
+            else if ("ignoreInvisible".equals(key)) KillAuraHandler.cfg().ignoreInvisible = value;
+            else if ("enableNoCollision".equals(key)) KillAuraHandler.cfg().enableNoCollision = value;
+            else if ("enableAntiKnockback".equals(key)) KillAuraHandler.cfg().enableAntiKnockback = value;
+            else if ("disableOnDisconnect".equals(key)) KillAuraHandler.setDisableOnDisconnect(value);
+            else if ("enableFullBrightVision".equals(key)) KillAuraHandler.cfg().enableFullBrightVision = value;
+            else if ("huntPickupItemsEnabled".equals(key)) KillAuraHandler.cfg().huntPickupItemsEnabled = value;
+            else if ("visualizeHuntRadius".equals(key)) KillAuraHandler.setVisualizeHuntRadius(value);
+            else if ("huntOrbitEnabled".equals(key)) KillAuraHandler.cfg().huntOrbitEnabled = value;
+            else if ("huntJumpOrbitEnabled".equals(key)) KillAuraHandler.cfg().huntJumpOrbitEnabled = value;
+            else if ("enableNameWhitelist".equals(key)) KillAuraHandler.cfg().enableNameWhitelist = value;
+            else if ("enableNameBlacklist".equals(key)) KillAuraHandler.cfg().enableNameBlacklist = value;
+            else if ("teleportAttackRotationPackets".equals(key)) KillAuraHandler.cfg().teleportAttackRotationPackets = value;
         }
 
         private static String getText(String key) {
-            if ("attackMode".equals(key)) return safeStatic(KillAuraHandler.attackMode);
-            if ("huntMode".equals(key)) return safeStatic(KillAuraHandler.huntMode);
-            if ("attackSequenceName".equals(key)) return safeStatic(KillAuraHandler.attackSequenceName);
+            String mode = profileMode(key);
+            if (mode != null) {
+                String base = key.substring(mode.length() + 1);
+                if (mode.equalsIgnoreCase(KillAuraHandler.cfg().attackMode)) return getText(base);
+                return safeStatic(modeProfile(mode).get(base));
+            }
+            if ("attackMode".equals(key)) return safeStatic(KillAuraHandler.cfg().attackMode);
+            if ("huntMode".equals(key)) return safeStatic(KillAuraHandler.cfg().huntMode);
+            if ("attackSequenceName".equals(key)) return safeStatic(KillAuraHandler.cfg().attackSequenceName);
             if ("smoothMaxTurnStepSpec".equals(key)) return KillAuraHandler.getSmoothMaxTurnStepSpec();
             if ("attackSequenceDelayTicksSpec".equals(key)) return KillAuraHandler.getAttackSequenceDelayTicksSpec();
             if ("aimYawOffsetSpec".equals(key)) return KillAuraHandler.getAimYawOffsetSpec();
             if ("aimPitchOffsetSpec".equals(key)) return KillAuraHandler.getAimPitchOffsetSpec();
-            if ("fullBrightGamma".equals(key)) return formatStatic(KillAuraHandler.fullBrightGamma);
-            if ("teleportStepDistance".equals(key)) return formatStatic(KillAuraHandler.teleportStepDistance);
-            if ("teleportStationAttackRadius".equals(key)) return formatStatic(KillAuraHandler.teleportStationAttackRadius);
-            if ("nearbyEntityScanRange".equals(key)) return formatStatic(KillAuraHandler.nearbyEntityScanRange);
-            if ("huntRadius".equals(key)) return formatStatic(KillAuraHandler.huntRadius);
-            if ("huntFixedDistance".equals(key)) return formatStatic(KillAuraHandler.huntFixedDistance);
-            if ("huntUpRange".equals(key)) return formatStatic(KillAuraHandler.huntUpRange);
-            if ("huntDownRange".equals(key)) return formatStatic(KillAuraHandler.huntDownRange);
-            if ("attackRange".equals(key)) return formatStatic(KillAuraHandler.attackRange);
-            if ("minAttackStrength".equals(key)) return formatStatic(KillAuraHandler.minAttackStrength);
-            if ("minTurnSpeed".equals(key)) return formatStatic(KillAuraHandler.minTurnSpeed);
-            if ("maxTurnSpeed".equals(key)) return formatStatic(KillAuraHandler.maxTurnSpeed);
-            if ("huntScoreRadiusWeight".equals(key)) return formatStatic(KillAuraHandler.huntScoreRadiusWeight);
-            if ("huntScorePlayerDistanceWeight".equals(key)) return formatStatic(KillAuraHandler.huntScorePlayerDistanceWeight);
-            if ("huntScorePlayerPlaneWeight".equals(key)) return formatStatic(KillAuraHandler.huntScorePlayerPlaneWeight);
-            if ("huntScoreTargetHeightWeight".equals(key)) return formatStatic(KillAuraHandler.huntScoreTargetHeightWeight);
-            if ("huntScoreAttackRangeWeight".equals(key)) return formatStatic(KillAuraHandler.huntScoreAttackRangeWeight);
-            if ("huntScoreVisibilityWeight".equals(key)) return formatStatic(KillAuraHandler.huntScoreVisibilityWeight);
-            if ("huntScoreOpennessWeight".equals(key)) return formatStatic(KillAuraHandler.huntScoreOpennessWeight);
-            if ("huntOrbitSamplePoints".equals(key)) return String.valueOf(KillAuraHandler.huntOrbitSamplePoints);
-            if ("teleportAttackPacketLimitPerTick".equals(key)) return String.valueOf(KillAuraHandler.teleportAttackPacketLimitPerTick);
-            if ("noDamageAttackLimit".equals(key)) return String.valueOf(KillAuraHandler.noDamageAttackLimit);
-            if ("minAttackIntervalTicks".equals(key)) return String.valueOf(KillAuraHandler.minAttackIntervalTicks);
-            if ("targetsPerAttack".equals(key)) return String.valueOf(KillAuraHandler.targetsPerAttack);
+            if ("fullBrightGamma".equals(key)) return formatStatic(KillAuraHandler.cfg().fullBrightGamma);
+            if ("teleportViewMode".equals(key)) return safeStatic(KillAuraHandler.cfg().teleportViewMode);
+            if ("teleportStepDistance".equals(key)) return formatStatic(KillAuraHandler.cfg().teleportStepDistance);
+            if ("teleportStationAttackRadius".equals(key)) return formatStatic(KillAuraHandler.cfg().teleportStationAttackRadius);
+            if ("teleportActionsPerTick".equals(key)) return String.valueOf(KillAuraHandler.cfg().teleportActionsPerTick);
+            if ("teleportStepDistancePerAction".equals(key)) return formatStatic(KillAuraHandler.cfg().teleportStepDistancePerAction);
+            if ("nearbyEntityScanRange".equals(key)) return formatStatic(KillAuraHandler.cfg().nearbyEntityScanRange);
+            if ("huntRadius".equals(key)) return formatStatic(KillAuraHandler.cfg().huntRadius);
+            if ("huntFixedDistance".equals(key)) return formatStatic(KillAuraHandler.cfg().huntFixedDistance);
+            if ("huntUpRange".equals(key)) return formatStatic(KillAuraHandler.cfg().huntUpRange);
+            if ("huntDownRange".equals(key)) return formatStatic(KillAuraHandler.cfg().huntDownRange);
+            if ("attackRange".equals(key)) return formatStatic(KillAuraHandler.cfg().attackRange);
+            if ("minAttackStrength".equals(key)) return formatStatic(KillAuraHandler.cfg().minAttackStrength);
+            if ("minTurnSpeed".equals(key)) return formatStatic(KillAuraHandler.cfg().minTurnSpeed);
+            if ("maxTurnSpeed".equals(key)) return formatStatic(KillAuraHandler.cfg().maxTurnSpeed);
+            if ("huntScoreRadiusWeight".equals(key)) return formatStatic(KillAuraHandler.cfg().huntScoreRadiusWeight);
+            if ("huntScorePlayerDistanceWeight".equals(key)) return formatStatic(KillAuraHandler.cfg().huntScorePlayerDistanceWeight);
+            if ("huntScorePlayerPlaneWeight".equals(key)) return formatStatic(KillAuraHandler.cfg().huntScorePlayerPlaneWeight);
+            if ("huntScoreTargetHeightWeight".equals(key)) return formatStatic(KillAuraHandler.cfg().huntScoreTargetHeightWeight);
+            if ("huntScoreAttackRangeWeight".equals(key)) return formatStatic(KillAuraHandler.cfg().huntScoreAttackRangeWeight);
+            if ("huntScoreVisibilityWeight".equals(key)) return formatStatic(KillAuraHandler.cfg().huntScoreVisibilityWeight);
+            if ("huntScoreOpennessWeight".equals(key)) return formatStatic(KillAuraHandler.cfg().huntScoreOpennessWeight);
+            if ("huntOrbitSamplePoints".equals(key)) return String.valueOf(KillAuraHandler.cfg().huntOrbitSamplePoints);
+            if ("noDamageAttackLimit".equals(key)) return String.valueOf(KillAuraHandler.cfg().noDamageAttackLimit);
+            if ("minAttackIntervalTicks".equals(key)) return String.valueOf(KillAuraHandler.cfg().minAttackIntervalTicks);
+            if ("targetsPerAttack".equals(key)) return String.valueOf(KillAuraHandler.cfg().targetsPerAttack);
             return "";
         }
 
         private static void setText(String key, String text) {
+            String mode = profileMode(key);
+            if (mode != null) {
+                String base = key.substring(mode.length() + 1);
+                if (mode.equalsIgnoreCase(KillAuraHandler.cfg().attackMode)) setText(base, text);
+                else modeProfile(mode).put(base, safeStatic(text).trim());
+                return;
+            }
             if ("attackMode".equals(key)) {
-                KillAuraHandler.attackMode = safeStatic(text).trim();
+                KillAuraHandler.cfg().attackMode = safeStatic(text).trim();
             } else if ("huntMode".equals(key)) {
                 KillAuraHandler.setHuntMode(text);
             } else if ("attackSequenceName".equals(key)) {
-                KillAuraHandler.attackSequenceName = safeStatic(text).trim();
+                KillAuraHandler.cfg().attackSequenceName = safeStatic(text).trim();
             } else if ("smoothMaxTurnStepSpec".equals(key)) {
                 KillAuraHandler.setSmoothMaxTurnStepSpec(text);
             } else if ("attackSequenceDelayTicksSpec".equals(key)) {
@@ -3537,42 +4238,47 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
                 KillAuraHandler.setAimYawOffsetSpec(text);
             } else if ("aimPitchOffsetSpec".equals(key)) {
                 KillAuraHandler.setAimPitchOffsetSpec(text);
-            } else if ("fullBrightGamma".equals(key)) KillAuraHandler.fullBrightGamma = floatStatic(text, KillAuraHandler.fullBrightGamma, 1, 1000);
-            else if ("teleportStepDistance".equals(key)) KillAuraHandler.teleportStepDistance = floatStatic(text,
-                    KillAuraHandler.teleportStepDistance, KillAuraHandler.MIN_TELEPORT_STEP_DISTANCE,
+            } else if ("fullBrightGamma".equals(key)) KillAuraHandler.cfg().fullBrightGamma = floatStatic(text, KillAuraHandler.cfg().fullBrightGamma, 1, 1000);
+            else if ("teleportViewMode".equals(key)) KillAuraHandler.cfg().teleportViewMode = text;
+            else if ("teleportStepDistance".equals(key)) KillAuraHandler.cfg().teleportStepDistance = floatStatic(text,
+                    KillAuraHandler.cfg().teleportStepDistance, KillAuraHandler.MIN_TELEPORT_STEP_DISTANCE,
                     KillAuraHandler.MAX_TELEPORT_STEP_DISTANCE);
-            else if ("teleportStationAttackRadius".equals(key)) KillAuraHandler.teleportStationAttackRadius = floatStatic(
-                    text, KillAuraHandler.teleportStationAttackRadius,
+            else if ("teleportStationAttackRadius".equals(key)) KillAuraHandler.cfg().teleportStationAttackRadius = floatStatic(
+                    text, KillAuraHandler.cfg().teleportStationAttackRadius,
                     KillAuraHandler.MIN_TELEPORT_STATION_ATTACK_RADIUS,
                     KillAuraHandler.MAX_TELEPORT_STATION_ATTACK_RADIUS);
-            else if ("nearbyEntityScanRange".equals(key)) KillAuraHandler.nearbyEntityScanRange = floatStatic(text, KillAuraHandler.nearbyEntityScanRange, 1, 64);
-            else if ("huntRadius".equals(key)) KillAuraHandler.huntRadius = floatStatic(text, KillAuraHandler.huntRadius, KillAuraHandler.attackRange, 100);
-            else if ("huntFixedDistance".equals(key)) KillAuraHandler.huntFixedDistance = floatStatic(text, KillAuraHandler.huntFixedDistance, 0.5F, 100);
-            else if ("huntUpRange".equals(key)) KillAuraHandler.huntUpRange = floatStatic(text, KillAuraHandler.huntUpRange, 0, 100);
-            else if ("huntDownRange".equals(key)) KillAuraHandler.huntDownRange = floatStatic(text, KillAuraHandler.huntDownRange, 0, 100);
+            else if ("teleportActionsPerTick".equals(key)) KillAuraHandler.cfg().teleportActionsPerTick = intStatic(
+                    text, KillAuraHandler.cfg().teleportActionsPerTick,
+                    KillAuraHandler.MIN_TELEPORT_ACTIONS_PER_TICK,
+                    KillAuraHandler.MAX_TELEPORT_ACTIONS_PER_TICK);
+            else if ("teleportStepDistancePerAction".equals(key)) KillAuraHandler.cfg().teleportStepDistancePerAction = floatStatic(
+                    text, KillAuraHandler.cfg().teleportStepDistancePerAction,
+                    KillAuraHandler.MIN_TELEPORT_STEP_DISTANCE_PER_ACTION,
+                    KillAuraHandler.MAX_TELEPORT_STEP_DISTANCE_PER_ACTION);
+            else if ("nearbyEntityScanRange".equals(key)) KillAuraHandler.cfg().nearbyEntityScanRange = floatStatic(text, KillAuraHandler.cfg().nearbyEntityScanRange, 1, 64);
+            else if ("huntRadius".equals(key)) KillAuraHandler.cfg().huntRadius = floatStatic(text, KillAuraHandler.cfg().huntRadius, KillAuraHandler.cfg().attackRange, 100);
+            else if ("huntFixedDistance".equals(key)) KillAuraHandler.cfg().huntFixedDistance = floatStatic(text, KillAuraHandler.cfg().huntFixedDistance, 0.5F, 100);
+            else if ("huntUpRange".equals(key)) KillAuraHandler.cfg().huntUpRange = floatStatic(text, KillAuraHandler.cfg().huntUpRange, 0, 100);
+            else if ("huntDownRange".equals(key)) KillAuraHandler.cfg().huntDownRange = floatStatic(text, KillAuraHandler.cfg().huntDownRange, 0, 100);
             else if ("attackRange".equals(key)) {
-                KillAuraHandler.attackRange = floatStatic(text, KillAuraHandler.attackRange, 1, 100);
-                KillAuraHandler.huntRadius = Math.max(KillAuraHandler.huntRadius, KillAuraHandler.attackRange);
-            } else if ("minAttackStrength".equals(key)) KillAuraHandler.minAttackStrength = floatStatic(text, KillAuraHandler.minAttackStrength, 0, 1);
+                KillAuraHandler.cfg().attackRange = floatStatic(text, KillAuraHandler.cfg().attackRange, 1, 100);
+                KillAuraHandler.cfg().huntRadius = Math.max(KillAuraHandler.cfg().huntRadius, KillAuraHandler.cfg().attackRange);
+            } else if ("minAttackStrength".equals(key)) KillAuraHandler.cfg().minAttackStrength = floatStatic(text, KillAuraHandler.cfg().minAttackStrength, 0, 1);
             else if ("minTurnSpeed".equals(key)) {
-                KillAuraHandler.minTurnSpeed = floatStatic(text, KillAuraHandler.minTurnSpeed, 1, 40);
-                KillAuraHandler.maxTurnSpeed = Math.max(KillAuraHandler.maxTurnSpeed, KillAuraHandler.minTurnSpeed);
-            } else if ("maxTurnSpeed".equals(key)) KillAuraHandler.maxTurnSpeed = floatStatic(text, KillAuraHandler.maxTurnSpeed, KillAuraHandler.minTurnSpeed, 60);
-            else if ("huntScoreRadiusWeight".equals(key)) KillAuraHandler.huntScoreRadiusWeight = floatStatic(text, KillAuraHandler.huntScoreRadiusWeight, 0, 100);
-            else if ("huntScorePlayerDistanceWeight".equals(key)) KillAuraHandler.huntScorePlayerDistanceWeight = floatStatic(text, KillAuraHandler.huntScorePlayerDistanceWeight, 0, 100);
-            else if ("huntScorePlayerPlaneWeight".equals(key)) KillAuraHandler.huntScorePlayerPlaneWeight = floatStatic(text, KillAuraHandler.huntScorePlayerPlaneWeight, 0, 100);
-            else if ("huntScoreTargetHeightWeight".equals(key)) KillAuraHandler.huntScoreTargetHeightWeight = floatStatic(text, KillAuraHandler.huntScoreTargetHeightWeight, 0, 100);
-            else if ("huntScoreAttackRangeWeight".equals(key)) KillAuraHandler.huntScoreAttackRangeWeight = floatStatic(text, KillAuraHandler.huntScoreAttackRangeWeight, 0, 100);
-            else if ("huntScoreVisibilityWeight".equals(key)) KillAuraHandler.huntScoreVisibilityWeight = floatStatic(text, KillAuraHandler.huntScoreVisibilityWeight, 0, 100);
-            else if ("huntScoreOpennessWeight".equals(key)) KillAuraHandler.huntScoreOpennessWeight = floatStatic(text, KillAuraHandler.huntScoreOpennessWeight, 0, 100);
-            else if ("huntOrbitSamplePoints".equals(key)) KillAuraHandler.huntOrbitSamplePoints = intStatic(text, KillAuraHandler.huntOrbitSamplePoints, KillAuraHandler.MIN_HUNT_ORBIT_SAMPLE_POINTS, KillAuraHandler.MAX_HUNT_ORBIT_SAMPLE_POINTS);
-            else if ("teleportAttackPacketLimitPerTick".equals(key)) KillAuraHandler.teleportAttackPacketLimitPerTick = intStatic(
-                    text, KillAuraHandler.teleportAttackPacketLimitPerTick,
-                    KillAuraHandler.MIN_TELEPORT_ATTACK_PACKET_LIMIT_PER_TICK,
-                    KillAuraHandler.MAX_TELEPORT_ATTACK_PACKET_LIMIT_PER_TICK);
-            else if ("noDamageAttackLimit".equals(key)) KillAuraHandler.noDamageAttackLimit = intStatic(text, KillAuraHandler.noDamageAttackLimit, 0, KillAuraHandler.MAX_NO_DAMAGE_ATTACK_LIMIT);
-            else if ("minAttackIntervalTicks".equals(key)) KillAuraHandler.minAttackIntervalTicks = intStatic(text, KillAuraHandler.minAttackIntervalTicks, 0, 20);
-            else if ("targetsPerAttack".equals(key)) KillAuraHandler.targetsPerAttack = intStatic(text, KillAuraHandler.targetsPerAttack, 1, 50);
+                KillAuraHandler.cfg().minTurnSpeed = floatStatic(text, KillAuraHandler.cfg().minTurnSpeed, 1, 40);
+                KillAuraHandler.cfg().maxTurnSpeed = Math.max(KillAuraHandler.cfg().maxTurnSpeed, KillAuraHandler.cfg().minTurnSpeed);
+            } else if ("maxTurnSpeed".equals(key)) KillAuraHandler.cfg().maxTurnSpeed = floatStatic(text, KillAuraHandler.cfg().maxTurnSpeed, KillAuraHandler.cfg().minTurnSpeed, 60);
+            else if ("huntScoreRadiusWeight".equals(key)) KillAuraHandler.cfg().huntScoreRadiusWeight = floatStatic(text, KillAuraHandler.cfg().huntScoreRadiusWeight, 0, 100);
+            else if ("huntScorePlayerDistanceWeight".equals(key)) KillAuraHandler.cfg().huntScorePlayerDistanceWeight = floatStatic(text, KillAuraHandler.cfg().huntScorePlayerDistanceWeight, 0, 100);
+            else if ("huntScorePlayerPlaneWeight".equals(key)) KillAuraHandler.cfg().huntScorePlayerPlaneWeight = floatStatic(text, KillAuraHandler.cfg().huntScorePlayerPlaneWeight, 0, 100);
+            else if ("huntScoreTargetHeightWeight".equals(key)) KillAuraHandler.cfg().huntScoreTargetHeightWeight = floatStatic(text, KillAuraHandler.cfg().huntScoreTargetHeightWeight, 0, 100);
+            else if ("huntScoreAttackRangeWeight".equals(key)) KillAuraHandler.cfg().huntScoreAttackRangeWeight = floatStatic(text, KillAuraHandler.cfg().huntScoreAttackRangeWeight, 0, 100);
+            else if ("huntScoreVisibilityWeight".equals(key)) KillAuraHandler.cfg().huntScoreVisibilityWeight = floatStatic(text, KillAuraHandler.cfg().huntScoreVisibilityWeight, 0, 100);
+            else if ("huntScoreOpennessWeight".equals(key)) KillAuraHandler.cfg().huntScoreOpennessWeight = floatStatic(text, KillAuraHandler.cfg().huntScoreOpennessWeight, 0, 100);
+            else if ("huntOrbitSamplePoints".equals(key)) KillAuraHandler.cfg().huntOrbitSamplePoints = intStatic(text, KillAuraHandler.cfg().huntOrbitSamplePoints, KillAuraHandler.MIN_HUNT_ORBIT_SAMPLE_POINTS, KillAuraHandler.MAX_HUNT_ORBIT_SAMPLE_POINTS);
+            else if ("noDamageAttackLimit".equals(key)) KillAuraHandler.cfg().noDamageAttackLimit = intStatic(text, KillAuraHandler.cfg().noDamageAttackLimit, 0, KillAuraHandler.MAX_NO_DAMAGE_ATTACK_LIMIT);
+            else if ("minAttackIntervalTicks".equals(key)) KillAuraHandler.cfg().minAttackIntervalTicks = intStatic(text, KillAuraHandler.cfg().minAttackIntervalTicks, 0, 20);
+            else if ("targetsPerAttack".equals(key)) KillAuraHandler.cfg().targetsPerAttack = intStatic(text, KillAuraHandler.cfg().targetsPerAttack, 1, 50);
         }
 
         private static String safeStatic(String value) {
@@ -3651,11 +4357,12 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
         presetListBounds = null;
         nameEntryBounds = null;
         scanNamesBounds = null;
-        addWhitelistBounds = null;
-        addBlacklistBounds = null;
+        addToNameGroupBounds = null;
+        newNameGroupBounds = null;
+        renameNameGroupBounds = null;
         nearbyListBounds = null;
-        whitelistListBounds = null;
-        blacklistListBounds = null;
+        nameGroupsBounds = null;
+        nameGroupCards.clear();
         addRuleBounds = null;
         deleteRuleBounds = null;
         ruleListBounds = null;
@@ -3679,16 +4386,93 @@ public final class ModernKillAuraSettingsTab implements ModernSettingsTab {
     private void drawSectionLayouts(int mouseX, int mouseY) {
         for (SectionLayout layout : sectionLayouts) {
             Section section = layout.section;
-            ModernUiRenderer.drawText(fontRenderer, section.title, layout.bounds.x, layout.bounds.y + 2,
-                    ModernUiRenderer.SUBTLE_TEXT, Math.max(32, layout.bounds.width - 16));
-            drawInfoIcon(layout.bounds.x + Math.min(Math.max(0, layout.bounds.width - 12),
-                    fontRenderer.getStringWidth(section.title) + 5), layout.bounds.y + 1, section.tooltip, mouseX, mouseY);
+            if (section.modeCard != null) {
+                drawModeCardFrame(layout, mouseX, mouseY);
+            } else {
+                ModernUiRenderer.drawText(fontRenderer, section.title, layout.bounds.x, layout.bounds.y + 2,
+                        ModernUiRenderer.SUBTLE_TEXT, Math.max(32, layout.bounds.width - 16));
+                drawInfoIcon(layout.bounds.x + Math.min(Math.max(0, layout.bounds.width - 12),
+                        fontRenderer.getStringWidth(t(section.title)) + 5), layout.bounds.y + 1, section.tooltip,
+                        mouseX, mouseY);
+            }
+            if (section.collapsible && !section.expanded) {
+                continue;
+            }
             for (Field field : section.fields) {
                 if (field.visible() && field.rowBounds != null) {
                     drawField(field, mouseX, mouseY);
                 }
             }
         }
+    }
+
+    private void drawModeCardFrame(SectionLayout layout, int mouseX, int mouseY) {
+        Section section = layout.section;
+        ModernMainLayout.Rect bounds = layout.bounds;
+        ModernMainLayout.Rect header = section.headerBounds;
+        boolean active = section.modeCard.equalsIgnoreCase(KillAuraHandler.cfg().attackMode);
+        boolean headerHovered = contains(header, mouseX, mouseY);
+        ModernUiRenderer.drawSubtlePanel(bounds.x, bounds.y, bounds.width, bounds.height, 6,
+                headerHovered && !section.expanded ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SHELL_RAISED,
+                active ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
+        int textY = header.y + (header.height - fontRenderer.FONT_HEIGHT) / 2;
+        int chevronY = header.y + header.height / 2;
+        if (section.expanded) {
+            ModernUiRenderer.drawDropdownChevron(header.x + 8, chevronY - 2, ModernUiRenderer.SUBTLE_TEXT);
+        } else {
+            ModernUiRenderer.drawChevron(header.x + 10, chevronY - 4, true, ModernUiRenderer.SUBTLE_TEXT);
+        }
+        String name = t(section.title);
+        int nameX = header.x + 20;
+        ModernUiRenderer.drawText(fontRenderer, name, nameX, textY,
+                active ? ModernUiRenderer.TEXT : ModernUiRenderer.SUBTLE_TEXT, Math.max(24, header.width / 3));
+        int nameWidth = Math.min(fontRenderer.getStringWidth(name), Math.max(24, header.width / 3));
+
+        String label = active ? t("gui.modern.killaura.u275") : t("gui.modern.killaura.u274");
+        int buttonWidth = Math.max(44, fontRenderer.getStringWidth(label) + 16);
+        ModernMainLayout.Rect button = new ModernMainLayout.Rect(header.right() - buttonWidth - 6, header.y + 4,
+                buttonWidth, header.height - 8);
+        if (active) {
+            ModernUiRenderer.drawSubtlePanel(button.x, button.y, button.width, button.height, 4,
+                    ModernUiRenderer.ACCENT_DIM, ModernUiRenderer.ACCENT);
+            ModernUiRenderer.drawText(fontRenderer, label,
+                    button.x + (button.width - fontRenderer.getStringWidth(label)) / 2,
+                    button.y + (button.height - fontRenderer.FONT_HEIGHT) / 2, ModernUiRenderer.TEXT, button.width - 4);
+        } else {
+            boolean switchable = !KillAuraHandler.aimOnlyMode();
+            section.activateBounds = switchable ? button : null;
+            drawActionButton(button, label, switchable, mouseX, mouseY, false);
+        }
+        int summaryX = nameX + nameWidth + 8;
+        int summaryWidth = button.x - 6 - summaryX;
+        if (summaryWidth > 24) {
+            ModernUiRenderer.drawText(fontRenderer, modeSummary(section.modeCard), summaryX, textY,
+                    ModernUiRenderer.MUTED_TEXT, summaryWidth);
+        }
+        if (headerHovered && !contains(button, mouseX, mouseY)) {
+            hoveredTooltip = section.tooltip;
+        }
+    }
+
+    private String modeSummary(String mode) {
+        String range = State.getText(profileKey(mode, KEY_RANGE));
+        if (KillAuraHandler.ATTACK_MODE_TELEPORT.equals(mode)) {
+            return t("gui.modern.killaura.u271", range, State.getText(profileKey(mode, "teleportStepDistance")),
+                    State.getText(profileKey(mode, "teleportActionsPerTick")),
+                    State.getText(profileKey(mode, KEY_TARGETS)));
+        }
+        if (KillAuraHandler.ATTACK_MODE_SEQUENCE.equals(mode)) {
+            String sequenceName = safe(KillAuraHandler.cfg().attackSequenceName).trim();
+            return t("gui.modern.killaura.u272", range,
+                    sequenceName.isEmpty() ? t("gui.modern.killaura.u277") : sequenceName,
+                    State.getText(profileKey(mode, KEY_DELAY)));
+        }
+        if (KillAuraHandler.ATTACK_MODE_MOUSE_CLICK.equals(mode)) {
+            return t("gui.modern.killaura.u273", range, State.getText(profileKey(mode, KEY_STRENGTH)),
+                    State.getText(profileKey(mode, KEY_DELAY)));
+        }
+        return t("gui.modern.killaura.u270", range, State.getText(profileKey(mode, KEY_INTERVAL)),
+                State.getText(profileKey(mode, KEY_STRENGTH)), State.getText(profileKey(mode, KEY_TARGETS)));
     }
 
     private void drawField(Field field, int mouseX, int mouseY) {

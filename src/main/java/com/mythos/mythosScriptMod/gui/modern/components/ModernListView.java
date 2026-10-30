@@ -32,7 +32,6 @@ public final class ModernListView implements ModernComponent {
 
     public List<String> items() { return Collections.unmodifiableList(items); }
     public int selectedIndex() { return selected; }
-    public String selectedValue() { return selected >= 0 && selected < items.size() ? items.get(selected) : ""; }
     public ModernListView setOnSelected(BiConsumer<Integer, String> onSelected) { this.onSelected = onSelected; return this; }
 
     @Override public void layout(ModernMainLayout.Rect bounds) { this.bounds = bounds; scroll = Math.min(scroll, maxScroll()); }

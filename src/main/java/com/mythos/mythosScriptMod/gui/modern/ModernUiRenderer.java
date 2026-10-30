@@ -285,42 +285,6 @@ public final class ModernUiRenderer {
         return color;
     }
 
-    private static void drawRoundedOutline(int x, int y, int width, int height, int radius, int color) {
-        if (width <= 0 || height <= 0 || (color >>> 24) == 0) {
-            return;
-        }
-        int r = Math.max(0, Math.min(Math.min(width, height) / 2, radius));
-        boolean cullEnabled = disableCullForVector();
-        boolean alphaEnabled = GL11.glIsEnabled(GL11.GL_ALPHA_TEST);
-        GlStateManager.disableAlpha();
-        GlStateManager.disableTexture2D();
-        GlStateManager.enableBlend();
-        GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
-        applyColor(color);
-        // Only the one-pixel ring is filled; nothing is painted under the content.
-        GL11.glBegin(GL11.GL_QUAD_STRIP);
-        for (int corner = 0; corner <= 4; corner++) {
-            int c = corner % 4;
-            int cx = (c == 0 || c == 3) ? x + r : x + width - r;
-            int cy = c < 2 ? y + r : y + height - r;
-            int segments = Math.max(4, r / 2);
-            for (int i = 0; i <= (corner == 4 ? 0 : segments); i++) {
-                double angle = Math.toRadians(180 + c * 90 + i * 90.0 / segments);
-                float dx = (float) Math.cos(angle);
-                float dy = (float) Math.sin(angle);
-                GL11.glVertex2f(cx + dx * r, cy + dy * r);
-                GL11.glVertex2f(cx + dx * (r + 1), cy + dy * (r + 1));
-            }
-        }
-        GL11.glEnd();
-        GlStateManager.disableBlend();
-        GlStateManager.enableTexture2D();
-        if (alphaEnabled) {
-            GlStateManager.enableAlpha();
-        }
-        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
-        restoreCullAfterVector(cullEnabled);
-    }
 
     public static void drawRoundedRect(int x, int y, int width, int height, int radius, int color) {
         if (width <= 0 || height <= 0 || (color >>> 24) == 0) {

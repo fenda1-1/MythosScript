@@ -45,6 +45,7 @@ gui.point_picker.title.radius=Center and radius picking
 gui.point_picker.title.returns=Return-point list picking
 gui.point_picker.navigation.start=Visual path picking enabled: WASD moves the camera, jump rises, sneak descends. Left- or right-click the highlighted target; toggle the menu button or bound hotkey again to exit.
 gui.point_picker.navigation.selected=Pathing to %s, %s, %s. You can select another target or watch your body.
+gui.point_picker.navigation.error.no_baritone=The current player has no available pathing controller.
 gui.point_picker.navigation.goal=Path target
 gui.point_picker.navigation.busy=Finish or cancel the current point selection first.
 gui.point_picker.start.area=Area picking started: Left-click point 1, right-click point 2, middle-click to confirm, Esc to cancel.

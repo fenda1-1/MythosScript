@@ -62,15 +62,6 @@ public final class AutoEscapeWorkbenchState {
         if (rules.contains(rule)) selected = rule;
     }
 
-    public void replaceSelected(AutoEscapeRule replacement) {
-        if (replacement == null || selected == null) return;
-        replacement.normalize();
-        int index = rules.indexOf(selected);
-        if (index < 0) return;
-        rules.set(index, replacement);
-        selected = replacement;
-        addCategory(replacement.category);
-    }
 
     public void addRule(String category) {
         AutoEscapeRule rule = new AutoEscapeRule();

@@ -71,9 +71,11 @@ public class PlayerMovementInput extends MovementInput {
             desiredStrafe--;
         }
 
+        net.minecraft.client.entity.EntityPlayerSP ctxPlayer = handler.ctx.player();
+
         boolean decoupleMovementFromVisualYaw = handler.baritone.getLookBehavior().shouldDecoupleMovementFromVisualYaw();
         float yawDifferenceDeg = decoupleMovementFromVisualYaw
-                ? MathHelper.wrapDegrees(handler.getMovementYaw() - handler.getPlayerYaw())
+                ? MathHelper.wrapDegrees(handler.getMovementYaw() - (ctxPlayer != null ? ctxPlayer.rotationYaw : 0.0F))
                 : 0.0F;
 
         if (decoupleMovementFromVisualYaw && (desiredForward != 0.0F || desiredStrafe != 0.0F)) {
@@ -92,7 +94,7 @@ public class PlayerMovementInput extends MovementInput {
 
         HumanLikeMovementController controller = HumanLikeMovementController.INSTANCE;
         HumanLikeMovementController.MovementState movementState;
-        if (shouldBypassHumanLikeMovement()) {
+        if (ctxPlayer == null || shouldBypassHumanLikeMovement()) {
             movementState = new HumanLikeMovementController.MovementState(
                     desiredForward,
                     desiredStrafe,
@@ -105,10 +107,10 @@ public class PlayerMovementInput extends MovementInput {
                     desiredJump,
                     desiredSneak,
                     yawDifferenceDeg,
-                    handler.ctx.player().posX,
-                    handler.ctx.player().posY,
-                    handler.ctx.player().posZ,
-                    handler.ctx.player().onGround,
+                    ctxPlayer.posX,
+                    ctxPlayer.posY,
+                    ctxPlayer.posZ,
+                    ctxPlayer.onGround,
                     computeFinalApproachProgress(),
                     computeNarrowPassageFactor(),
                     computeStraightPathFactor(),
@@ -175,7 +177,7 @@ public class PlayerMovementInput extends MovementInput {
     }
 
     private float computeFinalApproachProgress() {
-        HumanLikeMovementConfig config = HumanLikeMovementConfig.INSTANCE;
+        HumanLikeMovementConfig config = HumanLikeMovementConfig.instance();
         if (config == null) {
             return 0.0F;
         }

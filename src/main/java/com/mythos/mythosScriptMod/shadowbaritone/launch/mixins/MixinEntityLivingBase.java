@@ -66,7 +66,7 @@ public abstract class MixinEntityLivingBase extends Entity {
 
     @Inject(method = "knockBack", at = @At("HEAD"), cancellable = true, require = 1)
     private void mythos$beforeKnockback(Entity attacker, float strength, double x, double z, CallbackInfo ci) {
-        if ((Object) this != net.minecraft.client.Minecraft.getMinecraft().player) return;
+        if ((Object) this != com.mythos.mythosScriptMod.mixin.SessionFieldAccess.getPlayer(net.minecraft.client.Minecraft.getMinecraft())) return;
         mythos$beforeKnockbackX = motionX;
         mythos$beforeKnockbackY = motionY;
         mythos$beforeKnockbackZ = motionZ;
@@ -75,7 +75,7 @@ public abstract class MixinEntityLivingBase extends Entity {
 
     @Inject(method = "knockBack", at = @At("RETURN"), require = 1)
     private void mythos$afterKnockback(Entity attacker, float strength, double x, double z, CallbackInfo ci) {
-        if ((Object) this != net.minecraft.client.Minecraft.getMinecraft().player) return;
+        if ((Object) this != com.mythos.mythosScriptMod.mixin.SessionFieldAccess.getPlayer(net.minecraft.client.Minecraft.getMinecraft())) return;
         double resistance = MovementFeatureManager.getKnockbackResistance();
         motionX += (mythos$beforeKnockbackX - motionX) * resistance;
         motionY += (mythos$beforeKnockbackY - motionY) * resistance;

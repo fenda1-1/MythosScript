@@ -122,9 +122,6 @@ abstract class PacketPanelBase extends ModernEmbeddedPanel {
         int gap = 6; int pad = 12; int width = Math.max(1, (area.width - pad * 2 - gap * Math.max(0, count - 1)) / Math.max(1, count));
         return new ModernMainLayout.Rect(area.x + pad + row * (width + gap), area.bottom() - 30, width, 22);
     }
-    protected ModernMainLayout.Rect buttonAt(int x, int y, int width, int height) {
-        return new ModernMainLayout.Rect(x, y, Math.max(1, width), Math.max(1, height));
-    }
     protected void drawButton(FontRenderer renderer, ModernMainLayout.Rect r, String label, int mouseX, int mouseY) {
         drawButton(renderer, r, label, mouseX, mouseY, true, false);
     }

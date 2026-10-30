@@ -86,17 +86,27 @@ public class SimulatedKeyInputManager {
         }
     }
 
-    private final Set<Integer> heldKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
-    private final Set<Integer> managedKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
-    private final Map<Integer, Integer> pendingReleaseTicks = new ConcurrentHashMap<>();
-    private final Queue<SimulatedPressEvent> pendingPressEvents = new ConcurrentLinkedQueue<>();
-    private final Set<Integer> syntheticActionKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
-    private final Set<Integer> syntheticTapKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
-    private final Set<Integer> foregroundActionKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
-    private final Set<Integer> backgroundActionKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
-    private final Set<Integer> foregroundTapKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
-    private final Set<Integer> backgroundTapKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
-    private final Queue<SyntheticKeyboardEvent> syntheticKeyboardEvents = new ConcurrentLinkedQueue<>();
+    private static final ConcurrentHashMap<String, RuntimeState> STATES = new ConcurrentHashMap<>();
+
+    private static RuntimeState rt() {
+        return STATES.computeIfAbsent(
+                com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner(),
+                k -> new RuntimeState());
+    }
+
+    private static final class RuntimeState {
+        private final Set<Integer> heldKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
+        private final Set<Integer> managedKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
+        private final Map<Integer, Integer> pendingReleaseTicks = new ConcurrentHashMap<>();
+        private final Queue<SimulatedPressEvent> pendingPressEvents = new ConcurrentLinkedQueue<>();
+        private final Set<Integer> syntheticActionKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
+        private final Set<Integer> syntheticTapKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
+        private final Set<Integer> foregroundActionKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
+        private final Set<Integer> backgroundActionKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
+        private final Set<Integer> foregroundTapKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
+        private final Set<Integer> backgroundTapKeys = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
+        private final Queue<SyntheticKeyboardEvent> syntheticKeyboardEvents = new ConcurrentLinkedQueue<>();
+    }
 
     private SimulatedKeyInputManager() {
     }
@@ -207,7 +217,7 @@ public class SimulatedKeyInputManager {
     /** Called by the Keyboard mixin at the start of Keyboard.next(). */
     public static boolean beginSyntheticKeyboardEvent() {
         CURRENT_SYNTHETIC_EVENT.remove();
-        SyntheticKeyboardEvent event = INSTANCE.syntheticKeyboardEvents.poll();
+        SyntheticKeyboardEvent event = rt().syntheticKeyboardEvents.poll();
         if (event == null) {
             return false;
         }
@@ -237,7 +247,7 @@ public class SimulatedKeyInputManager {
     }
 
     public SimulatedPressEvent pollPressedKey() {
-        return pendingPressEvents.poll();
+        return rt().pendingPressEvents.poll();
     }
 
     public void reset() {
@@ -259,7 +269,7 @@ public class SimulatedKeyInputManager {
     }
 
     private void applyStateChange(int keyCode, String state, boolean emitPressEvent) {
-        managedKeys.add(keyCode);
+        rt().managedKeys.add(keyCode);
         switch (state) {
             case "Down":
                 pressKey(keyCode, false, emitPressEvent);
@@ -275,15 +285,16 @@ public class SimulatedKeyInputManager {
     }
 
     private void applySyntheticActionState(int keyCode, String state, int pressDurationTicks, boolean background) {
-        managedKeys.add(keyCode);
-        Set<Integer> scopedActionKeys = background ? backgroundActionKeys : foregroundActionKeys;
-        Set<Integer> scopedTapKeys = background ? backgroundTapKeys : foregroundTapKeys;
+        RuntimeState rt = rt();
+        rt.managedKeys.add(keyCode);
+        Set<Integer> scopedActionKeys = background ? rt.backgroundActionKeys : rt.foregroundActionKeys;
+        Set<Integer> scopedTapKeys = background ? rt.backgroundTapKeys : rt.foregroundTapKeys;
         switch (state) {
             case "Down":
                 scopedActionKeys.add(keyCode);
                 scopedTapKeys.remove(keyCode);
-                syntheticActionKeys.add(keyCode);
-                syntheticTapKeys.remove(keyCode);
+                rt.syntheticActionKeys.add(keyCode);
+                rt.syntheticTapKeys.remove(keyCode);
                 applyStateChange(keyCode, "Down", false);
                 dispatchSyntheticKeyboardEvent(new SyntheticKeyboardEvent(keyCode, getEventCharacter(keyCode), true));
                 break;
@@ -295,8 +306,8 @@ public class SimulatedKeyInputManager {
             default:
                 scopedActionKeys.add(keyCode);
                 scopedTapKeys.add(keyCode);
-                syntheticActionKeys.add(keyCode);
-                syntheticTapKeys.add(keyCode);
+                rt.syntheticActionKeys.add(keyCode);
+                rt.syntheticTapKeys.add(keyCode);
                 tapKey(keyCode, false, pressDurationTicks);
                 dispatchSyntheticKeyboardEvent(new SyntheticKeyboardEvent(keyCode, getEventCharacter(keyCode), true));
                 break;
@@ -309,18 +320,19 @@ public class SimulatedKeyInputManager {
     }
 
     private void pressKey(int keyCode, boolean syntheticTap, boolean emitPressEvent, int holdTicks) {
-        boolean wasHeld = heldKeys.contains(keyCode);
-        heldKeys.add(keyCode);
+        RuntimeState rt = rt();
+        boolean wasHeld = rt.heldKeys.contains(keyCode);
+        rt.heldKeys.add(keyCode);
         if (syntheticTap) {
-            pendingReleaseTicks.put(keyCode, Math.max(1, holdTicks));
+            rt.pendingReleaseTicks.put(keyCode, Math.max(1, holdTicks));
         } else {
-            pendingReleaseTicks.remove(keyCode);
+            rt.pendingReleaseTicks.remove(keyCode);
         }
 
         syncKeyBindingState(keyCode);
         if (emitPressEvent && (!wasHeld || syntheticTap)) {
             KeyBinding.onTick(keyCode);
-            pendingPressEvents.add(new SimulatedPressEvent(keyCode, snapshotActiveModifiers()));
+            rt.pendingPressEvents.add(new SimulatedPressEvent(keyCode, snapshotActiveModifiers()));
         }
     }
 
@@ -329,11 +341,12 @@ public class SimulatedKeyInputManager {
     }
 
     private void tapKey(int keyCode, boolean emitPressEvent, int holdTicks) {
-        if (heldKeys.contains(keyCode) && !pendingReleaseTicks.containsKey(keyCode)) {
+        RuntimeState rt = rt();
+        if (rt.heldKeys.contains(keyCode) && !rt.pendingReleaseTicks.containsKey(keyCode)) {
             syncKeyBindingState(keyCode);
             if (emitPressEvent) {
                 KeyBinding.onTick(keyCode);
-                pendingPressEvents.add(new SimulatedPressEvent(keyCode, snapshotActiveModifiers()));
+                rt.pendingPressEvents.add(new SimulatedPressEvent(keyCode, snapshotActiveModifiers()));
             }
             return;
         }
@@ -341,28 +354,31 @@ public class SimulatedKeyInputManager {
     }
 
     private void releaseKey(int keyCode) {
-        heldKeys.remove(keyCode);
-        pendingReleaseTicks.remove(keyCode);
+        RuntimeState rt = rt();
+        rt.heldKeys.remove(keyCode);
+        rt.pendingReleaseTicks.remove(keyCode);
         syncKeyBindingState(keyCode);
     }
 
     private void syncManagedKeyStates() {
-        if (managedKeys.isEmpty()) {
+        RuntimeState rt = rt();
+        if (rt.managedKeys.isEmpty()) {
             return;
         }
 
-        for (Integer keyCode : new HashSet<>(managedKeys)) {
+        for (Integer keyCode : new HashSet<>(rt.managedKeys)) {
             syncKeyBindingState(keyCode);
         }
     }
 
     private void advancePendingReleases() {
-        if (pendingReleaseTicks.isEmpty()) {
+        RuntimeState rt = rt();
+        if (rt.pendingReleaseTicks.isEmpty()) {
             return;
         }
 
         Set<Integer> releaseKeys = new HashSet<>();
-        for (Map.Entry<Integer, Integer> entry : pendingReleaseTicks.entrySet()) {
+        for (Map.Entry<Integer, Integer> entry : rt.pendingReleaseTicks.entrySet()) {
             int remaining = entry.getValue() - 1;
             if (remaining <= 0) {
                 releaseKeys.add(entry.getKey());
@@ -372,17 +388,18 @@ public class SimulatedKeyInputManager {
         }
 
         for (Integer keyCode : releaseKeys) {
-            boolean foregroundTap = foregroundTapKeys.remove(keyCode);
-            boolean backgroundTap = backgroundTapKeys.remove(keyCode);
-            if (foregroundTap) foregroundActionKeys.remove(keyCode);
-            if (backgroundTap) backgroundActionKeys.remove(keyCode);
+            boolean foregroundTap = rt.foregroundTapKeys.remove(keyCode);
+            boolean backgroundTap = rt.backgroundTapKeys.remove(keyCode);
+            if (foregroundTap) rt.foregroundActionKeys.remove(keyCode);
+            if (backgroundTap) rt.backgroundActionKeys.remove(keyCode);
             refreshSyntheticKeyState(keyCode, true);
         }
     }
 
     private void releasePathActionKeysInternal(boolean background) {
-        Set<Integer> scopedActionKeys = background ? backgroundActionKeys : foregroundActionKeys;
-        Set<Integer> scopedTapKeys = background ? backgroundTapKeys : foregroundTapKeys;
+        RuntimeState rt = rt();
+        Set<Integer> scopedActionKeys = background ? rt.backgroundActionKeys : rt.foregroundActionKeys;
+        Set<Integer> scopedTapKeys = background ? rt.backgroundTapKeys : rt.foregroundTapKeys;
         Set<Integer> keys = new HashSet<>(scopedActionKeys);
         keys.addAll(scopedTapKeys);
         scopedActionKeys.clear();
@@ -393,21 +410,22 @@ public class SimulatedKeyInputManager {
     }
 
     private void refreshSyntheticKeyState(int keyCode, boolean dispatchRelease) {
-        boolean stillForeground = foregroundActionKeys.contains(keyCode);
-        boolean stillBackground = backgroundActionKeys.contains(keyCode);
+        RuntimeState rt = rt();
+        boolean stillForeground = rt.foregroundActionKeys.contains(keyCode);
+        boolean stillBackground = rt.backgroundActionKeys.contains(keyCode);
         boolean stillHeld = stillForeground || stillBackground;
         if (stillHeld) {
-            syntheticActionKeys.add(keyCode);
-            if (!foregroundTapKeys.contains(keyCode) && !backgroundTapKeys.contains(keyCode)) {
-                syntheticTapKeys.remove(keyCode);
-                pendingReleaseTicks.remove(keyCode);
+            rt.syntheticActionKeys.add(keyCode);
+            if (!rt.foregroundTapKeys.contains(keyCode) && !rt.backgroundTapKeys.contains(keyCode)) {
+                rt.syntheticTapKeys.remove(keyCode);
+                rt.pendingReleaseTicks.remove(keyCode);
             }
             syncKeyBindingState(keyCode);
             return;
         }
-        syntheticActionKeys.remove(keyCode);
-        syntheticTapKeys.remove(keyCode);
-        pendingReleaseTicks.remove(keyCode);
+        rt.syntheticActionKeys.remove(keyCode);
+        rt.syntheticTapKeys.remove(keyCode);
+        rt.pendingReleaseTicks.remove(keyCode);
         releaseKey(keyCode);
         if (dispatchRelease) {
             dispatchSyntheticKeyboardEvent(new SyntheticKeyboardEvent(keyCode, getEventCharacter(keyCode), false));
@@ -415,22 +433,23 @@ public class SimulatedKeyInputManager {
     }
 
     private void resetInternal() {
-        Set<Integer> keysToReset = new HashSet<>(managedKeys);
-        keysToReset.addAll(heldKeys);
-        keysToReset.addAll(pendingReleaseTicks.keySet());
+        RuntimeState rt = rt();
+        Set<Integer> keysToReset = new HashSet<>(rt.managedKeys);
+        keysToReset.addAll(rt.heldKeys);
+        keysToReset.addAll(rt.pendingReleaseTicks.keySet());
 
-        pendingPressEvents.clear();
-        syntheticKeyboardEvents.clear();
+        rt.pendingPressEvents.clear();
+        rt.syntheticKeyboardEvents.clear();
         CURRENT_SYNTHETIC_EVENT.remove();
-        syntheticActionKeys.clear();
-        syntheticTapKeys.clear();
-        foregroundActionKeys.clear();
-        backgroundActionKeys.clear();
-        foregroundTapKeys.clear();
-        backgroundTapKeys.clear();
-        heldKeys.clear();
-        pendingReleaseTicks.clear();
-        managedKeys.clear();
+        rt.syntheticActionKeys.clear();
+        rt.syntheticTapKeys.clear();
+        rt.foregroundActionKeys.clear();
+        rt.backgroundActionKeys.clear();
+        rt.foregroundTapKeys.clear();
+        rt.backgroundTapKeys.clear();
+        rt.heldKeys.clear();
+        rt.pendingReleaseTicks.clear();
+        rt.managedKeys.clear();
 
         for (Integer keyCode : keysToReset) {
             KeyBinding.setKeyBindState(keyCode, Keyboard.isKeyDown(keyCode));
@@ -452,6 +471,7 @@ public class SimulatedKeyInputManager {
             return;
         }
 
+        rt().syntheticKeyboardEvents.add(event);
         NativeKeyboardSnapshot nativeState = installNativeKeyboardState(event);
         CURRENT_SYNTHETIC_EVENT.set(event);
         try {
@@ -611,23 +631,24 @@ public class SimulatedKeyInputManager {
         if (keyCode == Keyboard.KEY_NONE) {
             return false;
         }
-        if (heldKeys.contains(keyCode)) {
+        RuntimeState rt = rt();
+        if (rt.heldKeys.contains(keyCode)) {
             return true;
         }
 
         switch (keyCode) {
             case Keyboard.KEY_LCONTROL:
-                return heldKeys.contains(Keyboard.KEY_RCONTROL);
+                return rt.heldKeys.contains(Keyboard.KEY_RCONTROL);
             case Keyboard.KEY_RCONTROL:
-                return heldKeys.contains(Keyboard.KEY_LCONTROL);
+                return rt.heldKeys.contains(Keyboard.KEY_LCONTROL);
             case Keyboard.KEY_LSHIFT:
-                return heldKeys.contains(Keyboard.KEY_RSHIFT);
+                return rt.heldKeys.contains(Keyboard.KEY_RSHIFT);
             case Keyboard.KEY_RSHIFT:
-                return heldKeys.contains(Keyboard.KEY_LSHIFT);
+                return rt.heldKeys.contains(Keyboard.KEY_LSHIFT);
             case Keyboard.KEY_LMENU:
-                return heldKeys.contains(Keyboard.KEY_RMENU);
+                return rt.heldKeys.contains(Keyboard.KEY_RMENU);
             case Keyboard.KEY_RMENU:
-                return heldKeys.contains(Keyboard.KEY_LMENU);
+                return rt.heldKeys.contains(Keyboard.KEY_LMENU);
             default:
                 return false;
         }

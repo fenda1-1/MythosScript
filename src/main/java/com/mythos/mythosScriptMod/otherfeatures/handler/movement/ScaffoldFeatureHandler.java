@@ -69,7 +69,7 @@ final class ScaffoldFeatureHandler {
             MovementFeatureSupport.PlacementTarget placement = MovementFeatureSupport.findScaffoldPlacement(player, targetPos);
             if (placement != null && MovementFeatureSupport.placeFromScaffold(player, placement)) {
                 player.fallDistance = 0.0F;
-                manager.scaffoldPlaceCooldownTicks = 0;
+                MovementFeatureManager.rt().scaffoldPlaceCooldownTicks = 0;
                 return true;
             }
         }

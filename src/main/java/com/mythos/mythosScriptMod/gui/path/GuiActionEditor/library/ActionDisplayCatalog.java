@@ -104,6 +104,7 @@ public final class ActionDisplayCatalog {
         ACTION_DISPLAY_KEYS.put("toggle_baritone_free_look", "gui.path.action_editor.type.toggle_baritone_free_look");
         ACTION_DISPLAY_KEYS.put("toggle_baritone_human_like", "gui.path.action_editor.type.toggle_baritone_human_like");
         ACTION_DISPLAY_KEYS.put("toggle_baritone_flight", "gui.path.action_editor.type.toggle_baritone_flight");
+        ACTION_DISPLAY_KEYS.put("toggle_baritone_blink", "gui.path.action_editor.type.toggle_baritone_blink");
         ACTION_DISPLAY_KEYS.put("toggle_other_feature", "gui.path.action_editor.type.toggle_other_feature");
         ACTION_DISPLAY_KEYS.put("hunt", "gui.path.action_editor.type.hunt");
         ACTION_DISPLAY_KEYS.put("follow_entity", "gui.path.action_editor.type.follow_entity");
@@ -116,7 +117,6 @@ public final class ActionDisplayCatalog {
         ACTION_DISPLAY_KEYS.put("pickup_nearby_items", "gui.path.action_editor.type.pickup_nearby_items");
         ACTION_DISPLAY_KEYS.put("switch_hotbar_slot", "gui.path.action_editor.type.switch_hotbar_slot");
         ACTION_DISPLAY_KEYS.put("silentuse", "gui.path.action_editor.type.silentuse");
-        ACTION_DISPLAY_KEYS.put("runlastsequence", "gui.path.action_editor.type.runlastsequence");
         ACTION_DISPLAY_KEYS.put("send_packet", "gui.path.action_editor.type.send_packet");
         ACTION_DISPLAY_KEYS.put("run_sequence", "gui.path.action_editor.type.run_sequence");
         ACTION_DISPLAY_KEYS.put("stop_current_sequence", "gui.path.action_editor.type.stop_current_sequence");
@@ -130,7 +130,4 @@ public final class ActionDisplayCatalog {
         return Collections.unmodifiableMap(ACTION_DISPLAY_KEYS);
     }
 
-    public static List<String> getOrderedActionTypes() {
-        return new ArrayList<String>(ACTION_DISPLAY_KEYS.keySet());
-    }
 }

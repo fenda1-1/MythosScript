@@ -242,7 +242,7 @@ public class CalculationContext {
      *  further than the walking planner default. */
     private static int resolveRouteHeightRange() {
         int configured = Baritone.settings().allowBlinkPathing.value
-                ? BlinkPathingConfig.routeHeightRange
+                ? BlinkPathingConfig.cfg().routeHeightRange
                 : Baritone.settings().routeHeightRange.value;
         return Math.max(1, Math.min(100, configured));
     }

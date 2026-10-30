@@ -65,42 +65,62 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class AutoFollowHandler {
+
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        public final List<AutoFollowRule> rules = new CopyOnWriteArrayList<>();
+        private final List<String> categories = new CopyOnWriteArrayList<>();
+        public boolean antiStuckEnabled = false;
+        public boolean avoidVinesProactively = false;
+        public double vineAvoidanceDistance = 2.0;
+        public boolean timeoutReloadEnabled = false;
+        public int timeoutReloadSeconds = 60;
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) AutoFollowHandler::loadFollowConfig);
+            return config;
+        }
+    }
+
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    public static final List<AutoFollowRule> rules = new CopyOnWriteArrayList<>();
-    private static final List<String> categories = new CopyOnWriteArrayList<>();
     private static final String CATEGORY_DEFAULT = "默认";
     private static final String LEGACY_DEFAULT_CATEGORY_KEY = "gui.modern.autofollow.u046";
-    private static AutoFollowRule activeRule = null;
-    private static String lastQuickToggleRuleName = "";
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final Random RANDOM = new Random();
 
-    public static boolean antiStuckEnabled = false;
-    public static boolean avoidVinesProactively = false;
-    public static double vineAvoidanceDistance = 2.0;
 
-    public static boolean timeoutReloadEnabled = false;
-    public static int timeoutReloadSeconds = 60;
-    private static int timeoutTicksCounter = 0;
-    private static Vec3d lastTimeoutCheckPosition = null;
-
-    private static int stuckCheckCounter = 0;
-    private static Vec3d lastStuckCheckPosition = null;
     private static final int STUCK_CHECK_INTERVAL = 40;
     private static final double STUCK_DISTANCE_THRESHOLD_SQ = 0.01;
 
     private static final double AVOIDANCE_SIDESTEP_SAFETY_MARGIN = 1.5;
     private static final double AVOIDANCE_FORWARD_SAFETY_MARGIN = 1.5;
     private static final double ESCAPE_DISTANCE = 3.5;
-    private static Vec3d lastTickPlayerPos = null;
-    private static long lastAvoidanceTime = 0;
     private static final long AVOIDANCE_COOLDOWN_MS = 2500;
 
-    public static boolean isMovingToPoint = false;
-    private static Vec3d escapeDestination = null;
     public static final double DETECTION_RADIUS = 5.0;
     private static final double HUNT_GOTO_MOVE_THRESHOLD_SQ = 1.0; // 目标移动超过1格时重发goto
     private static final int HUNT_GOTO_INTERVAL_TICKS = 20; // 增加到20 ticks (1秒) 间隔
@@ -108,31 +128,53 @@ public class AutoFollowHandler {
     private static final int MONSTER_SCORE_SCAN_INTERVAL_TICKS = 4;
     private static final int HUNT_DESTINATION_HORIZONTAL_SEARCH_RADIUS = 2;
 
-    private static volatile List<ScoredMonsterInfo> lastScoredMonsters = Collections.emptyList();
-    private static int lastMonsterScoreScanTick = -99999;
-
-    private static Entity huntTargetEntity = null;
-    private static int lastHuntGotoTick = -99999;
-    private static int lastHuntTargetEntityId = Integer.MIN_VALUE;
-    private static Vec3d lastHuntTargetPos = null;
-    private static boolean huntMovementStopped = false;
-    private static boolean centerReturnCommandIssued = false;
-    private static int currentReturnPointIndex = 0;
-    private static boolean patrolWaitingAtPoint = false;
-    private static long patrolWaitStartMs = 0L;
-    private static Vec3d lastPatrolProgressPosition = null;
-    private static long patrolStoppedSinceMs = 0L;
-    private static Point randomPatrolPoint = null;
-
-    private static Point lastPlayerPosition = null;
-    private static boolean isSuspendedDueToDistance = false;
-    private static final double TELEPORT_THRESHOLD = 50.0;
     private static final int COMMAND_DELAY_TICKS = 3;
-    private static boolean returningToCenterFromOutOfBounds = false;
-    private static boolean outOfRecoveryRangeSequenceTriggered = false;
-    private static long lastOutOfBoundsNotifyMs = 0L;
     private static final long OUT_OF_BOUNDS_NOTIFY_COOLDOWN_MS = 2000L;
-    private static final double OUT_OF_BOUNDS_RETURN_TOLERANCE = 1.5;
+
+    // 跟随/狩猎/巡逻三个子状态机的运行时状态全部按会话装箱：
+    // 多 bot 并行时各自持有独立 RuntimeState，不再共享 static 字段。
+    private static final ConcurrentHashMap<String, RuntimeState> STATES = new ConcurrentHashMap<>();
+
+    private static RuntimeState rt() {
+        return STATES.computeIfAbsent(com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner(),
+                k -> new RuntimeState());
+    }
+
+    private static RuntimeState rtFor(String owner) {
+        return STATES.computeIfAbsent(owner == null ? "" : owner, k -> new RuntimeState());
+    }
+
+    private static final class RuntimeState {
+        private AutoFollowRule activeRule = null;
+        private String lastQuickToggleRuleName = "";
+        private int timeoutTicksCounter = 0;
+        private Vec3d lastTimeoutCheckPosition = null;
+        private int stuckCheckCounter = 0;
+        private Vec3d lastStuckCheckPosition = null;
+        private Vec3d lastTickPlayerPos = null;
+        private long lastAvoidanceTime = 0;
+        private boolean isMovingToPoint = false;
+        private Vec3d escapeDestination = null;
+        private volatile List<ScoredMonsterInfo> lastScoredMonsters = Collections.emptyList();
+        private int lastMonsterScoreScanTick = -99999;
+        private Entity huntTargetEntity = null;
+        private int lastHuntGotoTick = -99999;
+        private int lastHuntTargetEntityId = Integer.MIN_VALUE;
+        private Vec3d lastHuntTargetPos = null;
+        private boolean huntMovementStopped = false;
+        private boolean centerReturnCommandIssued = false;
+        private int currentReturnPointIndex = 0;
+        private boolean patrolWaitingAtPoint = false;
+        private long patrolWaitStartMs = 0L;
+        private Vec3d lastPatrolProgressPosition = null;
+        private long patrolStoppedSinceMs = 0L;
+        private Point randomPatrolPoint = null;
+        private Point lastPlayerPosition = null;
+        private boolean isSuspendedDueToDistance = false;
+        private boolean returningToCenterFromOutOfBounds = false;
+        private boolean outOfRecoveryRangeSequenceTriggered = false;
+        private long lastOutOfBoundsNotifyMs = 0L;
+    }
 
     static {
         loadFollowConfig();
@@ -186,39 +228,39 @@ public class AutoFollowHandler {
     }
 
     private static Path getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("autofollow_rules.json");
+        return ProfileManager.currentConfigFile("autofollow_rules.json");
     }
 
     public static synchronized void loadFollowConfig() {
-        rules.clear();
-        categories.clear();
+        cfg().rules.clear();
+        cfg().categories.clear();
         Path configFile = getConfigFile();
         if (Files.exists(configFile)) {
             try (BufferedReader reader = Files.newBufferedReader(configFile, StandardCharsets.UTF_8)) {
                 JsonElement parsed = new JsonParser().parse(reader);
 
-                antiStuckEnabled = false;
-                avoidVinesProactively = false;
-                vineAvoidanceDistance = 2.0;
-                timeoutReloadEnabled = false;
-                timeoutReloadSeconds = 60;
+                cfg().antiStuckEnabled = false;
+                cfg().avoidVinesProactively = false;
+                cfg().vineAvoidanceDistance = 2.0;
+                cfg().timeoutReloadEnabled = false;
+                cfg().timeoutReloadSeconds = 60;
 
                 JsonArray ruleArray = null;
 
                 if (parsed != null && parsed.isJsonObject()) {
                     JsonObject root = parsed.getAsJsonObject();
-                    antiStuckEnabled = root.has("antiStuckEnabled") ? root.get("antiStuckEnabled").getAsBoolean()
+                    cfg().antiStuckEnabled = root.has("antiStuckEnabled") ? root.get("antiStuckEnabled").getAsBoolean()
                             : false;
-                    avoidVinesProactively = root.has("avoidVinesProactively")
+                    cfg().avoidVinesProactively = root.has("avoidVinesProactively")
                             ? root.get("avoidVinesProactively").getAsBoolean()
                             : false;
-                    vineAvoidanceDistance = root.has("vineAvoidanceDistance")
+                    cfg().vineAvoidanceDistance = root.has("vineAvoidanceDistance")
                             ? root.get("vineAvoidanceDistance").getAsDouble()
                             : 2.0;
-                    timeoutReloadEnabled = root.has("timeoutReloadEnabled")
+                    cfg().timeoutReloadEnabled = root.has("timeoutReloadEnabled")
                             ? root.get("timeoutReloadEnabled").getAsBoolean()
                             : false;
-                    timeoutReloadSeconds = root.has("timeoutReloadSeconds")
+                    cfg().timeoutReloadSeconds = root.has("timeoutReloadSeconds")
                             ? root.get("timeoutReloadSeconds").getAsInt()
                             : 60;
 
@@ -226,7 +268,7 @@ public class AutoFollowHandler {
                         JsonArray categoryArray = root.getAsJsonArray("categories");
                         for (JsonElement element : categoryArray) {
                             if (element != null && element.isJsonPrimitive()) {
-                                categories.add(element.getAsString());
+                                cfg().categories.add(element.getAsString());
                             }
                         }
                     }
@@ -262,7 +304,7 @@ public class AutoFollowHandler {
                             rule.category = normalizeCategory(rule.category);
                             rule.updateBounds();
                             rule.ensureReturnPoints();
-                            rules.add(rule);
+                            cfg().rules.add(rule);
                         }
                     }
                 }
@@ -271,13 +313,13 @@ public class AutoFollowHandler {
             }
         }
         ensureCategoriesSynced();
-        activeRule = null;
+        rtFor("").activeRule = null;
         for (AutoFollowRule rule : snapshotRules()) {
             rule.updateBounds();
             rule.ensureReturnPoints();
             if (rule.enabled) {
-                activeRule = rule;
-                lastQuickToggleRuleName = rule.name == null ? "" : rule.name.trim();
+                rtFor("").activeRule = rule;
+                rtFor("").lastQuickToggleRuleName = rule.name == null ? "" : rule.name.trim();
                 break;
             }
         }
@@ -292,12 +334,12 @@ public class AutoFollowHandler {
             Files.createDirectories(configFile.getParent());
 
             JsonObject root = new JsonObject();
-            root.addProperty("antiStuckEnabled", antiStuckEnabled);
-            root.addProperty("avoidVinesProactively", avoidVinesProactively);
-            root.addProperty("vineAvoidanceDistance", vineAvoidanceDistance);
-            root.addProperty("timeoutReloadEnabled", timeoutReloadEnabled);
-            root.addProperty("timeoutReloadSeconds", timeoutReloadSeconds);
-            root.add("categories", GSON.toJsonTree(new ArrayList<>(categories)));
+            root.addProperty("antiStuckEnabled", cfg().antiStuckEnabled);
+            root.addProperty("avoidVinesProactively", cfg().avoidVinesProactively);
+            root.addProperty("vineAvoidanceDistance", cfg().vineAvoidanceDistance);
+            root.addProperty("timeoutReloadEnabled", cfg().timeoutReloadEnabled);
+            root.addProperty("timeoutReloadSeconds", cfg().timeoutReloadSeconds);
+            root.add("categories", GSON.toJsonTree(new ArrayList<>(cfg().categories)));
             root.add("rules", GSON.toJsonTree(snapshotRules()));
 
             try (BufferedWriter writer = Files.newBufferedWriter(configFile, StandardCharsets.UTF_8)) {
@@ -316,10 +358,10 @@ public class AutoFollowHandler {
 
     private static void ensureCategoriesSynced() {
         LinkedHashSet<String> normalized = new LinkedHashSet<>();
-        for (String category : categories) {
+        for (String category : cfg().categories) {
             normalized.add(normalizeCategory(category));
         }
-        for (AutoFollowRule rule : rules) {
+        for (AutoFollowRule rule : cfg().rules) {
             if (rule == null) {
                 continue;
             }
@@ -331,12 +373,12 @@ public class AutoFollowHandler {
         if (normalized.isEmpty()) {
             normalized.add(CATEGORY_DEFAULT);
         }
-        categories.clear();
-        categories.addAll(normalized);
+        cfg().categories.clear();
+        cfg().categories.addAll(normalized);
     }
 
     private static boolean containsCategoryIgnoreCase(String category) {
-        for (String existing : categories) {
+        for (String existing : cfg().categories) {
             if (normalizeCategory(existing).equalsIgnoreCase(normalizeCategory(category))) {
                 return true;
             }
@@ -345,9 +387,9 @@ public class AutoFollowHandler {
     }
 
     private static boolean removeCategoryIgnoreCase(String category) {
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
-                categories.remove(i);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
+                cfg().categories.remove(i);
                 return true;
             }
         }
@@ -356,7 +398,7 @@ public class AutoFollowHandler {
 
     public static synchronized List<String> getCategoriesSnapshot() {
         ensureCategoriesSynced();
-        return new ArrayList<>(categories);
+        return new ArrayList<>(cfg().categories);
     }
 
     public static synchronized void replaceCategoryOrder(List<String> orderedCategories) {
@@ -367,11 +409,11 @@ public class AutoFollowHandler {
                 normalized.add(normalizeCategory(category));
             }
         }
-        for (String category : categories) {
+        for (String category : cfg().categories) {
             normalized.add(normalizeCategory(category));
         }
-        categories.clear();
-        categories.addAll(normalized);
+        cfg().categories.clear();
+        cfg().categories.addAll(normalized);
         saveFollowConfig();
     }
 
@@ -381,7 +423,7 @@ public class AutoFollowHandler {
         if (containsCategoryIgnoreCase(normalized)) {
             return false;
         }
-        categories.add(normalized);
+        cfg().categories.add(normalized);
         saveFollowConfig();
         return true;
     }
@@ -399,15 +441,15 @@ public class AutoFollowHandler {
         }
 
         boolean changed = false;
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizedOld)) {
-                categories.set(i, normalizedNew);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizedOld)) {
+                cfg().categories.set(i, normalizedNew);
                 changed = true;
                 break;
             }
         }
 
-        for (AutoFollowRule rule : rules) {
+        for (AutoFollowRule rule : cfg().rules) {
             if (rule != null && normalizeCategory(rule.category).equalsIgnoreCase(normalizedOld)) {
                 rule.category = normalizedNew;
                 changed = true;
@@ -428,7 +470,7 @@ public class AutoFollowHandler {
         ensureCategoriesSynced();
 
         boolean changed = removeCategoryIgnoreCase(normalized);
-        for (AutoFollowRule rule : rules) {
+        for (AutoFollowRule rule : cfg().rules) {
             if (rule != null && normalizeCategory(rule.category).equalsIgnoreCase(normalized)) {
                 rule.category = CATEGORY_DEFAULT;
                 changed = true;
@@ -445,21 +487,21 @@ public class AutoFollowHandler {
     }
 
     public static AutoFollowRule getActiveRule() {
-        return activeRule;
+        return rt().activeRule;
     }
 
     public static boolean hasAnyRuleConfigured() {
-        return !rules.isEmpty();
+        return !cfg().rules.isEmpty();
     }
 
     public static AutoFollowRule toggleEnabledFromQuickSwitch() {
-        if (activeRule != null && activeRule.enabled) {
-            lastQuickToggleRuleName = activeRule.name == null ? "" : activeRule.name.trim();
+        if (rt().activeRule != null && rt().activeRule.enabled) {
+            rt().lastQuickToggleRuleName = rt().activeRule.name == null ? "" : rt().activeRule.name.trim();
             setActiveRule(null);
             return null;
         }
 
-        AutoFollowRule preferred = findRuleByName(lastQuickToggleRuleName);
+        AutoFollowRule preferred = findRuleByName(rt().lastQuickToggleRuleName);
         if (preferred == null) {
             List<AutoFollowRule> snapshot = snapshotRules();
             preferred = snapshot.isEmpty() ? null : snapshot.get(0);
@@ -506,15 +548,15 @@ public class AutoFollowHandler {
     }
 
     public static boolean hasActiveLockChaseRestriction() {
-        return activeRule != null && activeRule.enabled;
+        return rt().activeRule != null && rt().activeRule.enabled;
     }
 
     public static boolean isPositionWithinActiveLockChaseBounds(double x, double z) {
         if (!hasActiveLockChaseRestriction()) {
             return true;
         }
-        activeRule.updateBounds();
-        return isPositionWithinLockChaseBounds(activeRule, x, z);
+        rt().activeRule.updateBounds();
+        return isPositionWithinLockChaseBounds(rt().activeRule, x, z);
     }
 
     private static boolean isPositionWithinLockChaseBounds(AutoFollowRule rule, double x, double z) {
@@ -544,14 +586,14 @@ public class AutoFollowHandler {
     }
 
     public static synchronized List<ScoredMonsterInfo> getLastScoredMonstersSnapshot() {
-        if (lastScoredMonsters.isEmpty()) {
+        if (rt().lastScoredMonsters.isEmpty()) {
             return Collections.emptyList();
         }
-        return new ArrayList<>(lastScoredMonsters);
+        return new ArrayList<>(rt().lastScoredMonsters);
     }
 
     private static synchronized void replaceLastScoredMonsters(List<ScoredMonsterInfo> scoredMonsters) {
-        lastScoredMonsters = scoredMonsters == null || scoredMonsters.isEmpty()
+        rt().lastScoredMonsters = scoredMonsters == null || scoredMonsters.isEmpty()
                 ? Collections.<ScoredMonsterInfo>emptyList()
                 : new ArrayList<>(scoredMonsters);
     }
@@ -564,11 +606,11 @@ public class AutoFollowHandler {
             ruleToActivate.updateBounds();
             ruleToActivate.ensureReturnPoints();
             ruleToActivate.enabled = true;
-            activeRule = ruleToActivate;
-            lastQuickToggleRuleName = ruleToActivate.name == null ? "" : ruleToActivate.name.trim();
+            rt().activeRule = ruleToActivate;
+            rt().lastQuickToggleRuleName = ruleToActivate.name == null ? "" : ruleToActivate.name.trim();
             reloadState(false);
         } else {
-            activeRule = null;
+            rt().activeRule = null;
             resetPatrolState();
         }
         saveFollowConfig();
@@ -588,39 +630,39 @@ public class AutoFollowHandler {
     }
 
     public static void reloadState(boolean showMessage) {
-        if (activeRule == null) {
+        if (rt().activeRule == null) {
             return;
         }
-        activeRule.updateBounds();
-        activeRule.ensureReturnPoints();
+        rt().activeRule.updateBounds();
+        rt().activeRule.ensureReturnPoints();
 
-        isMovingToPoint = true;
-        returningToCenterFromOutOfBounds = false;
-        escapeDestination = null;
-        isSuspendedDueToDistance = false;
-        lastPlayerPosition = null;
-        stuckCheckCounter = 0;
-        lastStuckCheckPosition = null;
-        timeoutTicksCounter = 0;
-        lastTimeoutCheckPosition = null;
-        huntTargetEntity = null;
-        lastHuntGotoTick = -99999;
-        lastHuntTargetEntityId = Integer.MIN_VALUE;
-        lastHuntTargetPos = null;
-        huntMovementStopped = false;
-        centerReturnCommandIssued = false;
-        outOfRecoveryRangeSequenceTriggered = false;
-        patrolWaitingAtPoint = false;
-        patrolWaitStartMs = 0L;
+        rt().isMovingToPoint = true;
+        rt().returningToCenterFromOutOfBounds = false;
+        rt().escapeDestination = null;
+        rt().isSuspendedDueToDistance = false;
+        rt().lastPlayerPosition = null;
+        rt().stuckCheckCounter = 0;
+        rt().lastStuckCheckPosition = null;
+        rt().timeoutTicksCounter = 0;
+        rt().lastTimeoutCheckPosition = null;
+        rt().huntTargetEntity = null;
+        rt().lastHuntGotoTick = -99999;
+        rt().lastHuntTargetEntityId = Integer.MIN_VALUE;
+        rt().lastHuntTargetPos = null;
+        rt().huntMovementStopped = false;
+        rt().centerReturnCommandIssued = false;
+        rt().outOfRecoveryRangeSequenceTriggered = false;
+        rt().patrolWaitingAtPoint = false;
+        rt().patrolWaitStartMs = 0L;
         resetPatrolStuckMonitor();
-        randomPatrolPoint = null;
-        lastMonsterScoreScanTick = -99999;
+        rt().randomPatrolPoint = null;
+        rt().lastMonsterScoreScanTick = -99999;
         replaceLastScoredMonsters(Collections.<ScoredMonsterInfo>emptyList());
 
         if (mc.player != null) {
-            currentReturnPointIndex = getNearestReturnPointIndex(mc.player.posX, mc.player.posY, mc.player.posZ);
+            rt().currentReturnPointIndex = getNearestReturnPointIndex(mc.player.posX, mc.player.posY, mc.player.posZ);
         } else {
-            currentReturnPointIndex = selectInitialReturnPointIndex();
+            rt().currentReturnPointIndex = selectInitialReturnPointIndex();
         }
 
         EmbeddedNavigationHandler.INSTANCE.stop();
@@ -632,20 +674,30 @@ public class AutoFollowHandler {
         }
     }
 
+    // 原 public static isMovingToPoint 的对外兼容访问器：语义为「当前会话的
+    // 正在 goto」；多 bot 场景由调用线程的 tick owner 解析，行为与装箱前一致。
+    public static boolean isMovingToPoint() {
+        return rt().isMovingToPoint;
+    }
+
+    public static void setMovingToPoint(boolean moving) {
+        rt().isMovingToPoint = moving;
+    }
+
     private static void resetPatrolState() {
-        currentReturnPointIndex = 0;
-        patrolWaitingAtPoint = false;
-        patrolWaitStartMs = 0L;
+        rt().currentReturnPointIndex = 0;
+        rt().patrolWaitingAtPoint = false;
+        rt().patrolWaitStartMs = 0L;
         resetPatrolStuckMonitor();
-        randomPatrolPoint = null;
-        centerReturnCommandIssued = false;
+        rt().randomPatrolPoint = null;
+        rt().centerReturnCommandIssued = false;
     }
 
     private static List<AutoFollowRule> snapshotRules() {
-        if (rules.isEmpty()) {
+        if (cfg().rules.isEmpty()) {
             return Collections.emptyList();
         }
-        return rules;
+        return cfg().rules;
     }
 
     @SubscribeEvent
@@ -661,105 +713,105 @@ public class AutoFollowHandler {
         EntityPlayerSP player = (EntityPlayerSP) event.player;
         Vec3d currentPos = player.getPositionVector();
 
-        if (activeRule == null || !activeRule.enabled
-                || PathSequenceEventListener.instance.isTracking()
+        if (rt().activeRule == null || !rt().activeRule.enabled
+                || PathSequenceEventListener.foregroundRunner().isTracking()
                 || AutoEscapeHandler.isEmergencyLockActive()) {
-            lastTickPlayerPos = currentPos;
-            stuckCheckCounter = 0;
-            lastStuckCheckPosition = null;
-            timeoutTicksCounter = 0;
-            lastTimeoutCheckPosition = null;
-            returningToCenterFromOutOfBounds = false;
-            huntTargetEntity = null;
-            lastHuntTargetEntityId = Integer.MIN_VALUE;
-            lastHuntTargetPos = null;
-            huntMovementStopped = false;
-            centerReturnCommandIssued = false;
-            outOfRecoveryRangeSequenceTriggered = false;
-            patrolWaitingAtPoint = false;
-            patrolWaitStartMs = 0L;
+            rt().lastTickPlayerPos = currentPos;
+            rt().stuckCheckCounter = 0;
+            rt().lastStuckCheckPosition = null;
+            rt().timeoutTicksCounter = 0;
+            rt().lastTimeoutCheckPosition = null;
+            rt().returningToCenterFromOutOfBounds = false;
+            rt().huntTargetEntity = null;
+            rt().lastHuntTargetEntityId = Integer.MIN_VALUE;
+            rt().lastHuntTargetPos = null;
+            rt().huntMovementStopped = false;
+            rt().centerReturnCommandIssued = false;
+            rt().outOfRecoveryRangeSequenceTriggered = false;
+            rt().patrolWaitingAtPoint = false;
+            rt().patrolWaitStartMs = 0L;
             resetPatrolStuckMonitor();
             replaceLastScoredMonsters(Collections.<ScoredMonsterInfo>emptyList());
             return;
         }
 
-        activeRule.updateBounds();
-        activeRule.ensureReturnPoints();
+        rt().activeRule.updateBounds();
+        rt().activeRule.ensureReturnPoints();
 
         double playerX = player.posX;
         double playerZ = player.posZ;
 
-        lastPlayerPosition = new Point(playerX, playerZ);
+        rt().lastPlayerPosition = new Point(playerX, playerZ);
 
-        if (isMovingToPoint) {
-            timeoutTicksCounter = 0;
-            lastTimeoutCheckPosition = null;
+        if (rt().isMovingToPoint) {
+            rt().timeoutTicksCounter = 0;
+            rt().lastTimeoutCheckPosition = null;
 
             // 回归途中支持抢怪：若范围内刷出怪，立即中断回归并转为追怪
-            if (escapeDestination == null && !shouldYieldChaseToKillAura(player)) {
+            if (rt().escapeDestination == null && !shouldYieldChaseToKillAura(player)) {
                 Entity candidate = findNearestMonsterInRule(player);
                 if (candidate != null) {
-                    isMovingToPoint = false;
-                    returningToCenterFromOutOfBounds = false;
-                    centerReturnCommandIssued = false;
-                    patrolWaitingAtPoint = false;
-                    patrolWaitStartMs = 0L;
+                    rt().isMovingToPoint = false;
+                    rt().returningToCenterFromOutOfBounds = false;
+                    rt().centerReturnCommandIssued = false;
+                    rt().patrolWaitingAtPoint = false;
+                    rt().patrolWaitStartMs = 0L;
                     resetPatrolStuckMonitor();
-                    huntTargetEntity = candidate;
-                    lastHuntTargetEntityId = Integer.MIN_VALUE;
-                    lastHuntTargetPos = null;
-                    huntMovementStopped = false;
+                    rt().huntTargetEntity = candidate;
+                    rt().lastHuntTargetEntityId = Integer.MIN_VALUE;
+                    rt().lastHuntTargetPos = null;
+                    rt().huntMovementStopped = false;
                     handleBoundedMonsterChase(player);
-                    lastTickPlayerPos = currentPos;
+                    rt().lastTickPlayerPos = currentPos;
                     return;
                 }
             }
 
             Point unfinishedReturnPoint = getCurrentReturnPoint();
-            if (escapeDestination == null
+            if (rt().escapeDestination == null
                     && !isAtReturnPoint(unfinishedReturnPoint, getReturnArriveDistance())
                     && handleInterruptedPatrolRoute(player, currentPos)) {
-                lastTickPlayerPos = currentPos;
+                rt().lastTickPlayerPos = currentPos;
                 return;
             }
 
             boolean arrived;
-            if (escapeDestination != null) {
-                arrived = mythosScriptMod.ArriveAt(escapeDestination.x, Double.NaN, escapeDestination.z, 1.5);
+            if (rt().escapeDestination != null) {
+                arrived = mythosScriptMod.ArriveAt(rt().escapeDestination.x, Double.NaN, rt().escapeDestination.z, 1.5);
                 if (arrived) {
-                    isMovingToPoint = false;
-                    returningToCenterFromOutOfBounds = false;
-                    escapeDestination = null;
+                    rt().isMovingToPoint = false;
+                    rt().returningToCenterFromOutOfBounds = false;
+                    rt().escapeDestination = null;
                     EmbeddedNavigationHandler.INSTANCE.stop();
-                    huntTargetEntity = null;
-                    lastHuntTargetEntityId = Integer.MIN_VALUE;
-                    lastHuntTargetPos = null;
-                    huntMovementStopped = false;
-                    centerReturnCommandIssued = false;
+                    rt().huntTargetEntity = null;
+                    rt().lastHuntTargetEntityId = Integer.MIN_VALUE;
+                    rt().lastHuntTargetPos = null;
+                    rt().huntMovementStopped = false;
+                    rt().centerReturnCommandIssued = false;
                 }
             } else {
                 Point returnPoint = getCurrentReturnPoint();
                 double tolerance = getReturnArriveDistance();
                 arrived = isAtReturnPoint(returnPoint, tolerance);
                 if (arrived) {
-                    isMovingToPoint = false;
-                    returningToCenterFromOutOfBounds = false;
+                    rt().isMovingToPoint = false;
+                    rt().returningToCenterFromOutOfBounds = false;
                     EmbeddedNavigationHandler.INSTANCE.stop();
-                    huntTargetEntity = null;
-                    lastHuntTargetEntityId = Integer.MIN_VALUE;
-                    lastHuntTargetPos = null;
-                    huntMovementStopped = false;
-                    centerReturnCommandIssued = false;
-                    patrolWaitingAtPoint = true;
-                    patrolWaitStartMs = System.currentTimeMillis();
+                    rt().huntTargetEntity = null;
+                    rt().lastHuntTargetEntityId = Integer.MIN_VALUE;
+                    rt().lastHuntTargetPos = null;
+                    rt().huntMovementStopped = false;
+                    rt().centerReturnCommandIssued = false;
+                    rt().patrolWaitingAtPoint = true;
+                    rt().patrolWaitStartMs = System.currentTimeMillis();
                     resetPatrolStuckMonitor();
                     player.sendMessage(new TextComponentString(
                             TextFormatting.AQUA + "[自动追怪] " + TextFormatting.GREEN + "已到达回归点，开始停留。"));
                 }
             }
         } else {
-            boolean isWithinBounds = playerX >= activeRule.minX && playerX <= activeRule.maxX
-                    && playerZ >= activeRule.minZ && playerZ <= activeRule.maxZ;
+            boolean isWithinBounds = playerX >= rt().activeRule.minX && playerX <= rt().activeRule.maxX
+                    && playerZ >= rt().activeRule.minZ && playerZ <= rt().activeRule.maxZ;
 
             if (isWithinBounds) {
                 if (handleTimeoutReload(player)) {
@@ -768,37 +820,37 @@ public class AutoFollowHandler {
 
                 Point returnPoint = getCurrentReturnPoint();
                 double distToCenter = distanceToPoint(playerX, playerZ, returnPoint);
-                if (distToCenter > activeRule.maxRecoveryDistance) {
-                    if (!isSuspendedDueToDistance) {
-                        isSuspendedDueToDistance = true;
+                if (distToCenter > rt().activeRule.maxRecoveryDistance) {
+                    if (!rt().isSuspendedDueToDistance) {
+                        rt().isSuspendedDueToDistance = true;
                         EmbeddedNavigationHandler.INSTANCE.stop();
                         player.sendMessage(
                                 new TextComponentString(TextFormatting.AQUA + "[自动追怪] " + TextFormatting.YELLOW
                                         + "距离当前回归点过远，逻辑已暂停。进入 "
-                                        + (int) activeRule.maxRecoveryDistance + " 格范围后将自动恢复。"));
+                                        + (int) rt().activeRule.maxRecoveryDistance + " 格范围后将自动恢复。"));
                     }
                 } else {
-                    if (isSuspendedDueToDistance) {
-                        isSuspendedDueToDistance = false;
+                    if (rt().isSuspendedDueToDistance) {
+                        rt().isSuspendedDueToDistance = false;
                         player.sendMessage(new TextComponentString(
                                 TextFormatting.AQUA + "[自动追怪] " + TextFormatting.GREEN + "已返回有效范围，恢复追怪。"));
-                        huntTargetEntity = null;
-                        lastHuntTargetEntityId = Integer.MIN_VALUE;
-                        lastHuntTargetPos = null;
-                        huntMovementStopped = false;
+                        rt().huntTargetEntity = null;
+                        rt().lastHuntTargetEntityId = Integer.MIN_VALUE;
+                        rt().lastHuntTargetPos = null;
+                        rt().huntMovementStopped = false;
                     }
 
-                    if (antiStuckEnabled && System.currentTimeMillis() - lastAvoidanceTime > AVOIDANCE_COOLDOWN_MS) {
+                    if (cfg().antiStuckEnabled && System.currentTimeMillis() - rt().lastAvoidanceTime > AVOIDANCE_COOLDOWN_MS) {
                         if (handleGeneralStuckCondition(player)) {
                             // 卡住处理成功
-                        } else if (avoidVinesProactively) {
+                        } else if (cfg().avoidVinesProactively) {
                             Vec3d travelVec = null;
-                            if (lastTickPlayerPos != null && currentPos.squareDistanceTo(lastTickPlayerPos) > 0.001) {
-                                travelVec = currentPos.subtract(lastTickPlayerPos).normalize();
+                            if (rt().lastTickPlayerPos != null && currentPos.squareDistanceTo(rt().lastTickPlayerPos) > 0.001) {
+                                travelVec = currentPos.subtract(rt().lastTickPlayerPos).normalize();
                             }
 
                             if (travelVec != null
-                                    && isNearHazard(player, player.getPosition(), vineAvoidanceDistance) != null) {
+                                    && isNearHazard(player, player.getPosition(), cfg().vineAvoidanceDistance) != null) {
                                 resolveHazardZoneAvoidance(player, travelVec);
                             }
                         }
@@ -808,46 +860,46 @@ public class AutoFollowHandler {
                     handleBoundedMonsterChase(player);
                 }
             } else {
-                if (huntTargetEntity != null && huntTargetEntity.isEntityAlive()
-                        && isEntityWithinLockChaseBounds(huntTargetEntity)) {
-                    centerReturnCommandIssued = false;
-                    patrolWaitingAtPoint = false;
-                    patrolWaitStartMs = 0L;
+                if (rt().huntTargetEntity != null && rt().huntTargetEntity.isEntityAlive()
+                        && isEntityWithinLockChaseBounds(rt().huntTargetEntity)) {
+                    rt().centerReturnCommandIssued = false;
+                    rt().patrolWaitingAtPoint = false;
+                    rt().patrolWaitStartMs = 0L;
                     handleBoundedMonsterChase(player);
-                    lastTickPlayerPos = currentPos;
+                    rt().lastTickPlayerPos = currentPos;
                     return;
                 }
 
-                currentReturnPointIndex = getNearestReturnPointIndex(playerX, player.posY, playerZ);
+                rt().currentReturnPointIndex = getNearestReturnPointIndex(playerX, player.posY, playerZ);
                 Point returnPoint = getCurrentReturnPoint();
                 double distToCenter = distanceToPoint(playerX, playerZ, returnPoint);
 
-                huntTargetEntity = null;
-                lastHuntTargetEntityId = Integer.MIN_VALUE;
-                lastHuntTargetPos = null;
-                huntMovementStopped = false;
-                escapeDestination = null;
-                patrolWaitingAtPoint = false;
-                patrolWaitStartMs = 0L;
+                rt().huntTargetEntity = null;
+                rt().lastHuntTargetEntityId = Integer.MIN_VALUE;
+                rt().lastHuntTargetPos = null;
+                rt().huntMovementStopped = false;
+                rt().escapeDestination = null;
+                rt().patrolWaitingAtPoint = false;
+                rt().patrolWaitStartMs = 0L;
 
-                if (distToCenter > activeRule.maxRecoveryDistance) {
-                    isMovingToPoint = false;
-                    returningToCenterFromOutOfBounds = false;
-                    centerReturnCommandIssued = false;
+                if (distToCenter > rt().activeRule.maxRecoveryDistance) {
+                    rt().isMovingToPoint = false;
+                    rt().returningToCenterFromOutOfBounds = false;
+                    rt().centerReturnCommandIssued = false;
                     EmbeddedNavigationHandler.INSTANCE.stop();
 
-                    boolean shouldRunSequence = activeRule.runSequenceWhenOutOfRecoveryRange
-                            && activeRule.outOfRangeSequenceName != null
-                            && !activeRule.outOfRangeSequenceName.trim().isEmpty();
+                    boolean shouldRunSequence = rt().activeRule.runSequenceWhenOutOfRecoveryRange
+                            && rt().activeRule.outOfRangeSequenceName != null
+                            && !rt().activeRule.outOfRangeSequenceName.trim().isEmpty();
 
-                    if (shouldRunSequence && !outOfRecoveryRangeSequenceTriggered) {
-                        String sequenceName = activeRule.outOfRangeSequenceName.trim();
+                    if (shouldRunSequence && !rt().outOfRecoveryRangeSequenceTriggered) {
+                        String sequenceName = rt().activeRule.outOfRangeSequenceName.trim();
                         if (PathSequenceManager.hasSequence(sequenceName)) {
-                            outOfRecoveryRangeSequenceTriggered = true;
+                            rt().outOfRecoveryRangeSequenceTriggered = true;
                             PathSequenceManager.runPathSequence(sequenceName);
                             long now = System.currentTimeMillis();
-                            if (now - lastOutOfBoundsNotifyMs >= OUT_OF_BOUNDS_NOTIFY_COOLDOWN_MS) {
-                                lastOutOfBoundsNotifyMs = now;
+                            if (now - rt().lastOutOfBoundsNotifyMs >= OUT_OF_BOUNDS_NOTIFY_COOLDOWN_MS) {
+                                rt().lastOutOfBoundsNotifyMs = now;
                                 player.sendMessage(new TextComponentString(
                                         TextFormatting.AQUA + "[自动追怪] " + TextFormatting.YELLOW
                                                 + "超出巡逻范围且超过最大恢复距离，正在执行序列: "
@@ -855,8 +907,8 @@ public class AutoFollowHandler {
                             }
                         } else {
                             long now = System.currentTimeMillis();
-                            if (now - lastOutOfBoundsNotifyMs >= OUT_OF_BOUNDS_NOTIFY_COOLDOWN_MS) {
-                                lastOutOfBoundsNotifyMs = now;
+                            if (now - rt().lastOutOfBoundsNotifyMs >= OUT_OF_BOUNDS_NOTIFY_COOLDOWN_MS) {
+                                rt().lastOutOfBoundsNotifyMs = now;
                                 player.sendMessage(new TextComponentString(
                                         TextFormatting.AQUA + "[自动追怪] " + TextFormatting.RED
                                                 + "超距序列不存在，无法执行: "
@@ -865,21 +917,21 @@ public class AutoFollowHandler {
                         }
                     } else {
                         long now = System.currentTimeMillis();
-                        if (now - lastOutOfBoundsNotifyMs >= OUT_OF_BOUNDS_NOTIFY_COOLDOWN_MS) {
-                            lastOutOfBoundsNotifyMs = now;
+                        if (now - rt().lastOutOfBoundsNotifyMs >= OUT_OF_BOUNDS_NOTIFY_COOLDOWN_MS) {
+                            rt().lastOutOfBoundsNotifyMs = now;
                             player.sendMessage(new TextComponentString(
                                     TextFormatting.AQUA + "[自动追怪] " + TextFormatting.YELLOW
                                             + "超出巡逻范围，且距离回归点超过最大恢复距离，已停止自动返回。"));
                         }
                     }
                 } else {
-                    outOfRecoveryRangeSequenceTriggered = false;
-                    returningToCenterFromOutOfBounds = true;
+                    rt().outOfRecoveryRangeSequenceTriggered = false;
+                    rt().returningToCenterFromOutOfBounds = true;
                     EmbeddedNavigationHandler.INSTANCE.stop();
                     startMoveToCurrentReturnPoint();
                     long now = System.currentTimeMillis();
-                    if (now - lastOutOfBoundsNotifyMs >= OUT_OF_BOUNDS_NOTIFY_COOLDOWN_MS) {
-                        lastOutOfBoundsNotifyMs = now;
+                    if (now - rt().lastOutOfBoundsNotifyMs >= OUT_OF_BOUNDS_NOTIFY_COOLDOWN_MS) {
+                        rt().lastOutOfBoundsNotifyMs = now;
                         player.sendMessage(new TextComponentString(
                                 TextFormatting.AQUA + "[自动追怪] " + TextFormatting.YELLOW + "超出巡逻范围，正在返回回归点..."));
                     }
@@ -887,73 +939,73 @@ public class AutoFollowHandler {
             }
         }
 
-        lastTickPlayerPos = currentPos;
+        rt().lastTickPlayerPos = currentPos;
     }
 
     private void handleBoundedMonsterChase(EntityPlayerSP player) {
-        if (activeRule == null || mc.world == null || player == null) {
+        if (rt().activeRule == null || mc.world == null || player == null) {
             return;
         }
         if (shouldYieldChaseToKillAura(player)) {
-            huntTargetEntity = null;
-            lastHuntTargetEntityId = Integer.MIN_VALUE;
-            lastHuntTargetPos = null;
-            huntMovementStopped = false;
+            rt().huntTargetEntity = null;
+            rt().lastHuntTargetEntityId = Integer.MIN_VALUE;
+            rt().lastHuntTargetPos = null;
+            rt().huntMovementStopped = false;
             return;
         }
 
-        if (huntTargetEntity != null) {
-            boolean invalid = !huntTargetEntity.isEntityAlive() || !isEntityWithinLockChaseBounds(huntTargetEntity);
+        if (rt().huntTargetEntity != null) {
+            boolean invalid = !rt().huntTargetEntity.isEntityAlive() || !isEntityWithinLockChaseBounds(rt().huntTargetEntity);
             if (invalid) {
-                huntTargetEntity = null;
-                lastHuntTargetEntityId = Integer.MIN_VALUE;
-                lastHuntTargetPos = null;
-                huntMovementStopped = false;
+                rt().huntTargetEntity = null;
+                rt().lastHuntTargetEntityId = Integer.MIN_VALUE;
+                rt().lastHuntTargetPos = null;
+                rt().huntMovementStopped = false;
             }
         }
 
         Entity latestBestCandidate = findNearestMonsterInRule(player);
 
-        if (huntTargetEntity == null) {
-            huntTargetEntity = latestBestCandidate;
-            if (huntTargetEntity == null) {
+        if (rt().huntTargetEntity == null) {
+            rt().huntTargetEntity = latestBestCandidate;
+            if (rt().huntTargetEntity == null) {
                 handlePatrolWhenNoMonster();
                 return;
             }
-            centerReturnCommandIssued = false;
-            patrolWaitingAtPoint = false;
-            patrolWaitStartMs = 0L;
-            lastHuntTargetEntityId = Integer.MIN_VALUE;
-            lastHuntTargetPos = null;
-            huntMovementStopped = false;
+            rt().centerReturnCommandIssued = false;
+            rt().patrolWaitingAtPoint = false;
+            rt().patrolWaitStartMs = 0L;
+            rt().lastHuntTargetEntityId = Integer.MIN_VALUE;
+            rt().lastHuntTargetPos = null;
+            rt().huntMovementStopped = false;
         }
 
-        boolean fixedDistanceMode = isFixedDistanceHuntMode(activeRule);
-        double keepDistance = getHuntKeepDistance(activeRule);
+        boolean fixedDistanceMode = isFixedDistanceHuntMode(rt().activeRule);
+        double keepDistance = getHuntKeepDistance(rt().activeRule);
         double keepDistSq = keepDistance * keepDistance;
-        double distanceSq = player.getDistanceSq(huntTargetEntity);
+        double distanceSq = player.getDistanceSq(rt().huntTargetEntity);
         double distance = Math.sqrt(distanceSq);
         boolean withinDesiredDistance = fixedDistanceMode
                 ? Math.abs(distance - keepDistance) <= HUNT_FIXED_DISTANCE_TOLERANCE
                 : distanceSq <= keepDistSq;
         if (withinDesiredDistance) {
-            if (!huntMovementStopped) {
+            if (!rt().huntMovementStopped) {
                 EmbeddedNavigationHandler.INSTANCE.stop();
-                huntMovementStopped = true;
+                rt().huntMovementStopped = true;
             }
             return;
         }
 
-        huntMovementStopped = false;
+        rt().huntMovementStopped = false;
 
-        Vec3d targetPos = huntTargetEntity.getPositionVector();
+        Vec3d targetPos = rt().huntTargetEntity.getPositionVector();
         int nowTick = player.ticksExisted;
-        int targetId = huntTargetEntity.getEntityId();
+        int targetId = rt().huntTargetEntity.getEntityId();
 
-        boolean needSendGoto = targetId != lastHuntTargetEntityId
-                || lastHuntTargetPos == null
-                || targetPos.squareDistanceTo(lastHuntTargetPos) >= HUNT_GOTO_MOVE_THRESHOLD_SQ
-                || (nowTick - lastHuntGotoTick) >= HUNT_GOTO_INTERVAL_TICKS;
+        boolean needSendGoto = targetId != rt().lastHuntTargetEntityId
+                || rt().lastHuntTargetPos == null
+                || targetPos.squareDistanceTo(rt().lastHuntTargetPos) >= HUNT_GOTO_MOVE_THRESHOLD_SQ
+                || (nowTick - rt().lastHuntGotoTick) >= HUNT_GOTO_INTERVAL_TICKS;
 
         // 只有当距离大于保持距离+额外缓冲时才发送goto命令
         double minGotoDistance = keepDistance + 0.5; // 额外0.5格缓冲
@@ -965,22 +1017,22 @@ public class AutoFollowHandler {
             double destinationX = targetPos.x;
             double destinationZ = targetPos.z;
             if (fixedDistanceMode) {
-                double[] destination = computeFixedDistanceHuntDestination(player, huntTargetEntity, keepDistance);
+                double[] destination = computeFixedDistanceHuntDestination(player, rt().huntTargetEntity, keepDistance);
                 destinationX = destination[0];
                 destinationZ = destination[1];
             }
 
-            BlockPos destination = findBoundedHuntDestination(huntTargetEntity, destinationX, destinationZ);
+            BlockPos destination = findBoundedHuntDestination(rt().huntTargetEntity, destinationX, destinationZ);
             if (destination != null) {
                 EmbeddedNavigationHandler.INSTANCE.startGoto(destination.getX() + 0.5D, destination.getY(),
                         destination.getZ() + 0.5D);
             } else {
                 EmbeddedNavigationHandler.INSTANCE.stop();
-                huntMovementStopped = true;
+                rt().huntMovementStopped = true;
             }
-            lastHuntGotoTick = nowTick;
-            lastHuntTargetEntityId = targetId;
-            lastHuntTargetPos = targetPos;
+            rt().lastHuntGotoTick = nowTick;
+            rt().lastHuntTargetEntityId = targetId;
+            rt().lastHuntTargetPos = targetPos;
         }
     }
 
@@ -1016,7 +1068,7 @@ public class AutoFollowHandler {
         double scale = desiredDistance / distance;
         double destinationX = target.posX + dx * scale;
         double destinationZ = target.posZ + dz * scale;
-        return clipFixedDistanceDestination(activeRule, target.posX, target.posZ, destinationX, destinationZ);
+        return clipFixedDistanceDestination(rt().activeRule, target.posX, target.posZ, destinationX, destinationZ);
     }
 
     private BlockPos findBoundedHuntDestination(Entity target, double desiredX, double desiredZ) {
@@ -1025,11 +1077,11 @@ public class AutoFollowHandler {
         }
 
         int targetFeetY = MathHelper.floor(target.posY);
-        int maxYDistance = activeRule == null
+        int maxYDistance = rt().activeRule == null
                 ? AutoFollowRule.DEFAULT_MONSTER_CHASE_Y_LIMIT
-                : Math.max(0, activeRule.monsterChaseYLimit == null
+                : Math.max(0, rt().activeRule.monsterChaseYLimit == null
                         ? AutoFollowRule.DEFAULT_MONSTER_CHASE_Y_LIMIT
-                        : activeRule.monsterChaseYLimit);
+                        : rt().activeRule.monsterChaseYLimit);
 
         BlockPos sameLevel = findStandableHuntDestinationAtY(targetFeetY, desiredX, desiredZ);
         if (sameLevel != null) {
@@ -1144,29 +1196,29 @@ public class AutoFollowHandler {
     }
 
     private void handlePatrolWhenNoMonster() {
-        if (activeRule == null) {
+        if (rt().activeRule == null) {
             return;
         }
-        activeRule.ensureReturnPoints();
+        rt().activeRule.ensureReturnPoints();
 
-        if (activeRule.returnPoints == null || activeRule.returnPoints.isEmpty()) {
+        if (rt().activeRule.returnPoints == null || rt().activeRule.returnPoints.isEmpty()) {
             handleRandomPatrolWithoutReturnPoints();
             return;
         }
 
         Point returnPoint = getCurrentReturnPoint();
 
-        if (patrolWaitingAtPoint) {
+        if (rt().patrolWaitingAtPoint) {
             EmbeddedNavigationHandler.INSTANCE.stop();
-            int stayMillis = Math.max(1, activeRule.returnStayMillis);
-            if (System.currentTimeMillis() - patrolWaitStartMs >= stayMillis) {
-                if (activeRule.returnPoints != null && activeRule.returnPoints.size() > 1) {
-                    patrolWaitingAtPoint = false;
-                    patrolWaitStartMs = 0L;
+            int stayMillis = Math.max(1, rt().activeRule.returnStayMillis);
+            if (System.currentTimeMillis() - rt().patrolWaitStartMs >= stayMillis) {
+                if (rt().activeRule.returnPoints != null && rt().activeRule.returnPoints.size() > 1) {
+                    rt().patrolWaitingAtPoint = false;
+                    rt().patrolWaitStartMs = 0L;
                     advanceToNextReturnPoint();
                     startMoveToCurrentReturnPoint();
                 } else {
-                    patrolWaitStartMs = System.currentTimeMillis();
+                    rt().patrolWaitStartMs = System.currentTimeMillis();
                 }
             }
             return;
@@ -1174,55 +1226,55 @@ public class AutoFollowHandler {
 
         boolean atPoint = isAtReturnPoint(returnPoint, getReturnArriveDistance());
         if (!atPoint) {
-            if (!isMovingToPoint || !centerReturnCommandIssued) {
+            if (!rt().isMovingToPoint || !rt().centerReturnCommandIssued) {
                 startMoveToCurrentReturnPoint();
             }
             return;
         }
 
-        centerReturnCommandIssued = false;
-        patrolWaitingAtPoint = true;
-        patrolWaitStartMs = System.currentTimeMillis();
+        rt().centerReturnCommandIssued = false;
+        rt().patrolWaitingAtPoint = true;
+        rt().patrolWaitStartMs = System.currentTimeMillis();
     }
 
     private void handleRandomPatrolWithoutReturnPoints() {
-        if (activeRule == null) {
+        if (rt().activeRule == null) {
             return;
         }
 
-        if (patrolWaitingAtPoint) {
+        if (rt().patrolWaitingAtPoint) {
             EmbeddedNavigationHandler.INSTANCE.stop();
-            int stayMillis = Math.max(1, activeRule.returnStayMillis);
-            if (System.currentTimeMillis() - patrolWaitStartMs >= stayMillis) {
-                patrolWaitingAtPoint = false;
-                patrolWaitStartMs = 0L;
-                randomPatrolPoint = getRandomPatrolPointWithinBounds();
-                startMoveToPoint(randomPatrolPoint);
+            int stayMillis = Math.max(1, rt().activeRule.returnStayMillis);
+            if (System.currentTimeMillis() - rt().patrolWaitStartMs >= stayMillis) {
+                rt().patrolWaitingAtPoint = false;
+                rt().patrolWaitStartMs = 0L;
+                rt().randomPatrolPoint = getRandomPatrolPointWithinBounds();
+                startMoveToPoint(rt().randomPatrolPoint);
             }
             return;
         }
 
-        if (randomPatrolPoint == null) {
-            randomPatrolPoint = getRandomPatrolPointWithinBounds();
-            startMoveToPoint(randomPatrolPoint);
+        if (rt().randomPatrolPoint == null) {
+            rt().randomPatrolPoint = getRandomPatrolPointWithinBounds();
+            startMoveToPoint(rt().randomPatrolPoint);
             return;
         }
 
-        boolean atPoint = mythosScriptMod.ArriveAt(randomPatrolPoint.x, Double.NaN, randomPatrolPoint.z, getReturnArriveDistance());
+        boolean atPoint = mythosScriptMod.ArriveAt(rt().randomPatrolPoint.x, Double.NaN, rt().randomPatrolPoint.z, getReturnArriveDistance());
         if (!atPoint) {
-            if (!isMovingToPoint || !centerReturnCommandIssued) {
-                startMoveToPoint(randomPatrolPoint);
+            if (!rt().isMovingToPoint || !rt().centerReturnCommandIssued) {
+                startMoveToPoint(rt().randomPatrolPoint);
             }
             return;
         }
 
-        centerReturnCommandIssued = false;
-        patrolWaitingAtPoint = true;
-        patrolWaitStartMs = System.currentTimeMillis();
+        rt().centerReturnCommandIssued = false;
+        rt().patrolWaitingAtPoint = true;
+        rt().patrolWaitStartMs = System.currentTimeMillis();
     }
 
     private static void startMoveToCurrentReturnPoint() {
-        if (activeRule == null) {
+        if (rt().activeRule == null) {
             return;
         }
         startMoveToPoint(getCurrentReturnPoint());
@@ -1232,36 +1284,36 @@ public class AutoFollowHandler {
         if (targetPoint == null) {
             return;
         }
-        isMovingToPoint = true;
-        patrolWaitingAtPoint = false;
-        patrolWaitStartMs = 0L;
+        rt().isMovingToPoint = true;
+        rt().patrolWaitingAtPoint = false;
+        rt().patrolWaitStartMs = 0L;
         resetPatrolStuckMonitor();
-        centerReturnCommandIssued = true;
+        rt().centerReturnCommandIssued = true;
         ModUtils.DelayScheduler.instance.schedule(() -> {
             startGotoPoint(targetPoint, false);
         }, COMMAND_DELAY_TICKS);
     }
 
     private static boolean handleInterruptedPatrolRoute(EntityPlayerSP player, Vec3d currentPos) {
-        if (activeRule == null || player == null || currentPos == null) {
+        if (rt().activeRule == null || player == null || currentPos == null) {
             resetPatrolStuckMonitor();
             return false;
         }
 
         long now = System.currentTimeMillis();
-        if (lastPatrolProgressPosition == null
-                || currentPos.squareDistanceTo(lastPatrolProgressPosition) >= STUCK_DISTANCE_THRESHOLD_SQ) {
-            lastPatrolProgressPosition = currentPos;
-            patrolStoppedSinceMs = now;
+        if (rt().lastPatrolProgressPosition == null
+                || currentPos.squareDistanceTo(rt().lastPatrolProgressPosition) >= STUCK_DISTANCE_THRESHOLD_SQ) {
+            rt().lastPatrolProgressPosition = currentPos;
+            rt().patrolStoppedSinceMs = now;
             return false;
         }
-        if (patrolStoppedSinceMs <= 0L) {
-            patrolStoppedSinceMs = now;
+        if (rt().patrolStoppedSinceMs <= 0L) {
+            rt().patrolStoppedSinceMs = now;
             return false;
         }
 
-        long timeoutMs = Math.max(1, activeRule.patrolStuckRestartSeconds) * 1000L;
-        if (now - patrolStoppedSinceMs < timeoutMs) {
+        long timeoutMs = Math.max(1, rt().activeRule.patrolStuckRestartSeconds) * 1000L;
+        if (now - rt().patrolStoppedSinceMs < timeoutMs) {
             return false;
         }
 
@@ -1273,78 +1325,78 @@ public class AutoFollowHandler {
 
         Point unfinishedPoint = getCurrentReturnPoint();
         resetPatrolStuckMonitor();
-        centerReturnCommandIssued = true;
+        rt().centerReturnCommandIssued = true;
         startGotoPoint(unfinishedPoint, true);
         player.sendMessage(new TextComponentString(
                 TextFormatting.AQUA + "[自动追怪] " + TextFormatting.YELLOW
-                        + "巡逻寻路停留超过 " + Math.max(1, activeRule.patrolStuckRestartSeconds)
+                        + "巡逻寻路停留超过 " + Math.max(1, rt().activeRule.patrolStuckRestartSeconds)
                         + " 秒，已重启当前回点寻路。"));
         return true;
     }
 
     private static boolean shouldYieldPatrolMovementToKillAura(EntityPlayerSP player) {
         return player != null
-                && KillAuraHandler.enabled
+                && KillAuraHandler.enabled()
                 && KillAuraHandler.isHuntEnabled()
                 && KillAuraHandler.INSTANCE.hasActiveTarget(player);
     }
 
     private static void resetPatrolStuckMonitor() {
-        lastPatrolProgressPosition = null;
-        patrolStoppedSinceMs = 0L;
+        rt().lastPatrolProgressPosition = null;
+        rt().patrolStoppedSinceMs = 0L;
     }
 
     private static Point getCurrentReturnPoint() {
-        if (activeRule == null) {
+        if (rt().activeRule == null) {
             return new Point(0, 0);
         }
-        activeRule.ensureReturnPoints();
-        List<Point> returnPoints = activeRule.returnPoints;
+        rt().activeRule.ensureReturnPoints();
+        List<Point> returnPoints = rt().activeRule.returnPoints;
         if (returnPoints == null || returnPoints.isEmpty()) {
-            if (randomPatrolPoint != null) {
-                return new Point(randomPatrolPoint.x, randomPatrolPoint.z);
+            if (rt().randomPatrolPoint != null) {
+                return new Point(rt().randomPatrolPoint.x, rt().randomPatrolPoint.z);
             }
-            return new Point((activeRule.minX + activeRule.maxX) * 0.5, (activeRule.minZ + activeRule.maxZ) * 0.5);
+            return new Point((rt().activeRule.minX + rt().activeRule.maxX) * 0.5, (rt().activeRule.minZ + rt().activeRule.maxZ) * 0.5);
         }
-        if (currentReturnPointIndex < 0 || currentReturnPointIndex >= returnPoints.size()) {
-            currentReturnPointIndex = 0;
+        if (rt().currentReturnPointIndex < 0 || rt().currentReturnPointIndex >= returnPoints.size()) {
+            rt().currentReturnPointIndex = 0;
         }
-        Point point = returnPoints.get(currentReturnPointIndex);
+        Point point = returnPoints.get(rt().currentReturnPointIndex);
         return point == null ? new Point(0, 0) : AutoFollowRule.copyPoint(point);
     }
 
     private static Point getRandomPatrolPointWithinBounds() {
-        if (activeRule == null) {
+        if (rt().activeRule == null) {
             return new Point(0, 0);
         }
-        double spanX = Math.max(0.0, activeRule.maxX - activeRule.minX);
-        double spanZ = Math.max(0.0, activeRule.maxZ - activeRule.minZ);
-        double x = activeRule.minX + (spanX <= 0.01 ? 0.0 : RANDOM.nextDouble() * spanX);
-        double z = activeRule.minZ + (spanZ <= 0.01 ? 0.0 : RANDOM.nextDouble() * spanZ);
+        double spanX = Math.max(0.0, rt().activeRule.maxX - rt().activeRule.minX);
+        double spanZ = Math.max(0.0, rt().activeRule.maxZ - rt().activeRule.minZ);
+        double x = rt().activeRule.minX + (spanX <= 0.01 ? 0.0 : RANDOM.nextDouble() * spanX);
+        double z = rt().activeRule.minZ + (spanZ <= 0.01 ? 0.0 : RANDOM.nextDouble() * spanZ);
         return new Point(x, z);
     }
 
     private static int selectInitialReturnPointIndex() {
-        if (activeRule == null) {
+        if (rt().activeRule == null) {
             return 0;
         }
-        activeRule.ensureReturnPoints();
-        List<Point> returnPoints = activeRule.returnPoints;
+        rt().activeRule.ensureReturnPoints();
+        List<Point> returnPoints = rt().activeRule.returnPoints;
         if (returnPoints == null || returnPoints.isEmpty()) {
             return 0;
         }
-        if (AutoFollowRule.PATROL_MODE_RANDOM.equalsIgnoreCase(activeRule.patrolMode)) {
+        if (AutoFollowRule.PATROL_MODE_RANDOM.equalsIgnoreCase(rt().activeRule.patrolMode)) {
             return RANDOM.nextInt(returnPoints.size());
         }
         return 0;
     }
 
     private static int getNearestReturnPointIndex(double x, double y, double z) {
-        if (activeRule == null) {
+        if (rt().activeRule == null) {
             return 0;
         }
-        activeRule.ensureReturnPoints();
-        List<Point> returnPoints = activeRule.returnPoints;
+        rt().activeRule.ensureReturnPoints();
+        List<Point> returnPoints = rt().activeRule.returnPoints;
         if (returnPoints == null || returnPoints.isEmpty()) {
             return 0;
         }
@@ -1372,25 +1424,25 @@ public class AutoFollowHandler {
     }
 
     private static void advanceToNextReturnPoint() {
-        if (activeRule == null) {
-            currentReturnPointIndex = 0;
+        if (rt().activeRule == null) {
+            rt().currentReturnPointIndex = 0;
             return;
         }
-        activeRule.ensureReturnPoints();
-        List<Point> returnPoints = activeRule.returnPoints;
+        rt().activeRule.ensureReturnPoints();
+        List<Point> returnPoints = rt().activeRule.returnPoints;
         if (returnPoints == null || returnPoints.size() <= 1) {
-            currentReturnPointIndex = 0;
+            rt().currentReturnPointIndex = 0;
             return;
         }
 
-        if (AutoFollowRule.PATROL_MODE_RANDOM.equalsIgnoreCase(activeRule.patrolMode)) {
-            int next = currentReturnPointIndex;
-            while (next == currentReturnPointIndex && returnPoints.size() > 1) {
+        if (AutoFollowRule.PATROL_MODE_RANDOM.equalsIgnoreCase(rt().activeRule.patrolMode)) {
+            int next = rt().currentReturnPointIndex;
+            while (next == rt().currentReturnPointIndex && returnPoints.size() > 1) {
                 next = RANDOM.nextInt(returnPoints.size());
             }
-            currentReturnPointIndex = next;
+            rt().currentReturnPointIndex = next;
         } else {
-            currentReturnPointIndex = (currentReturnPointIndex + 1) % returnPoints.size();
+            rt().currentReturnPointIndex = (rt().currentReturnPointIndex + 1) % returnPoints.size();
         }
     }
 
@@ -1404,10 +1456,10 @@ public class AutoFollowHandler {
     }
 
     private static double getReturnArriveDistance() {
-        if (activeRule == null || activeRule.returnArriveDistance <= 0) {
+        if (rt().activeRule == null || rt().activeRule.returnArriveDistance <= 0) {
             return AutoFollowRule.DEFAULT_RETURN_ARRIVE_DISTANCE;
         }
-        return activeRule.returnArriveDistance;
+        return rt().activeRule.returnArriveDistance;
     }
 
     private static boolean isAtReturnPoint(Point point, double tolerance) {
@@ -1430,7 +1482,7 @@ public class AutoFollowHandler {
 
     private boolean shouldYieldChaseToKillAura(EntityPlayerSP player) {
         return player != null
-                && KillAuraHandler.enabled
+                && KillAuraHandler.enabled()
                 && KillAuraHandler.isHuntEnabled()
                 && KillAuraHandler.INSTANCE.hasActiveTarget(player);
     }
@@ -1441,7 +1493,7 @@ public class AutoFollowHandler {
             return null;
         }
 
-        if (player.ticksExisted - lastMonsterScoreScanTick < MONSTER_SCORE_SCAN_INTERVAL_TICKS) {
+        if (player.ticksExisted - rt().lastMonsterScoreScanTick < MONSTER_SCORE_SCAN_INTERVAL_TICKS) {
             Entity cached = resolveBestCachedMonster();
             if (cached != null) {
                 return cached;
@@ -1472,22 +1524,22 @@ public class AutoFollowHandler {
         }
 
         if (snapshots.isEmpty()) {
-            lastMonsterScoreScanTick = player.ticksExisted;
+            rt().lastMonsterScoreScanTick = player.ticksExisted;
             replaceLastScoredMonsters(Collections.<ScoredMonsterInfo>emptyList());
             return null;
         }
 
         snapshots.sort((left, right) -> Double.compare(right.totalScore, left.totalScore));
-        lastMonsterScoreScanTick = player.ticksExisted;
+        rt().lastMonsterScoreScanTick = player.ticksExisted;
         replaceLastScoredMonsters(snapshots);
         return bestEntity;
     }
 
     private Entity resolveBestCachedMonster() {
-        if (mc.world == null || lastScoredMonsters.isEmpty()) {
+        if (mc.world == null || rt().lastScoredMonsters.isEmpty()) {
             return null;
         }
-        for (ScoredMonsterInfo info : lastScoredMonsters) {
+        for (ScoredMonsterInfo info : rt().lastScoredMonsters) {
             Entity entity = mc.world.getEntityByID(info.entityId);
             if (entity != null && entity.isEntityAlive() && isEntityInActiveRuleBounds(entity)) {
                 return entity;
@@ -1526,7 +1578,7 @@ public class AutoFollowHandler {
         if (floating) {
             info.verticalScore -= 15.0;
         }
-        info.lockBonusScore = huntTargetEntity != null && huntTargetEntity.getEntityId() == entity.getEntityId() ? 18.0 : 0.0;
+        info.lockBonusScore = rt().huntTargetEntity != null && rt().huntTargetEntity.getEntityId() == entity.getEntityId() ? 18.0 : 0.0;
         info.totalScore = info.distanceScore
                 + info.visibilityScore
                 + info.reachabilityScore
@@ -1537,13 +1589,13 @@ public class AutoFollowHandler {
     }
 
     private boolean isEntityInActiveRuleBounds(Entity entity) {
-        if (activeRule == null || entity == null) {
+        if (rt().activeRule == null || entity == null) {
             return false;
         }
         double x = entity.posX;
         double z = entity.posZ;
-        boolean insideHorizontalBounds = x >= activeRule.minX && x <= activeRule.maxX
-                && z >= activeRule.minZ && z <= activeRule.maxZ;
+        boolean insideHorizontalBounds = x >= rt().activeRule.minX && x <= rt().activeRule.maxX
+                && z >= rt().activeRule.minZ && z <= rt().activeRule.maxZ;
         if (!insideHorizontalBounds) {
             return false;
         }
@@ -1554,7 +1606,7 @@ public class AutoFollowHandler {
     }
 
     private boolean isEntityWithinLockChaseBounds(Entity entity) {
-        if (activeRule == null || entity == null) {
+        if (rt().activeRule == null || entity == null) {
             return false;
         }
         if (!passesMonsterTargetFilters(entity) || !passesMonsterVerticalRange(entity)) {
@@ -1564,24 +1616,24 @@ public class AutoFollowHandler {
     }
 
     private boolean passesMonsterTargetFilters(Entity entity) {
-        if (activeRule == null || entity == null) {
+        if (rt().activeRule == null || entity == null) {
             return false;
         }
         if (!matchesConfiguredEntityType(entity)) {
             return false;
         }
-        if (!activeRule.targetInvisibleMonsters && entity.isInvisible()) {
+        if (!rt().activeRule.targetInvisibleMonsters && entity.isInvisible()) {
             return false;
         }
-        if (!activeRule.enableMonsterNameList) {
+        if (!rt().activeRule.enableMonsterNameList) {
             return true;
         }
 
         String name = getFilterableEntityName(entity);
-        boolean hasWhitelist = activeRule.monsterWhitelistNames != null && !activeRule.monsterWhitelistNames.isEmpty();
+        boolean hasWhitelist = rt().activeRule.monsterWhitelistNames != null && !rt().activeRule.monsterWhitelistNames.isEmpty();
         boolean matchedWhitelist = !hasWhitelist
-                || KillAuraHandler.getNameListMatchIndex(name, activeRule.monsterWhitelistNames) != Integer.MAX_VALUE;
-        boolean matchedBlacklist = KillAuraHandler.getNameListMatchIndex(name, activeRule.monsterBlacklistNames) != Integer.MAX_VALUE;
+                || KillAuraHandler.getNameListMatchIndex(name, rt().activeRule.monsterWhitelistNames) != Integer.MAX_VALUE;
+        boolean matchedBlacklist = KillAuraHandler.getNameListMatchIndex(name, rt().activeRule.monsterBlacklistNames) != Integer.MAX_VALUE;
         return matchedWhitelist && !matchedBlacklist;
     }
 
@@ -1589,7 +1641,7 @@ public class AutoFollowHandler {
         if (!(entity instanceof EntityLivingBase) || entity instanceof EntityArmorStand) {
             return false;
         }
-        List<String> types = activeRule == null ? null : activeRule.entityTypes;
+        List<String> types = rt().activeRule == null ? null : rt().activeRule.entityTypes;
         if (types == null || types.isEmpty()) {
             return entity instanceof IMob;
         }
@@ -1678,7 +1730,7 @@ public class AutoFollowHandler {
     }
 
     private boolean passesMonsterVerticalRange(Entity entity) {
-        if (entity == null || mc.player == null || activeRule == null) {
+        if (entity == null || mc.player == null || rt().activeRule == null) {
             return false;
         }
         double delta = getEntityCenterY(entity) - getPlayerCenterY(mc.player);
@@ -1697,8 +1749,8 @@ public class AutoFollowHandler {
     }
 
     private double getAllowedUpwardRange(EntityPlayerSP player, Entity entity) {
-        double range = activeRule != null && activeRule.monsterUpwardRange > 0
-                ? activeRule.monsterUpwardRange
+        double range = rt().activeRule != null && rt().activeRule.monsterUpwardRange > 0
+                ? rt().activeRule.monsterUpwardRange
                 : AutoFollowRule.DEFAULT_MONSTER_UPWARD_RANGE;
         if (isStairOrSlopeContext(player, entity)) {
             range += 1.0;
@@ -1707,8 +1759,8 @@ public class AutoFollowHandler {
     }
 
     private double getAllowedDownwardRange(EntityPlayerSP player, Entity entity) {
-        double range = activeRule != null && activeRule.monsterDownwardRange > 0
-                ? activeRule.monsterDownwardRange
+        double range = rt().activeRule != null && rt().activeRule.monsterDownwardRange > 0
+                ? rt().activeRule.monsterDownwardRange
                 : AutoFollowRule.DEFAULT_MONSTER_DOWNWARD_RANGE;
         if (isStairOrSlopeContext(player, entity)) {
             range += 1.0;
@@ -1732,22 +1784,22 @@ public class AutoFollowHandler {
     }
 
     private boolean handleTimeoutReload(EntityPlayerSP player) {
-        if (!timeoutReloadEnabled) {
+        if (!cfg().timeoutReloadEnabled) {
             return false;
         }
 
-        timeoutTicksCounter++;
-        if (timeoutTicksCounter >= 20) {
-            if (lastTimeoutCheckPosition != null && player.getPositionVector()
-                    .squareDistanceTo(lastTimeoutCheckPosition) < STUCK_DISTANCE_THRESHOLD_SQ) {
+        rt().timeoutTicksCounter++;
+        if (rt().timeoutTicksCounter >= 20) {
+            if (rt().lastTimeoutCheckPosition != null && player.getPositionVector()
+                    .squareDistanceTo(rt().lastTimeoutCheckPosition) < STUCK_DISTANCE_THRESHOLD_SQ) {
                 // 位置没变，继续计时
             } else {
-                timeoutTicksCounter = 0;
+                rt().timeoutTicksCounter = 0;
             }
-            lastTimeoutCheckPosition = player.getPositionVector();
+            rt().lastTimeoutCheckPosition = player.getPositionVector();
         }
 
-        if (timeoutTicksCounter >= timeoutReloadSeconds * 20) {
+        if (rt().timeoutTicksCounter >= cfg().timeoutReloadSeconds * 20) {
             player.sendMessage(new TextComponentString(
                     TextFormatting.AQUA + "[自动追怪] " + TextFormatting.RED + "检测到长时间未移动，触发超时重载！"));
             reloadState(true);
@@ -1757,8 +1809,8 @@ public class AutoFollowHandler {
     }
 
     private boolean handleGeneralStuckCondition(EntityPlayerSP player) {
-        stuckCheckCounter++;
-        if (stuckCheckCounter >= STUCK_CHECK_INTERVAL) {
+        rt().stuckCheckCounter++;
+        if (rt().stuckCheckCounter >= STUCK_CHECK_INTERVAL) {
             List<Entity> nearbyEnemies = mc.world.getEntitiesInAABBexcluding(player,
                     player.getEntityBoundingBox().grow(3.5),
                     entity -> entity != null
@@ -1767,24 +1819,24 @@ public class AutoFollowHandler {
                             && passesMonsterTargetFilters(entity));
 
             if (!nearbyEnemies.isEmpty()) {
-                stuckCheckCounter = 0;
-                lastStuckCheckPosition = player.getPositionVector();
+                rt().stuckCheckCounter = 0;
+                rt().lastStuckCheckPosition = player.getPositionVector();
                 return false;
             }
 
-            if (lastStuckCheckPosition != null && player.getPositionVector()
-                    .squareDistanceTo(lastStuckCheckPosition) < STUCK_DISTANCE_THRESHOLD_SQ) {
+            if (rt().lastStuckCheckPosition != null && player.getPositionVector()
+                    .squareDistanceTo(rt().lastStuckCheckPosition) < STUCK_DISTANCE_THRESHOLD_SQ) {
                 player.sendMessage(new TextComponentString(
                         TextFormatting.AQUA + "[自动追怪] " + TextFormatting.RED + "检测到卡住！执行智能逃逸..."));
 
                 if (findAndExecuteEscape(player)) {
-                    stuckCheckCounter = 0;
-                    lastStuckCheckPosition = null;
+                    rt().stuckCheckCounter = 0;
+                    rt().lastStuckCheckPosition = null;
                     return true;
                 }
             }
-            lastStuckCheckPosition = player.getPositionVector();
-            stuckCheckCounter = 0;
+            rt().lastStuckCheckPosition = player.getPositionVector();
+            rt().stuckCheckCounter = 0;
         }
         return false;
     }
@@ -1794,14 +1846,14 @@ public class AutoFollowHandler {
         if (escapeVec != null) {
             Vec3d avoidancePoint = player.getPositionVector().add(escapeVec.scale(ESCAPE_DISTANCE));
 
-            this.escapeDestination = avoidancePoint;
-            this.isMovingToPoint = true;
-            returningToCenterFromOutOfBounds = false;
+            this.rt().escapeDestination = avoidancePoint;
+            this.rt().isMovingToPoint = true;
+            rt().returningToCenterFromOutOfBounds = false;
             EmbeddedNavigationHandler.INSTANCE.stop();
             ModUtils.DelayScheduler.instance.schedule(() -> {
                 EmbeddedNavigationHandler.INSTANCE.startGotoXZ(avoidancePoint.x, avoidancePoint.z);
             }, COMMAND_DELAY_TICKS);
-            lastAvoidanceTime = System.currentTimeMillis();
+            rt().lastAvoidanceTime = System.currentTimeMillis();
             return true;
         } else {
             player.sendMessage(new TextComponentString(
@@ -1940,14 +1992,14 @@ public class AutoFollowHandler {
             return;
         }
 
-        this.escapeDestination = avoidancePoint;
-        this.isMovingToPoint = true;
+        this.rt().escapeDestination = avoidancePoint;
+        this.rt().isMovingToPoint = true;
         EmbeddedNavigationHandler.INSTANCE.stop();
         ModUtils.DelayScheduler.instance.schedule(() -> {
             EmbeddedNavigationHandler.INSTANCE.startGotoXZ(avoidancePoint.x, avoidancePoint.z);
         }, COMMAND_DELAY_TICKS);
 
-        lastAvoidanceTime = System.currentTimeMillis();
+        rt().lastAvoidanceTime = System.currentTimeMillis();
     }
 
     private List<BlockPos> scanForwardArea(EntityPlayerSP player, Vec3d travelVec) {
@@ -1988,14 +2040,14 @@ public class AutoFollowHandler {
 
         if (isWalkable(new BlockPos(avoidancePointRight))
                 && isPathClear(player.getPositionVector(), avoidancePointRight)) {
-            this.escapeDestination = avoidancePointRight;
+            this.rt().escapeDestination = avoidancePointRight;
         } else {
             Vec3d sidestepVecLeft = new Vec3d(travelVec.z, 0, -travelVec.x).normalize();
             Vec3d avoidancePointLeft = player.getPositionVector()
                     .add(sidestepVecLeft.scale(AVOIDANCE_SIDESTEP_SAFETY_MARGIN + 1.0));
             if (isWalkable(new BlockPos(avoidancePointLeft))
                     && isPathClear(player.getPositionVector(), avoidancePointLeft)) {
-                this.escapeDestination = avoidancePointLeft;
+                this.rt().escapeDestination = avoidancePointLeft;
             } else {
                 // 如果两侧都不可行，则放弃本次规避
                 player.sendMessage(new TextComponentString(
@@ -2004,13 +2056,13 @@ public class AutoFollowHandler {
             }
         }
 
-        this.isMovingToPoint = true;
-        returningToCenterFromOutOfBounds = false;
+        this.rt().isMovingToPoint = true;
+        rt().returningToCenterFromOutOfBounds = false;
         EmbeddedNavigationHandler.INSTANCE.stop();
         ModUtils.DelayScheduler.instance.schedule(() -> {
-            EmbeddedNavigationHandler.INSTANCE.startGotoXZ(this.escapeDestination.x, this.escapeDestination.z);
+            EmbeddedNavigationHandler.INSTANCE.startGotoXZ(this.rt().escapeDestination.x, this.rt().escapeDestination.z);
         }, COMMAND_DELAY_TICKS);
-        lastAvoidanceTime = System.currentTimeMillis();
+        rt().lastAvoidanceTime = System.currentTimeMillis();
     }
 
     private BlockPos isNearHazard(EntityPlayerSP player, BlockPos playerPos, double distance) {
@@ -2031,9 +2083,6 @@ public class AutoFollowHandler {
         return null;
     }
 
-    private boolean isHazard(EntityPlayerSP player, BlockPos pos, double distance) {
-        return isNearHazard(player, pos, distance) != null;
-    }
 
     private boolean isOnSlabOrStair(BlockPos playerPos) {
         IBlockState blockStateDown = mc.world.getBlockState(playerPos.down());
@@ -2051,7 +2100,7 @@ public class AutoFollowHandler {
             return;
         }
 
-        AutoFollowRule rule = activeRule;
+        AutoFollowRule rule = rt().activeRule;
         if (rule == null || !rule.enabled) {
             return;
         }
@@ -2092,7 +2141,7 @@ public class AutoFollowHandler {
                     if (point == null) {
                         continue;
                     }
-                    float alpha = i == currentReturnPointIndex ? 0.34F : 0.22F;
+                    float alpha = i == rt().currentReturnPointIndex ? 0.34F : 0.22F;
                     double returnBaseY = point.hasY() ? point.y - 0.05D : baseY;
                     double returnTopY = point.hasY() ? point.y + 2.0D : topY;
                     AxisAlignedBB returnOuter = new AxisAlignedBB(

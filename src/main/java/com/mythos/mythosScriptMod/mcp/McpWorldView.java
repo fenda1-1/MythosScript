@@ -51,6 +51,10 @@ public final class McpWorldView {
 
     public static void tick() {
         Minecraft mc=Minecraft.getMinecraft();
+        // A mount/disconnect swaps mc.world/player mid-frame; a half-torn session
+        // can NPE anywhere below. Swallow it — the per-tick service must never
+        // take down Minecraft.runTick (crash: McpWorldView.tick:55 on disconnect).
+        try {
         sync(mc);
         if(!action.isEmpty()) {
             if(!actionLease.active(System.nanoTime()) || !basicReason(mc).isEmpty()
@@ -62,6 +66,7 @@ public final class McpWorldView {
         // A hidden/closed workbench must not retain a terrain cache indefinitely.
         if(System.nanoTime()-lastPoll>3_000_000_000L) { terrain=null;origin=null;terrainStream.clear(); }
         else terrainStream.tick();
+        } catch (Throwable t) { com.mythos.mythosScriptMod.mythosScriptMod.LOGGER.warn("McpWorldView tick swallowed", t); }
     }
 
     private static void sync(Minecraft mc) {
@@ -143,7 +148,7 @@ public final class McpWorldView {
             if(!token.equals(expected) || !timely)throw new IllegalArgumentException("操作已过期或世界已切换");
             if(!basicReason(mc).isEmpty())throw new IllegalStateException(basicReason(mc));
             if(!PathSequenceEventListener.getActiveProgressSnapshots().isEmpty())throw new IllegalStateException("请先停止其他路径脚本");
-            if(action.isEmpty() && (EmbeddedNavigationHandler.INSTANCE.isPathingOrCalculating() || KillAuraHandler.enabled || KillAuraHandler.isMcpRuntimeActive()))
+            if(action.isEmpty() && (EmbeddedNavigationHandler.INSTANCE.isPathingOrCalculating() || KillAuraHandler.enabled() || KillAuraHandler.isMcpRuntimeActive()))
                 throw new IllegalStateException("请先停止其他寻路或杀戮光环任务");
             if(input.active(now) && !input.owned(owner,now))throw new IllegalStateException("移动已由其他窗口控制");
             if(actionLease.active(now)?!actionLease.update(owner,serial,0,now):!actionLease.acquire(owner,serial,now))
@@ -218,11 +223,35 @@ public final class McpWorldView {
             }
         }
         result.add("entities",entities);
+        // raw dump incl self + render flags — multiboxer render debugging
+        JsonArray raw=new JsonArray();
+        for(Entity entity:mc.world.loadedEntityList) {
+            JsonObject e=new JsonObject();
+            e.addProperty("cls",entity.getClass().getSimpleName());
+            e.addProperty("name",entity.getName());
+            e.addProperty("id",entity.getEntityId());
+            e.addProperty("invisible",entity.isInvisible());
+            e.addProperty("isUser",entity==mc.getRenderViewEntity());
+            e.addProperty("isPlayer",entity==mc.player);
+            e.addProperty("pos",entity.posX+","+entity.posY+","+entity.posZ);
+            e.addProperty("sameWorld",entity.world==mc.world);
+            e.addProperty("invisibleToPlayer",entity.isInvisibleToPlayer(mc.player));
+            raw.add(e);
+        }
+        result.add("rawEntities",raw);
+        result.addProperty("mcWorld", mc.world==null?null:Integer.toHexString(System.identityHashCode(mc.world)));
+        result.addProperty("worldEntityCount", mc.world==null?-1:mc.world.loadedEntityList.size());
+        result.addProperty("renderViewEntity", mc.getRenderViewEntity()==null?null:mc.getRenderViewEntity().getName()+"#"+System.identityHashCode(mc.getRenderViewEntity()));
+        result.addProperty("mcPlayer", mc.player==null?null:mc.player.getName()+"#"+System.identityHashCode(mc.player));
         return result;
     }
     private static void stopRuntime() {
-        if(ownsAura){KillAuraHandler.INSTANCE.stopAreaHuntAction();KillAuraHandler.endMcpRuntime();ownsAura=false;}
-        if(ownsNavigation){EmbeddedNavigationHandler.INSTANCE.stop();ownsNavigation=false;}
+        // Cleanup on a session swap/disconnect must never propagate — the old
+        // session's player/world may already be null inside these handlers.
+        try { if(ownsAura){KillAuraHandler.INSTANCE.stopAreaHuntAction();KillAuraHandler.endMcpRuntime();ownsAura=false;} }
+        catch (Throwable ignored) { ownsAura=false; }
+        try { if(ownsNavigation){EmbeddedNavigationHandler.INSTANCE.stop();ownsNavigation=false;} }
+        catch (Throwable ignored) { ownsNavigation=false; }
         targets.clear();destination=null;action="";chaseTarget=-1;chaseGoal=null;
     }
     private static void stopAction(String status) {stopRuntime();actionLease.clear();actionStatus=status;}

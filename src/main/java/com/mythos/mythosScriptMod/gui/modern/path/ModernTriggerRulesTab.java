@@ -20,6 +20,7 @@ import com.mythos.mythosScriptMod.path.PathSequenceManager;
 import com.mythos.mythosScriptMod.path.runtime.ScopedRuntimeVariables;
 import com.mythos.mythosScriptMod.path.trigger.LegacySequenceTriggerManager;
 import com.mythos.mythosScriptMod.path.trigger.PlayerListTriggerSupport;
+import com.mythos.mythosScriptMod.utils.JsonCopy;
 import com.mythos.mythosScriptMod.utils.PacketCaptureHandler;
 import com.mythos.mythosScriptMod.utils.PinyinSearchHelper;
 import com.mythos.mythosScriptMod.utils.guiinspect.GuiInspectionManager;
@@ -1402,7 +1403,7 @@ public final class ModernTriggerRulesTab implements ModernSettingsTab {
     }
 
     private JsonObject copyJson(JsonObject source) {
-        try { return source == null ? new JsonObject() : new JsonParser().parse(source.toString()).getAsJsonObject(); }
+        try { return JsonCopy.deepCopyObject(source); }
         catch (Exception ignored) { return new JsonObject(); }
     }
 

@@ -1526,17 +1526,11 @@ public final class ProfileShareCodeManager {
                     : Collections.unmodifiableList(new ArrayList<>(entries));
         }
 
-        public String getTargetProfileName() {
-            return targetProfileName;
-        }
 
         public List<ImportPreviewEntry> getEntries() {
             return entries;
         }
 
-        public int getTotalCount() {
-            return entries.size();
-        }
 
         public int getChangedCount() {
             return getChangedCount(PathConflictMode.REPLACE);
@@ -1667,9 +1661,6 @@ public final class ProfileShareCodeManager {
             this.unchangedFileCount = Math.max(0, unchangedFileCount);
         }
 
-        public List<String> getImportedFiles() {
-            return importedFiles;
-        }
 
         public int getImportedCount() {
             return importedFiles.size();

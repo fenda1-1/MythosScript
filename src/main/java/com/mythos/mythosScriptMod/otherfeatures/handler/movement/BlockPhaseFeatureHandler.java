@@ -10,6 +10,7 @@ final class BlockPhaseFeatureHandler {
     }
 
     static void apply(MovementFeatureManager manager, EntityPlayerSP player) {
+        MovementFeatureManager.RuntimeState rt = MovementFeatureManager.rt();
         if (!MovementFeatureManager.isEnabled("block_phase")
                 || player == null
                 || player.world == null
@@ -17,7 +18,7 @@ final class BlockPhaseFeatureHandler {
                 || player.isInWater()
                 || player.isInLava()
                 || player.isRiding()) {
-            manager.blockPhaseStuckTicks = 0;
+            rt.blockPhaseStuckTicks = 0;
             return;
         }
 
@@ -25,13 +26,13 @@ final class BlockPhaseFeatureHandler {
         boolean insideOpaque = player.isEntityInsideOpaqueBlock();
         boolean horizontallyBlocked = moving && player.collidedHorizontally;
         if (insideOpaque || horizontallyBlocked) {
-            manager.blockPhaseStuckTicks++;
+            rt.blockPhaseStuckTicks++;
         } else {
-            manager.blockPhaseStuckTicks = 0;
+            rt.blockPhaseStuckTicks = 0;
             return;
         }
 
-        if (!insideOpaque && manager.blockPhaseStuckTicks < 4) {
+        if (!insideOpaque && rt.blockPhaseStuckTicks < 4) {
             return;
         }
 
@@ -74,6 +75,6 @@ final class BlockPhaseFeatureHandler {
         }
         player.fallDistance = 0.0F;
         player.velocityChanged = true;
-        manager.blockPhaseStuckTicks = 0;
+        rt.blockPhaseStuckTicks = 0;
     }
 }

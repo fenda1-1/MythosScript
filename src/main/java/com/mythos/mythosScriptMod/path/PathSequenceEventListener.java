@@ -129,7 +129,13 @@ public class PathSequenceEventListener {
     // Baritone has one shared pathing process. Track the runner that last
     // dispatched a route so stopping a background sequence can cancel its
     // route without touching a later foreground route.
-    private static volatile PathSequenceEventListener navigationOwner;
+    private static final java.util.concurrent.ConcurrentHashMap<String, PathSequenceEventListener> NAVIGATION_OWNERS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    // Per-owner foreground runner.  "" (human/standalone) maps to `instance`;
+    // each bot username gets its own runner so two bots' scripts never share
+    // tracking state.  See B1/B2/B4.
+    private static final java.util.concurrent.ConcurrentHashMap<String, PathSequenceEventListener>
+            foregroundRunners = new java.util.concurrent.ConcurrentHashMap<>();
     private static final List<String> debugBreakpoints = new CopyOnWriteArrayList<>();
     public static final PathSequenceEventListener instance = new PathSequenceEventListener();
 
@@ -147,6 +153,7 @@ public class PathSequenceEventListener {
         private final boolean noStopNavigationOnCompletion;
         private final boolean backgroundRunner;
         private final String executionSessionId;
+        private final String owner;
 
         public ProgressSnapshot(String sequenceName, int stepIndex, int actionIndex, boolean atTarget,
                 int remainingLoops, int tickDelay, boolean explicitDelay, String status,
@@ -168,6 +175,16 @@ public class PathSequenceEventListener {
                 int remainingLoops, int tickDelay, boolean explicitDelay, String status,
                 ScopedRuntimeVariables.ScopeSnapshot variableSnapshot, int stepRetryUsed,
                 boolean noStopNavigationOnCompletion, boolean backgroundRunner, String executionSessionId) {
+            this(sequenceName, stepIndex, actionIndex, atTarget, remainingLoops, tickDelay, explicitDelay, status,
+                    variableSnapshot, stepRetryUsed, noStopNavigationOnCompletion, backgroundRunner,
+                    executionSessionId, "");
+        }
+
+        public ProgressSnapshot(String sequenceName, int stepIndex, int actionIndex, boolean atTarget,
+                int remainingLoops, int tickDelay, boolean explicitDelay, String status,
+                ScopedRuntimeVariables.ScopeSnapshot variableSnapshot, int stepRetryUsed,
+                boolean noStopNavigationOnCompletion, boolean backgroundRunner, String executionSessionId,
+                String owner) {
             this.sequenceName = sequenceName;
             this.stepIndex = stepIndex;
             this.actionIndex = actionIndex;
@@ -181,6 +198,7 @@ public class PathSequenceEventListener {
             this.noStopNavigationOnCompletion = noStopNavigationOnCompletion;
             this.backgroundRunner = backgroundRunner;
             this.executionSessionId = executionSessionId == null ? "" : executionSessionId;
+            this.owner = owner == null ? "" : owner;
         }
 
         public String getSequenceName() {
@@ -233,6 +251,10 @@ public class PathSequenceEventListener {
 
         public String getExecutionSessionId() {
             return executionSessionId;
+        }
+
+        public String getOwner() {
+            return owner;
         }
     }
 
@@ -316,6 +338,10 @@ public class PathSequenceEventListener {
     private int initialActionIndexForCurrentStep;
     private boolean tracking = false;
     private int tickDelay = 0;
+    /** Wall-clock deadline (nanoTime) for the current tickDelay — converts the
+     *  decrement count into a real-time wait so throttled bot sessions don't
+     *  stretch delays. -1 = no active deadline. */
+    private long tickDelayDeadlineNanos = -1L;
     private boolean atTarget = false;
     private boolean waitingForNavigationToFinishAtTarget = false;
     private int remainingLoops = 0;
@@ -333,11 +359,46 @@ public class PathSequenceEventListener {
     private boolean eventBusRegistered = false;
     private final Minecraft mc = Minecraft.getMinecraft();
     private final boolean backgroundRunner;
+
+    // ------------------------------------------------------------------
+    // Per-thread context resolution.  This class is NOT in NexusTransformer's
+    // FIELD_CTX_CLASSES rewrite list, so a bare `ctxPlayer()`/`ctxWorld()` read on
+    // a dedicated bot tick thread returns the MOUNTED player's entity — the
+    // wrong session.  Use ctxPlayer()/ctxWorld() everywhere the bot-tick path
+    // can reach so a bound thread resolves its own session's entity.  On the
+    // client thread (and when Nexus is absent) these return the real fields.
+    // ------------------------------------------------------------------
+    private static EntityPlayerSP ctxPlayer() {
+        return com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+    }
+    private static net.minecraft.world.World ctxWorld() {
+        return com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld();
+    }
+    private static net.minecraft.client.multiplayer.PlayerControllerMP ctxController() {
+        return com.mythos.mythosScriptMod.mcp.NexusSessions.boundController();
+    }
+    private static net.minecraft.client.gui.GuiScreen ctxScreen() {
+        return com.mythos.mythosScriptMod.mcp.NexusSessions.boundScreen();
+    }
+    // Which Nexus session owns this runner (username), or "" for the
+    // mounted/human/standalone case.  A runner is ticked by whichever
+    // mechanism has ctxPlayer() pointing at its owner: the Forge bus for the
+    // mounted owner, NexusTickBridge (inside withContext) for the rest.
+    private String executionUsername = "";
+    // Per-runner loop state.  "" (human) mirrors GuiInventory so the existing
+    // GUI keeps working; a bot uses its own fields so bots don't share a
+    // counter / running flag.
+    private int localLoopCounter = 0;
+    private boolean localLooping = false;
+    private int localLoopCount = 1;
     private final String lockOwnerId = UUID.randomUUID().toString();
     private String waitingLockResource = "";
     private int currentStepRetryUsed = 0;
     private boolean noStopNavigationOnCompletion = false;
     private int currentStepIdleTicks = 0;
+    /** Wall-clock anchor for idle detection — elapsed ticks derived from real
+     *  ms so throttled bot sessions don't stretch the timeout. */
+    private long currentStepIdleStartMillis = 0L;
     private boolean currentStepIdleAnnounced = false;
     private double currentStepLastMovementX = Double.NaN;
     private double currentStepLastMovementY = Double.NaN;
@@ -385,6 +446,9 @@ public class PathSequenceEventListener {
     private int huntKillCompletionConfirmTicks = 3 * 20;
     private int huntWhitelistRespawnTimeoutTicks = 120 * 20;
     private int huntWhitelistRespawnElapsedTicks = 0;
+    /** Wall-clock anchors — elapsed ticks are derived from real elapsed ms so
+     *  throttled bot sessions don't stretch these timeouts. */
+    private long huntWhitelistRespawnStartMillis = 0L;
     private boolean huntWhitelistRespawnWaiting = false;
     private boolean huntWhitelistRespawnCompletesAction = false;
     private boolean huntWhitelistRespawnWaitSatisfied = false;
@@ -393,9 +457,11 @@ public class PathSequenceEventListener {
     private boolean huntKillCompletionConfirming = false;
     private boolean huntKillCompletionConfirmationResumed = false;
     private int huntKillCompletionConfirmationElapsedTicks = 0;
+    private long huntKillCompletionConfirmationStartMillis = 0L;
     private boolean huntForceEndEnabled = false;
     private int huntForceEndTimeoutTicks = 60 * 20;
     private int huntForceEndElapsedTicks = 0;
+    private long huntForceEndStartMillis = 0L;
     private boolean huntEnableNameBlacklist = false;
     private boolean huntAreaSweepEnabled = true;
     private int huntAreaSweepCellSize = 8;
@@ -881,6 +947,9 @@ public class PathSequenceEventListener {
     private int hotbarUseRemainingCount = 0;
     private int hotbarUseIntervalTicks = 0;
     private int hotbarUseWaitTicks = 0;
+    /** Wall-clock next-use instant — replaces the hotbarUseWaitTicks decrement
+     *  for throttled sessions. */
+    private long hotbarUseNextUseMillis = 0L;
     // --- 新增结束 ---
 
     // --- 异步动作状态 ---
@@ -892,6 +961,10 @@ public class PathSequenceEventListener {
     // --- 等待条件动作状态 ---
     private boolean waitConditionRunning = false;
     private int waitConditionElapsedTicks = 0;
+    /** Wall-clock start of the current wait — elapsed ticks are derived from
+     *  real elapsed ms /50 so a throttled bot session doesn't stretch wait
+     *  timeouts. 0 = not running. */
+    private long waitConditionStartMillis = 0L;
     private long waitConditionStartCapturedUpdateVersion = 0L;
     private long waitConditionStartCapturedRecaptureVersion = 0L;
     private long waitConditionStartPacketTextVersion = 0L;
@@ -899,6 +972,9 @@ public class PathSequenceEventListener {
     private ActionData deferredWaitActionData = null;
     private int deferredWaitResumeActionIndex = -1;
     private int deferredWaitElapsedTicks = 0;
+    /** Wall-clock start of the deferred wait — same real-time derivation as
+     *  waitConditionStartMillis. */
+    private long deferredWaitStartMillis = 0L;
     private long deferredWaitStartCapturedUpdateVersion = 0L;
     private long deferredWaitStartCapturedRecaptureVersion = 0L;
     private long deferredWaitStartPacketTextVersion = 0L;
@@ -1018,17 +1094,132 @@ public class PathSequenceEventListener {
         return backgroundRunner;
     }
 
+    /** Nexus session (username) that owns this runner; "" = human/standalone. */
+    String owner() {
+        return executionUsername == null ? "" : executionUsername;
+    }
+
+    /** Set the owning session and (for bots) keep loop state off the GUI statics. */
+    void bindOwner(String username) {
+        this.executionUsername = username == null ? "" : username;
+    }
+
+    /** The foreground runner for an owner: "" maps to the shared singleton. */
+    public static PathSequenceEventListener foregroundFor(String owner) {
+        String key = owner == null ? "" : owner;
+        if (key.isEmpty()) {
+            return instance;
+        }
+        PathSequenceEventListener r = foregroundRunners.get(key);
+        if (r != null) return r;
+        // Cold path only: bot session's first tick ever.
+        return foregroundRunners.computeIfAbsent(key, k -> {
+            PathSequenceEventListener runner = new PathSequenceEventListener();
+            runner.bindOwner(k);
+            return runner;
+        });
+    }
+
+    /** Foreground runner for the session currently driving this call. */
+    public static PathSequenceEventListener foregroundRunner() {
+        return foregroundFor(com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner());
+    }
+
+    /** The runner (foreground or background) that owns the current context. */
+    public static PathSequenceEventListener activeRunner() {
+        PathSequenceEventListener ctx = ACTION_EXECUTION_CONTEXT.get();
+        if (ctx != null && ctx.hasActiveExecution()) {
+            return ctx;
+        }
+        String owner = com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner();
+        PathSequenceEventListener fg = foregroundFor(owner);
+        if (fg != null && fg.hasActiveExecution()) {
+            return fg;
+        }
+        for (PathSequenceEventListener runner : new ArrayList<>(backgroundRunners)) {
+            if (runner != null && owner.equals(runner.owner()) && runner.hasActiveExecution()) {
+                return runner;
+            }
+        }
+        return fg;
+    }
+
+    /** Drop a bot's foreground runner once it has no active execution. */
+    static void releaseForegroundRunner(String owner) {
+        String key = owner == null ? "" : owner;
+        if (key.isEmpty()) {
+            return;
+        }
+        PathSequenceEventListener runner = foregroundRunners.get(key);
+        if (runner != null && !runner.hasActiveExecution()) {
+            foregroundRunners.remove(key);
+        }
+    }
+
+    /** Stop every foreground runner (human singleton + each bot). Used on
+     *  disconnect/state reset so no bot keeps ticking a stale script. */
+    public static void stopAllForegroundRunners() {
+        for (PathSequenceEventListener runner : allForegroundRunners()) {
+            if (runner != null && runner.hasActiveExecution()) {
+                runner.markExecutionResult(false, "前台序列被整体停止");
+                runner.stopTracking();
+            }
+        }
+        foregroundRunners.clear();
+    }
+
+    // --- per-runner loop state (human mirrors the GUI statics) ---
+    int getLoopCounter() {
+        return backgroundRunner || !executionUsername.isEmpty() ? localLoopCounter : GuiInventory.loopCounter;
+    }
+
+    void setLoopCounter(int value) {
+        localLoopCounter = value;
+        if (!backgroundRunner && executionUsername.isEmpty()) {
+            GuiInventory.loopCounter = value;
+        }
+    }
+
+    boolean isLooping() {
+        return backgroundRunner || !executionUsername.isEmpty() ? localLooping : GuiInventory.isLooping;
+    }
+
+    void setLooping(boolean value) {
+        localLooping = value;
+        if (!backgroundRunner && executionUsername.isEmpty()) {
+            GuiInventory.isLooping = value;
+        }
+    }
+
+    int getLoopCount() {
+        // loopCount 是用户配置（GUI 循环次数），不是 per-bot 运行时状态——
+        // mounted bot 的前台 runner 也应读全局 GuiInventory.loopCount，否则
+        // 手动在 bot 上跑序列永远只跑 localLoopCount 默认的 1 轮。只有真正的
+        // 后台 runner 才用自己的 localLoopCount。
+        return backgroundRunner ? localLoopCount : GuiInventory.loopCount;
+    }
+
+    void setLoopCount(int value) {
+        if (backgroundRunner) {
+            localLoopCount = value;
+        } else {
+            GuiInventory.loopCount = value;
+        }
+    }
+
     private boolean ensureResources(EnumSet<ResourceLockManager.Resource> resources, String detail) {
         String sequenceName = currentSequence == null ? "" : currentSequence.getName();
-        String blocked = ResourceLockManager.acquireOrSync(lockOwnerId, sequenceName, backgroundRunner, resources, detail);
+        String blocked = ResourceLockManager.acquireOrSync(owner(), lockOwnerId, sequenceName, backgroundRunner,
+                resources, detail);
         String policy = currentSequence == null ? "WAIT" : currentSequence.getLockConflictPolicy();
         if (blocked != null && !blocked.isEmpty()
                 && "PREEMPT_BACKGROUND".equalsIgnoreCase(policy)
                 && !backgroundRunner) {
             ResourceLockManager.Resource blockedResource = ResourceLockManager.parseResource(blocked);
-            if (ResourceLockManager.isHeldByBackground(blockedResource)) {
-                stopAllBackgroundRunners();
-                blocked = ResourceLockManager.acquireOrSync(lockOwnerId, sequenceName, backgroundRunner, resources, detail);
+            if (ResourceLockManager.isHeldByBackground(owner(), blockedResource)) {
+                stopBackgroundRunnersFor(owner());
+                blocked = ResourceLockManager.acquireOrSync(owner(), lockOwnerId, sequenceName, backgroundRunner,
+                        resources, detail);
             }
         }
         if (blocked != null && !blocked.isEmpty()) {
@@ -1054,7 +1245,7 @@ public class PathSequenceEventListener {
 
     private void releaseResources() {
         waitingLockResource = "";
-        ResourceLockManager.releaseAll(lockOwnerId);
+        ResourceLockManager.releaseAll(owner(), lockOwnerId);
     }
 
     private boolean hasActiveExecution() {
@@ -1062,7 +1253,7 @@ public class PathSequenceEventListener {
     }
 
     private boolean startNavigationGoto(double x, double y, double z, boolean bypassGotoThrottle) {
-        navigationOwner = this;
+        NAVIGATION_OWNERS.put(owner(), this);
         return EmbeddedNavigationHandler.INSTANCE.startGoto(x, y, z, bypassGotoThrottle);
     }
 
@@ -1071,15 +1262,28 @@ public class PathSequenceEventListener {
     }
 
     private boolean ownsNavigation() {
-        return navigationOwner == this;
+        return NAVIGATION_OWNERS.get(owner()) == this;
     }
 
     private static boolean stopNavigationOwnedByBackgroundRunner() {
-        PathSequenceEventListener owner = navigationOwner;
+        for (java.util.Map.Entry<String, PathSequenceEventListener> e : NAVIGATION_OWNERS.entrySet()) {
+            PathSequenceEventListener owner = e.getValue();
+            if (owner != null && owner.backgroundRunner) {
+                NAVIGATION_OWNERS.remove(e.getKey());
+                return EmbeddedNavigationHandler.INSTANCE.stop();
+            }
+        }
+        return false;
+    }
+
+    /** Stop navigation only when the current navigation owner is a background
+     *  runner belonging to the given session owner. */
+    private static boolean stopNavigationOwnedByBackgroundRunnerFor(String ownerKey) {
+        PathSequenceEventListener owner = NAVIGATION_OWNERS.get(ownerKey == null ? "" : ownerKey);
         if (owner == null || !owner.backgroundRunner) {
             return false;
         }
-        navigationOwner = null;
+        NAVIGATION_OWNERS.remove(ownerKey == null ? "" : ownerKey);
         return EmbeddedNavigationHandler.INSTANCE.stop();
     }
 
@@ -1087,29 +1291,20 @@ public class PathSequenceEventListener {
         if (!ownsNavigation()) {
             return false;
         }
-        navigationOwner = null;
+        NAVIGATION_OWNERS.remove(owner());
         return EmbeddedNavigationHandler.INSTANCE.stop();
     }
 
     private boolean stopNavigation() {
         if (ownsNavigation()) {
-            navigationOwner = null;
+            NAVIGATION_OWNERS.remove(owner());
         }
-        return EmbeddedNavigationHandler.INSTANCE.stop();
+        // Sequence finished — just release the navigation claim. No baritone
+        // cancel; the sequence ends and baritone continues with whatever
+        // it was doing (which is nothing for a completed sequence).
+        return true;
     }
 
-    private boolean ownsResource(ResourceLockManager.Resource resource) {
-        if (resource == null) {
-            return false;
-        }
-        for (ResourceLockManager.LockSnapshot snapshot : ResourceLockManager.getSnapshots()) {
-            if (snapshot != null && resource == snapshot.getResource()
-                    && lockOwnerId.equals(snapshot.getOwnerId())) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     private EnumSet<ResourceLockManager.Resource> resolveMovementResources(double[] target) {
         EnumSet<ResourceLockManager.Resource> resources = EnumSet.noneOf(ResourceLockManager.Resource.class);
@@ -1240,17 +1435,72 @@ public class PathSequenceEventListener {
         return resources;
     }
 
+    /** Every foreground runner: the human singleton plus each bot's runner. */
+    private static List<PathSequenceEventListener> allForegroundRunners() {
+        List<PathSequenceEventListener> out = new ArrayList<>();
+        out.add(instance);
+        out.addAll(foregroundRunners.values());
+        return out;
+    }
+
     public static boolean isSequenceRunningInForeground(String sequenceName) {
-        return sequenceName != null
-                && instance.isTracking()
-                && instance.currentSequence != null
-                && sequenceName.equals(instance.currentSequence.getName());
+        if (sequenceName == null) {
+            return false;
+        }
+        for (PathSequenceEventListener runner : allForegroundRunners()) {
+            if (runner != null && runner.isTracking() && runner.currentSequence != null
+                    && sequenceName.equals(runner.currentSequence.getName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Per-owner variant for the inventory GUI. The inventory renders a single
+     * viewed session, so a sequence must only be marked "running" when THIS
+     * viewed session's runner owns it — otherwise every bot shows the stripe
+     * for a sequence another bot started (B3 isolation fix).
+     *
+     * @param owner the viewed session's owner key ("" for human / unmounted)
+     */
+    public static boolean isSequenceRunningInForegroundForOwner(String owner, String sequenceName) {
+        if (sequenceName == null) {
+            return false;
+        }
+        String key = owner == null ? "" : owner;
+        PathSequenceEventListener runner = key.isEmpty() ? instance : foregroundRunners.get(key);
+        return runner != null && runner.isTracking() && runner.currentSequence != null
+                && sequenceName.equals(runner.currentSequence.getName());
+    }
+
+    /**
+     * Per-owner variant of {@link #isSequenceRunningInBackground(String)} for
+     * the inventory GUI — only the viewed session's background runner counts.
+     */
+    public static boolean isSequenceRunningInBackgroundForOwner(String owner, String sequenceName) {
+        if (sequenceName == null || sequenceName.trim().isEmpty()) {
+            return false;
+        }
+        String key = owner == null ? "" : owner;
+        for (PathSequenceEventListener runner : new ArrayList<>(backgroundRunners)) {
+            if (runner != null
+                    && runner.isTracking()
+                    && runner.currentSequence != null
+                    && key.equals(runner.owner())
+                    && sequenceName.equals(runner.currentSequence.getName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Includes delayed loop restarts, which must retain transient sequence definitions. */
     public static boolean isSequenceActiveForMcp(String sequenceName) {
-        if (instance.hasActiveExecution() && instance.currentSequence != null
-                && (sequenceName == null || sequenceName.equals(instance.currentSequence.getName()))) return true;
+        for (PathSequenceEventListener runner : allForegroundRunners()) {
+            if (runner != null && runner.hasActiveExecution() && runner.currentSequence != null
+                    && (sequenceName == null || sequenceName.equals(runner.currentSequence.getName()))) return true;
+        }
         for (PathSequenceEventListener runner : new ArrayList<>(backgroundRunners)) {
             if (runner != null && runner.hasActiveExecution() && runner.currentSequence != null
                     && (sequenceName == null || sequenceName.equals(runner.currentSequence.getName()))) return true;
@@ -1274,8 +1524,10 @@ public class PathSequenceEventListener {
     }
 
     public static boolean isAnySequenceRunning() {
-        if (instance != null && instance.isTracking()) {
-            return true;
+        for (PathSequenceEventListener runner : allForegroundRunners()) {
+            if (runner != null && runner.isTracking()) {
+                return true;
+            }
         }
         for (PathSequenceEventListener runner : new ArrayList<>(backgroundRunners)) {
             if (runner != null && runner.isTracking()) {
@@ -1285,19 +1537,29 @@ public class PathSequenceEventListener {
         return false;
     }
 
-    /** Returns immutable-at-capture progress snapshots for the status HUD. */
+    /** Returns immutable-at-capture progress snapshots for the status HUD.
+     *  Under Nexus only the MOUNTED session's runner is included — the
+     *  render thread has no tick binding, so a bot's runner would otherwise
+     *  be picked up as "foreground" when the human mounts a different bot. */
     public static List<ProgressSnapshot> getActiveProgressSnapshots() {
+        // Inside a bot's withContext/runOnTick the bound session IS the
+        // calling bot — prefer it so `nexus.exec names=botN` status returns
+        // that bot's runs. Only fall back to the mounted session when no
+        // tick binding exists (render/client-thread callers like the HUD).
+        String owner = com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner();
+        if (owner == null || owner.isEmpty()) {
+            owner = com.mythos.mythosScriptMod.mcp.NexusSessions.mountedBotUsername();
+        }
+        if (owner == null) owner = "";
         List<ProgressSnapshot> snapshots = new ArrayList<>();
-        if (instance != null) {
-            ProgressSnapshot foreground = instance.captureProgressSnapshot();
-            if (foreground != null) {
-                snapshots.add(foreground);
-            }
+        PathSequenceEventListener fg = foregroundFor(owner);
+        if (fg != null) {
+            ProgressSnapshot snap = fg.captureProgressSnapshot();
+            if (snap != null) snapshots.add(snap);
         }
         for (PathSequenceEventListener runner : new ArrayList<>(backgroundRunners)) {
-            if (runner == null) {
-                continue;
-            }
+            if (runner == null) continue;
+            if (!owner.equals(runner.owner())) continue;
             ProgressSnapshot background = runner.captureProgressSnapshot();
             if (background != null) {
                 snapshots.add(background);
@@ -1306,25 +1568,58 @@ public class PathSequenceEventListener {
         return snapshots;
     }
 
-    /** Returns the execution-log session currently running the named sequence. */
-    public static String getActiveExecutionLogSessionId(String sequenceName) {
-        String requested = sequenceName == null ? "" : sequenceName.trim();
-        if (instance != null && instance.isTracking() && instance.currentSequence != null
-                && (requested.isEmpty() || requested.equals(instance.currentSequence.getName()))) {
-            return instance.executionLogSessionId == null ? "" : instance.executionLogSessionId;
+    /**
+     * Active snapshots for EVERY session — foreground + background across all
+     * owners. Used by the Nexus in-world overlay so each bot's entity shows
+     * its own sequence status without the viewer mounting into that bot.
+     */
+    public static List<ProgressSnapshot> getAllActiveProgressSnapshots() {
+        List<ProgressSnapshot> snapshots = new ArrayList<>();
+        for (PathSequenceEventListener runner : allForegroundRunners()) {
+            if (runner == null) continue;
+            ProgressSnapshot snap = runner.captureProgressSnapshot();
+            if (snap != null) snapshots.add(snap);
         }
         for (PathSequenceEventListener runner : new ArrayList<>(backgroundRunners)) {
-            if (runner != null && runner.isTracking() && runner.currentSequence != null
-                    && (requested.isEmpty() || requested.equals(runner.currentSequence.getName()))) {
+            if (runner == null) continue;
+            ProgressSnapshot snap = runner.captureProgressSnapshot();
+            if (snap != null) snapshots.add(snap);
+        }
+        return snapshots;
+    }
+
+    /** Returns the execution-log session currently running the named sequence. */
+    public static String getActiveExecutionLogSessionId(String sequenceName) {
+        return getActiveExecutionLogSessionId(sequenceName, null);
+    }
+
+    /** Same, restricted to one owner ("" = local player); null owner matches any. */
+    public static String getActiveExecutionLogSessionId(String sequenceName, String owner) {
+        String requested = sequenceName == null ? "" : sequenceName.trim();
+        for (PathSequenceEventListener runner : allForegroundRunners()) {
+            if (matchesActiveRun(runner, requested, owner)) {
+                return runner.executionLogSessionId == null ? "" : runner.executionLogSessionId;
+            }
+        }
+        for (PathSequenceEventListener runner : new ArrayList<>(backgroundRunners)) {
+            if (matchesActiveRun(runner, requested, owner)) {
                 return runner.executionLogSessionId == null ? "" : runner.executionLogSessionId;
             }
         }
         return "";
     }
 
+    private static boolean matchesActiveRun(PathSequenceEventListener runner, String requested, String owner) {
+        return runner != null && runner.isTracking() && runner.currentSequence != null
+                && (requested.isEmpty() || requested.equals(runner.currentSequence.getName()))
+                && (owner == null || owner.equals(runner.owner()));
+    }
+
     public static boolean isAnyHuntOrbitActionRunning() {
-        if (instance != null && instance.isHuntOrbitActionActive()) {
-            return true;
+        for (PathSequenceEventListener runner : allForegroundRunners()) {
+            if (runner != null && runner.isHuntOrbitActionActive()) {
+                return true;
+            }
         }
         for (PathSequenceEventListener runner : new ArrayList<>(backgroundRunners)) {
             if (runner != null && runner.isHuntOrbitActionActive()) {
@@ -1372,9 +1667,13 @@ public class PathSequenceEventListener {
             return false;
         }
 
-        stopAllBackgroundRunners();
+        // Only replace THIS owner's background runners — another bot's
+        // sequence must keep running when this one starts (B2).
+        String owner = com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner();
+        stopBackgroundRunnersFor(owner);
 
         PathSequenceEventListener runner = new PathSequenceEventListener(true);
+        runner.bindOwner(owner);
         backgroundRunners.add(runner);
         runner.setStatus(sequence.getName() + " | 后台执行");
         runner.startTracking(sequence, remainingLoops, initialSequenceVariables, startStepIndex, startActionIndex,
@@ -1382,6 +1681,18 @@ public class PathSequenceEventListener {
         runner.resume();
         primeBackgroundNavigation(runner, sequence);
         return true;
+    }
+
+    private static void stopBackgroundRunnersFor(String owner) {
+        String key = owner == null ? "" : owner;
+        for (PathSequenceEventListener runner : new ArrayList<>(backgroundRunners)) {
+            if (runner != null && key.equals(runner.owner()) && runner.hasActiveExecution()) {
+                runner.markExecutionResult(false, "后台序列被新的后台执行打断");
+                runner.stopTracking();
+            }
+        }
+        stopNavigationOwnedByBackgroundRunnerFor(key);
+        backgroundRunners.removeIf(r -> r != null && key.equals(r.owner()) && !r.hasActiveExecution());
     }
 
     public static void stopAllBackgroundRunners() {
@@ -1397,31 +1708,51 @@ public class PathSequenceEventListener {
         backgroundRunners.clear();
     }
 
+    /** Stop only the given owner's runners (used when a bot disconnects). */
+    public static void stopBackgroundRunnersForOwner(String owner) {
+        stopBackgroundRunnersFor(owner);
+    }
+
     public static boolean stopForegroundSequenceByAction() {
-        if (instance == null || !instance.hasActiveExecution()) {
+        PathSequenceEventListener runner = foregroundRunner();
+        if (runner == null || !runner.hasActiveExecution()) {
             return false;
         }
-        instance.markExecutionResult(false, "动作停止前台序列");
-        instance.stopTracking();
+        runner.markExecutionResult(false, "动作停止前台序列");
+        runner.stopTracking();
+        return true;
+    }
+
+    /** Stop the foreground runner owned by {@code owner} only — no create. */
+    public static boolean stopForegroundSequenceByActionForOwner(String owner) {
+        String key = owner == null ? "" : owner;
+        PathSequenceEventListener runner = key.isEmpty() ? instance : foregroundRunners.get(key);
+        if (runner == null || !runner.hasActiveExecution()) {
+            return false;
+        }
+        runner.markExecutionResult(false, "动作停止前台序列");
+        runner.stopTracking();
         return true;
     }
 
     public static boolean pauseForegroundSequenceByAction() {
-        if (instance == null || !instance.isTracking()) {
+        PathSequenceEventListener runner = foregroundRunner();
+        if (runner == null || !runner.isTracking()) {
             return false;
         }
-        if (!instance.isPaused) {
-            instance.pause();
+        if (!runner.isPaused) {
+            runner.pause();
         }
         return true;
     }
 
     public static boolean resumeForegroundSequenceByAction() {
-        if (instance == null || !instance.isTracking()) {
+        PathSequenceEventListener runner = foregroundRunner();
+        if (runner == null || !runner.isTracking()) {
             return false;
         }
-        if (instance.isPaused) {
-            instance.resume();
+        if (runner.isPaused) {
+            runner.resume();
         }
         return true;
     }
@@ -1519,8 +1850,8 @@ public class PathSequenceEventListener {
 
     private boolean shouldStopNavigationOnFinish() {
         if (backgroundRunner) {
-            return !(PathSequenceEventListener.instance.isTracking()
-                    && PathSequenceEventListener.instance.currentSequence != null);
+            PathSequenceEventListener fg = foregroundFor(owner());
+            return !(fg != null && fg.isTracking() && fg.currentSequence != null);
         }
         return !restoreAnyBackgroundNavigation();
     }
@@ -1533,8 +1864,8 @@ public class PathSequenceEventListener {
         if (!backgroundRunner) {
             return true;
         }
-        return !(PathSequenceEventListener.instance.isTracking()
-                && PathSequenceEventListener.instance.currentSequence != null);
+        PathSequenceEventListener fg = foregroundFor(owner());
+        return !(fg != null && fg.isTracking() && fg.currentSequence != null);
     }
 
     private static void primeBackgroundNavigation(PathSequenceEventListener runner, PathSequence sequence) {
@@ -1978,7 +2309,7 @@ public class PathSequenceEventListener {
     }
 
     void prepareForSequenceStartDispatch(String reason) {
-        navigationOwner = this;
+        NAVIGATION_OWNERS.put(owner(), this);
         resetPauseStateForSequenceLifecycle(reason, true);
     }
 
@@ -2012,6 +2343,7 @@ public class PathSequenceEventListener {
         this.tracking = true;
         this.atTarget = false;
         this.tickDelay = 0;
+        this.tickDelayDeadlineNanos = -1L;
         this.remainingLoops = remainingLoops;
         this.isPerformingExplicitDelay = false;
         this.explicitDelayNormalizeTo20Tps = false;
@@ -2053,12 +2385,12 @@ public class PathSequenceEventListener {
         currentDebugActionDescription = "";
         recordDebugTrace("序列开始: " + sequence.getName());
 
-        if (ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE) && mc.player != null) {
-            mc.player.sendMessage(new TextComponentString(
+        if (ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE) && ctxPlayer() != null) {
+            ctxPlayer().sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + 
                     I18n.format("msg.path.debug.sequence_start", sequence.getName())));
         }
 
-        initializeStepPathRetryMonitor(mc.player);
+        initializeStepPathRetryMonitor(ctxPlayer());
 
         ensureEventBusRegistered();
         mythosScriptMod.LOGGER.info(I18n.format("log.path.tracking_started") + sequence.getName());
@@ -2084,8 +2416,8 @@ public class PathSequenceEventListener {
         if (tracking || pendingLoopRestart) {
             boolean stopOwnedNavigation = backgroundRunner && ownsNavigation();
             SimulatedKeyInputManager.releasePathActionKeys(backgroundRunner);
-            if (ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE) && mc.player != null) {
-                mc.player.sendMessage(new TextComponentString(I18n.format("msg.path.debug.sequence_stop",
+            if (ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE) && ctxPlayer() != null) {
+                ctxPlayer().sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + I18n.format("msg.path.debug.sequence_stop",
                         currentSequence != null ? currentSequence.getName() : I18n.format("msg.common.unknown"))));
             }
             resetPauseStateForSequenceLifecycle("stopTracking", false);
@@ -2119,9 +2451,10 @@ public class PathSequenceEventListener {
             if (backgroundRunner) {
                 backgroundRunners.remove(this);
             } else {
-                GuiInventory.isLooping = false;
+                setLooping(false);
                 loopDelayTicks = 20;
-                PathSequenceManager.clearRunSequenceCallStack();
+                PathSequenceManager.clearRunSequenceCallStackFor(executionUsername);
+                releaseForegroundRunner(executionUsername);
             }
             mythosScriptMod.LOGGER.info(I18n.format("log.path.tracking_stopped"));
         }
@@ -2129,13 +2462,17 @@ public class PathSequenceEventListener {
 
     private void finishTrackingNaturally() {
         if (noStopNavigationOnCompletion && ownsNavigation()) {
-            navigationOwner = null;
+            NAVIGATION_OWNERS.remove(owner());
         }
         stopTracking();
     }
 
     public ProgressSnapshot captureProgressSnapshot() {
-        if (!tracking || currentSequence == null) {
+        // hasActiveExecution (tracking || pendingLoopRestart): a bot waiting
+        // its loop-delay between loops still owns the run — snapshots must
+        // keep it visible to the Nexus panel instead of vanishing for the
+        // delay window (the "快照=0" flicker).
+        if ((!tracking && !pendingLoopRestart) || currentSequence == null) {
             return null;
         }
         return new ProgressSnapshot(
@@ -2151,7 +2488,8 @@ public class PathSequenceEventListener {
                 currentStepRetryUsed,
                 noStopNavigationOnCompletion,
                 backgroundRunner,
-                executionLogSessionId);
+                executionLogSessionId,
+                owner());
     }
 
     public boolean resumeFromSnapshot(PathSequence sequence, ProgressSnapshot snapshot) {
@@ -2173,6 +2511,7 @@ public class PathSequenceEventListener {
         this.tracking = true;
         this.atTarget = snapshot.isAtTarget();
         this.tickDelay = Math.max(0, snapshot.getTickDelay());
+        this.tickDelayDeadlineNanos = -1L; // recomputed on next tick from tickDelay
         this.remainingLoops = snapshot.getRemainingLoops();
         this.isPerformingExplicitDelay = snapshot.isExplicitDelay();
         this.explicitDelayNormalizeTo20Tps = false;
@@ -2205,14 +2544,14 @@ public class PathSequenceEventListener {
         this.status = (snapshot.getStatus() == null || snapshot.getStatus().trim().isEmpty())
                 ? sequence.getName()
                 : snapshot.getStatus();
-        GuiInventory.isLooping = true;
+        setLooping(true);
 
         if (!this.atTarget) {
             double[] target = sequence.getSteps().get(this.currentStepIndex).getGotoPoint();
             if (!Double.isNaN(target[0])) {
                 prepareForSequenceStartDispatch("resumeFromSnapshot.goto");
                 startNavigationGoto(target[0], target[1], target[2], true);
-                initializeStepPathRetryMonitor(mc.player);
+                initializeStepPathRetryMonitor(ctxPlayer());
             } else if (!preserveCurrentNavigation) {
                 stopNavigation();
                 resetStepPathRetryMonitor();
@@ -2246,7 +2585,7 @@ public class PathSequenceEventListener {
         this.huntAreaSweepCellSize = Math.max(HUNT_AREA_SWEEP_MIN_CELL_SIZE,
                 Math.min(HUNT_AREA_SWEEP_MAX_CELL_SIZE, readHuntIntParam(params, "areaSweepCellSize", 8)));
         this.huntAreaSweepPlanner.reset(this.huntAreaSweepCellSize);
-        this.huntMode = KillAuraHandler.huntMode;
+        this.huntMode = KillAuraHandler.cfg().huntMode;
         this.huntOrbitEnabled = KillAuraHandler.isHuntOrbitEnabled();
         this.huntChaseIntervalEnabled = false;
         this.huntChaseIntervalTicks = 0;
@@ -2257,23 +2596,23 @@ public class PathSequenceEventListener {
         
         // 读取新增参数
         this.huntShowRange = readHuntBooleanParam(params, "showHuntRange", false);
-        this.huntIgnoreInvisible = KillAuraHandler.ignoreInvisible;
+        this.huntIgnoreInvisible = KillAuraHandler.cfg().ignoreInvisible;
         
         // 记录搜怪中心点（玩家当前位置）
-        if (mc.player != null) {
-            this.huntCenterX = mc.player.posX;
-            this.huntCenterY = mc.player.posY;
-            this.huntCenterZ = mc.player.posZ;
+        if (ctxPlayer() != null) {
+            this.huntCenterX = ctxPlayer().posX;
+            this.huntCenterY = ctxPlayer().posY;
+            this.huntCenterZ = ctxPlayer().posZ;
         }
 
         String huntEntityType = params != null && params.has("entityType")
                 ? params.get("entityType").getAsString().trim()
                 : "";
         if (huntEntityType.isEmpty()) {
-            this.huntTargetHostile = KillAuraHandler.targetHostile;
-            this.huntTargetPassive = KillAuraHandler.targetPassive;
-            this.huntTargetPlayers = KillAuraHandler.targetPlayers;
-            this.huntTargetNpcs = KillAuraHandler.targetNpcs;
+            this.huntTargetHostile = KillAuraHandler.cfg().targetHostile;
+            this.huntTargetPassive = KillAuraHandler.cfg().targetPassive;
+            this.huntTargetPlayers = KillAuraHandler.cfg().targetPlayers;
+            this.huntTargetNpcs = KillAuraHandler.cfg().targetNpcs;
         } else if ("player".equalsIgnoreCase(huntEntityType) || "玩家".equalsIgnoreCase(huntEntityType)) {
             this.huntTargetHostile = false;
             this.huntTargetPassive = false;
@@ -2334,12 +2673,15 @@ public class PathSequenceEventListener {
         this.huntKillCompletionConfirming = false;
         this.huntKillCompletionConfirmationResumed = false;
         this.huntKillCompletionConfirmationElapsedTicks = 0;
+        this.huntKillCompletionConfirmationStartMillis = 0L;
+        this.huntWhitelistRespawnStartMillis = 0L;
         this.huntForceEndEnabled = readHuntBooleanParam(params, "forceEndHunt", false);
         int forceEndTimeoutSeconds = Math.max(0,
                 readHuntIntParam(params, "forceEndHuntTimeoutSeconds", 60));
         this.huntForceEndTimeoutTicks = forceEndTimeoutSeconds > Integer.MAX_VALUE / 20
                 ? Integer.MAX_VALUE : forceEndTimeoutSeconds * 20;
         this.huntForceEndElapsedTicks = 0;
+        this.huntForceEndStartMillis = 0L;
         this.huntEnableNameBlacklist = readHuntBooleanParam(params, "enableNameBlacklist", false);
         this.huntWhitelistTargets.addAll(readHuntWhitelistTargets(params));
         for (HuntWhitelistTarget target : this.huntWhitelistTargets) {
@@ -2364,8 +2706,8 @@ public class PathSequenceEventListener {
                 this.huntUpRange,
                 this.huntDownRange,
                 huntEntityType.isEmpty() ? "沿用杀戮光环" : huntEntityType,
-                KillAuraHandler.attackMode,
-                KillAuraHandler.huntMode,
+                KillAuraHandler.cfg().attackMode,
+                KillAuraHandler.cfg().huntMode,
                 this.huntOrbitEnabled,
                 this.huntNoTargetSkipCount,
                 this.huntNoDamageAttackLimit > 0 ? this.huntNoDamageAttackLimit : "关闭",
@@ -2424,19 +2766,46 @@ public class PathSequenceEventListener {
 
     @SubscribeEvent
     public void onPlayerTick(TickEvent.PlayerTickEvent event) {
+        // Forge-bus entry point: fires for the mounted player (human or bot).
+        // Route to the runner that owns the current context, so a background
+        // bot's script is never ticked by the mounted player's event.
+        if (event.phase != TickEvent.Phase.START || event.side != Side.CLIENT) {
+            return;
+        }
+        if (ctxPlayer() == null || event.player != ctxPlayer()) {
+            return;
+        }
+        dispatchTick((EntityPlayerSP) event.player);
+    }
+
+    /**
+     * Tick every runner owned by the session currently driving this tick.
+     * Called by the Forge bus for the mounted player, and directly by
+     * NexusTickBridge (inside withContext) for each background bot.
+     */
+    public static void dispatchTick(EntityPlayerSP player) {
+        if (player == null) {
+            return;
+        }
+        String owner = com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner();
+        PathSequenceEventListener foreground = foregroundFor(owner);
+        if (foreground != null) {
+            foreground.tickBody(player);
+        }
+        for (PathSequenceEventListener runner : new ArrayList<>(backgroundRunners)) {
+            if (runner != null && owner.equals(runner.owner())) {
+                runner.tickBody(player);
+            }
+        }
+    }
+
+    private void tickBody(EntityPlayerSP eventPlayer) {
         if (!PerformanceMonitor.isFeatureEnabled("path_sequence")) {
             return;
         }
         PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("path_sequence");
         try {
-        // ==================== 核心修复 ====================
-        // 在方法最开始添加此检查，确保只处理主玩家的事件。
-        if (mc.player == null || event.player != mc.player) {
-            return;
-        }
-        // ==================== 修复结束 ====================
-
-        if (event.phase != TickEvent.Phase.START || event.side != Side.CLIENT) {
+        if (eventPlayer == null || eventPlayer != ctxPlayer()) {
             return;
         }
 
@@ -2444,15 +2813,15 @@ public class PathSequenceEventListener {
             return;
         }
 
-        // --- 核心修复 #1：将 event.player 强制转换为 (EntityPlayerSP) ---
-        // 我们在下面已经检查了 event.player.equals(mc.player)，所以这个转换是安全的。
+        // --- 核心修复 #1：将 eventPlayer 强制转换为 (EntityPlayerSP) ---
+        // 我们在下面已经检查了 eventPlayer.equals(ctxPlayer())，所以这个转换是安全的。
         if (isHunting) {
-            executeHuntTick((EntityPlayerSP) event.player);
+            executeHuntTick(eventPlayer);
             return; // 在狩猎模式下，不执行后续的路径跟踪逻辑
         }
         
         if (isFollowingEntity) {
-            executeFollowEntityTick((EntityPlayerSP) event.player);
+            executeFollowEntityTick(eventPlayer);
             return; // 在跟随实体模式下，不执行后续的路径跟踪逻辑
         }
         // --- 修复结束 ---
@@ -2460,31 +2829,38 @@ public class PathSequenceEventListener {
         if (!tracking)
             return;
         // 这一行现在是多余的，但保留也无妨
-        if (event.player == null || !event.player.equals(mc.player))
+        if (eventPlayer == null || !eventPlayer.equals(ctxPlayer()))
             return;
 
-        EntityPlayerSP player = (EntityPlayerSP) event.player;
+        EntityPlayerSP player = eventPlayer;
 
         if (tickDelay > 0) {
-            if (isPerformingExplicitDelay && explicitDelayNormalizeTo20Tps) {
-                explicitDelayRemainingBaselineTicks = Math.max(0.0D,
-                        explicitDelayRemainingBaselineTicks - (1.0D / ModUtils.getCurrentTimerSpeedMultiplier()));
-                tickDelay = Math.max(0, (int) Math.ceil(explicitDelayRemainingBaselineTicks));
-            } else {
-                tickDelay--;
+            // Wall-clock delay: background bot sessions tick at a throttled
+            // rate, so counting decrements stretches a "N tick" delay by
+            // 1/rate. Convert to a deadline once (50ms per tick) — the delay
+            // then means the same real duration at any session tick rate,
+            // and speedhack-timer normalization (explicitDelayNormalizeTo20Tps)
+            // is subsumed since 50ms/tick is already wall time.
+            long nowNanos = System.nanoTime();
+            if (tickDelayDeadlineNanos < 0L) {
+                tickDelayDeadlineNanos = nowNanos + tickDelay * 50_000_000L;
             }
-            if (isPerformingExplicitDelay && ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE)) {
-                double secondsLeft = explicitDelayNormalizeTo20Tps
-                        ? Math.max(0.0D, explicitDelayRemainingBaselineTicks) / 20.0D
-                        : tickDelay / 20.0D;
-                String baseStatus = status.split(" \\| ")[0];
-                setStatus(I18n.format("status.path.delaying", baseStatus, secondsLeft));
-                if (tickDelay > 0 && tickDelay % 20 == 0 && mc.player != null) {
-                    String chatMessage = I18n.format("msg.path.debug.delaying_left", secondsLeft);
-                    mc.player.sendMessage(new TextComponentString(chatMessage));
+            long remainingNanos = tickDelayDeadlineNanos - nowNanos;
+            if (remainingNanos > 0L) {
+                if (isPerformingExplicitDelay && ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE)) {
+                    double secondsLeft = remainingNanos / 1_000_000_000.0D;
+                    tickDelay = Math.max(0, (int) Math.ceil(remainingNanos / 50_000_000.0D));
+                    String baseStatus = status.split(" \\| ")[0];
+                    setStatus(I18n.format("status.path.delaying", baseStatus, secondsLeft));
+                    if (tickDelay > 0 && tickDelay % 20 == 0 && ctxPlayer() != null) {
+                        String chatMessage = I18n.format("msg.path.debug.delaying_left", secondsLeft);
+                        ctxPlayer().sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + chatMessage));
+                    }
                 }
+                return;
             }
-            return;
+            tickDelay = 0;
+            tickDelayDeadlineNanos = -1L;
         }
 
         if (isPerformingExplicitDelay) {
@@ -2542,14 +2918,14 @@ public class PathSequenceEventListener {
                         } else if (currentSequence != null) {
                             int nextLoopCount = nextRemainingLoops < 0
                                     ? -1
-                                    : nextRemainingLoops + GuiInventory.loopCounter;
+                                    : nextRemainingLoops + getLoopCounter();
                             PathSequenceManager.startNextLoopWithVariables(currentSequence.getName(),
                                     this.initialSequenceVariables, nextLoopCount);
                         }
                     }).accept(player);
                     return;
                 } else {
-                    status = I18n.format("status.path.completed_times", GuiInventory.loopCounter);
+                    status = I18n.format("status.path.completed_times", getLoopCounter());
                     markExecutionResult(true, "序列执行完成");
                     finishTrackingNaturally();
                 }
@@ -2567,7 +2943,7 @@ public class PathSequenceEventListener {
             if (!ensureResources(resolveMovementResources(target), "move_to_step_target")) {
                 return;
             }
-            if (AutoEatHandler.isEating) {
+            if (AutoEatHandler.isEating()) {
                 return;
             }
             if (hasReachedGotoTarget(player, currentStep, target)) {
@@ -2581,8 +2957,8 @@ public class PathSequenceEventListener {
                     resetStepPathRetryMonitor();
                     return;
                 }
-                if (ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE) && !atTarget && mc.player != null) {
-                    mc.player.sendMessage(new TextComponentString(
+                if (ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE) && !atTarget && ctxPlayer() != null) {
+                    ctxPlayer().sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + 
                             I18n.format("msg.path.debug.reached_step_target", currentStepIndex)));
                 }
                 mythosScriptMod.LOGGER.info(I18n.format("log.path.reached_target"), currentStepIndex,
@@ -2635,8 +3011,8 @@ public class PathSequenceEventListener {
                 }
 
                 if (actionIndex >= actions.size()) {
-                    if (ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE) && mc.player != null) {
-                        mc.player.sendMessage(new TextComponentString(
+                    if (ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE) && ctxPlayer() != null) {
+                        ctxPlayer().sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + 
                                 I18n.format("msg.path.debug.step_actions_done", currentStepIndex)));
                     }
                     if (stopAfterCurrentStep) {
@@ -2750,8 +3126,8 @@ public class PathSequenceEventListener {
                     continue;
                 }
 
-                if (ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE) && mc.player != null) {
-                    mc.player.sendMessage(new TextComponentString(
+                if (ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE) && ctxPlayer() != null) {
+                    ctxPlayer().sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + 
                             I18n.format("msg.path.debug.execute_action", currentStepIndex, actionIndex,
                                     resolvedActionData.getDescription())));
                 }
@@ -2800,7 +3176,7 @@ public class PathSequenceEventListener {
 
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
-        if (mc == null || mc.player == null || mc.playerController == null || mc.world == null) {
+        if (mc == null || ctxPlayer() == null || ctxController() == null || ctxWorld() == null) {
             return;
         }
     }
@@ -2817,6 +3193,7 @@ public class PathSequenceEventListener {
         this.hotbarUseRemainingCount = 0;
         this.hotbarUseIntervalTicks = 0;
         this.hotbarUseWaitTicks = 0;
+        this.hotbarUseNextUseMillis = 0L;
     }
 
     private void resetAsyncActionState() {
@@ -2879,8 +3256,8 @@ public class PathSequenceEventListener {
             return true;
         }
 
-        if (ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE) && mc.player != null) {
-            mc.player.sendMessage(new TextComponentString(
+        if (ModConfig.isDebugFlagEnabled(DebugModule.PATH_SEQUENCE) && ctxPlayer() != null) {
+            ctxPlayer().sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + 
                     I18n.format("msg.path.debug.execute_action", currentStepIndex, actionIndex,
                             actionData.getDescription())));
         }
@@ -2910,7 +3287,7 @@ public class PathSequenceEventListener {
 
     private boolean isAsyncActionInProgress(String actionType) {
         if ("move_inventory_items_to_chest_slots".equals(actionType)) {
-            return ItemFilterHandler.isWarehouseTransferInProgress();
+            return ItemFilterHandler.isWarehouseTransferInProgressForCurrentOwner();
         }
         if ("spread_inventory_item".equals(actionType)) {
             return ItemSpreadHandler.isSpreadInProgress();
@@ -2930,6 +3307,7 @@ public class PathSequenceEventListener {
     private void resetWaitConditionState() {
         this.waitConditionRunning = false;
         this.waitConditionElapsedTicks = 0;
+        this.waitConditionStartMillis = 0L;
         this.waitConditionStartCapturedUpdateVersion = 0L;
         this.waitConditionStartCapturedRecaptureVersion = 0L;
         this.waitConditionStartPacketTextVersion = 0L;
@@ -2940,6 +3318,7 @@ public class PathSequenceEventListener {
         this.deferredWaitActionData = null;
         this.deferredWaitResumeActionIndex = -1;
         this.deferredWaitElapsedTicks = 0;
+        this.deferredWaitStartMillis = 0L;
         this.deferredWaitStartCapturedUpdateVersion = 0L;
         this.deferredWaitStartCapturedRecaptureVersion = 0L;
         this.deferredWaitStartPacketTextVersion = 0L;
@@ -3039,6 +3418,7 @@ public class PathSequenceEventListener {
 
     private void resetStepPathRetryMonitor() {
         this.currentStepIdleTicks = 0;
+        this.currentStepIdleStartMillis = 0L;
         this.currentStepIdleAnnounced = false;
         this.currentStepLastMovementX = Double.NaN;
         this.currentStepLastMovementY = Double.NaN;
@@ -3064,10 +3444,10 @@ public class PathSequenceEventListener {
     }
 
     private void sendPathRetryMessage(String message, net.minecraft.util.text.TextFormatting color) {
-        if (mc.player == null || message == null || message.trim().isEmpty()) {
+        if (ctxPlayer() == null || message == null || message.trim().isEmpty()) {
             return;
         }
-        mc.player.sendMessage(new TextComponentString(color + "[路径序列] " + message));
+        ctxPlayer().sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + color + "[路径序列] " + message));
     }
 
     private void ensureSetVarDefaultValue(String varName, JsonObject rawParams, EntityPlayerSP player) {
@@ -3188,8 +3568,8 @@ public class PathSequenceEventListener {
 
         boolean started = PathSequenceManager.executeSequenceByConfiguredMode(target, player, callerSequenceName, null,
                 step.getRetryExhaustedStepIndex(), step.getRetryExhaustedActionIndex());
-        if (!started && mc.player != null) {
-            mc.player.sendMessage(new TextComponentString(
+        if (!started && ctxPlayer() != null) {
+            ctxPlayer().sendMessage(new TextComponentString(ModUtils.nexusChatPrefix() + 
                     net.minecraft.util.text.TextFormatting.RED + "[路径序列] 启动失败后执行序列失败: " + target));
         }
         return true;
@@ -3225,7 +3605,11 @@ public class PathSequenceEventListener {
             return false;
         }
 
-        currentStepIdleTicks++;
+        if (currentStepIdleStartMillis == 0L) {
+            currentStepIdleStartMillis = System.currentTimeMillis();
+        }
+        currentStepIdleTicks =
+                (int) ((System.currentTimeMillis() - currentStepIdleStartMillis) / 50L);
         if (!currentStepIdleAnnounced && currentStepIdleTicks >= PATH_RETRY_NOTIFY_TICKS) {
             int remainingRetries = Math.max(0, retryCount - currentStepRetryUsed);
             sendPathRetryMessage("步骤 " + (currentStepIndex + 1) + " 检测到人物原地不动，"
@@ -3387,13 +3771,13 @@ public class PathSequenceEventListener {
     }
 
     private String getCurrentGuiTitle() {
-        GuiScreen screen = mc.currentScreen;
+        GuiScreen screen = ctxScreen();
         if (screen == null) {
             return "";
         }
-        if (screen instanceof GuiChest && mc.player != null && mc.player.openContainer instanceof ContainerChest) {
+        if (screen instanceof GuiChest && ctxPlayer() != null && ctxPlayer().openContainer instanceof ContainerChest) {
             try {
-                IInventory inv = ((ContainerChest) mc.player.openContainer).getLowerChestInventory();
+                IInventory inv = ((ContainerChest) ctxPlayer().openContainer).getLowerChestInventory();
                 if (inv != null && inv.getDisplayName() != null) {
                     return inv.getDisplayName().getUnformattedText();
                 }
@@ -3464,7 +3848,7 @@ public class PathSequenceEventListener {
     private List<EntityLivingBase> collectMatchingNearbyEntities(EntityPlayerSP player, JsonObject params,
             double defaultRadius, boolean allowEmptyAsAll) {
         List<EntityLivingBase> matches = new ArrayList<>();
-        if (player == null || mc.world == null || params == null) {
+        if (player == null || ctxWorld() == null || params == null) {
             return matches;
         }
         String entityType = params.has("entityType") ? params.get("entityType").getAsString().trim() : "";
@@ -3474,7 +3858,7 @@ public class PathSequenceEventListener {
             return matches;
         }
         String expected = entityName.toLowerCase(Locale.ROOT);
-        List<EntityLivingBase> entities = mc.world.getEntitiesWithinAABB(EntityLivingBase.class,
+        List<EntityLivingBase> entities = ctxWorld().getEntitiesWithinAABB(EntityLivingBase.class,
                 new AxisAlignedBB(player.getPosition()).grow(radius));
         for (EntityLivingBase entity : entities) {
             if (entity == null || entity == player || !entity.isEntityAlive()) {
@@ -3548,10 +3932,10 @@ public class PathSequenceEventListener {
 
     private boolean hasMatchingScoreboardText(JsonObject params) {
         String expected = params != null && params.has("text") ? params.get("text").getAsString().trim() : "";
-        if (expected.isEmpty() || mc == null || mc.world == null) {
+        if (expected.isEmpty() || mc == null || ctxWorld() == null) {
             return false;
         }
-        Scoreboard scoreboard = mc.world.getScoreboard();
+        Scoreboard scoreboard = ctxWorld().getScoreboard();
         if (scoreboard == null) {
             return false;
         }
@@ -4029,6 +4413,11 @@ public class PathSequenceEventListener {
         }
 
         int timeoutTicks = getWaitTimeoutTicks(deferredWaitActionData);
+        // Wall-clock elapsed — throttled bot sessions tick slower, so counting
+        // tick calls would stretch the timeout proportionally.
+        deferredWaitElapsedTicks = deferredWaitStartMillis > 0L
+                ? (int) ((System.currentTimeMillis() - deferredWaitStartMillis) / 50L)
+                : 0;
         boolean matched = evaluateWaitAction(player, deferredWaitActionData,
                 deferredWaitStartCapturedUpdateVersion,
                 deferredWaitStartCapturedRecaptureVersion,
@@ -4052,7 +4441,6 @@ public class PathSequenceEventListener {
             return false;
         }
 
-        deferredWaitElapsedTicks++;
         if (actionIndex >= deferredWaitResumeActionIndex) {
             tickDelay = 1;
             consumeDebugProgress("延后等待中 tick=" + deferredWaitElapsedTicks);
@@ -4092,6 +4480,7 @@ public class PathSequenceEventListener {
                 deferredWaitActionData = actionData;
                 deferredWaitResumeActionIndex = actionIndex + 1 + preExecuteCount;
                 deferredWaitElapsedTicks = 0;
+                deferredWaitStartMillis = System.currentTimeMillis();
                 captureWaitStartVersions(actionData, true);
                 recordDebugTrace("wait defer: " + currentDebugActionDescription + " / pre=" + preExecuteCount);
                 actionIndex++;
@@ -4105,9 +4494,14 @@ public class PathSequenceEventListener {
             if (!waitConditionRunning) {
                 waitConditionRunning = true;
                 waitConditionElapsedTicks = 0;
+                waitConditionStartMillis = System.currentTimeMillis();
                 captureWaitStartVersions(actionData, false);
                 recordDebugTrace("wait start: " + currentDebugActionDescription);
             }
+            // Wall-clock elapsed — same reason as the deferred-wait path.
+            waitConditionElapsedTicks = waitConditionStartMillis > 0L
+                    ? (int) ((System.currentTimeMillis() - waitConditionStartMillis) / 50L)
+                    : 0;
             int timeoutTicks = getWaitTimeoutTicks(actionData);
             matched = evaluateWaitAction(player, actionData,
                     waitConditionStartCapturedUpdateVersion,
@@ -4140,7 +4534,6 @@ public class PathSequenceEventListener {
                 return true;
             }
 
-            waitConditionElapsedTicks++;
             tickDelay = 1;
             consumeDebugProgress("等待中 tick=" + waitConditionElapsedTicks);
             return true;
@@ -5195,7 +5588,7 @@ public class PathSequenceEventListener {
         }
 
         runtimeVariables.put(varName + "_found", false);
-        if (player == null || mc.world == null) {
+        if (player == null || ctxWorld() == null) {
             return;
         }
 
@@ -5226,14 +5619,14 @@ public class PathSequenceEventListener {
         }
 
         runtimeVariables.put(varName + "_found", false);
-        if (mc.world == null || params == null || !params.has("pos") || !params.get("pos").isJsonArray()) {
+        if (ctxWorld() == null || params == null || !params.has("pos") || !params.get("pos").isJsonArray()) {
             return;
         }
 
         try {
             com.google.gson.JsonArray pos = params.getAsJsonArray("pos");
             BlockPos blockPos = new BlockPos(pos.get(0).getAsDouble(), pos.get(1).getAsDouble(), pos.get(2).getAsDouble());
-            IBlockState state = mc.world.getBlockState(blockPos);
+            IBlockState state = ctxWorld().getBlockState(blockPos);
             Block block = state == null ? null : state.getBlock();
             if (block == null) {
                 return;
@@ -5255,7 +5648,7 @@ public class PathSequenceEventListener {
         String area = params != null && params.has("slotArea") ? params.get("slotArea").getAsString() : "MAIN";
         area = area == null || area.trim().isEmpty() ? "MAIN" : area.trim().toUpperCase(Locale.ROOT);
         int slotIndex = params != null && params.has("slotIndex") ? Math.max(0, params.get("slotIndex").getAsInt()) : 0;
-        if (varName.isEmpty() || mc.player == null || mc.player.inventory == null) {
+        if (varName.isEmpty() || ctxPlayer() == null || ctxPlayer().inventory == null) {
             return;
         }
 
@@ -5375,7 +5768,7 @@ public class PathSequenceEventListener {
 
     private void captureHotbar(JsonObject params) {
         String varName = params != null && params.has("varName") ? params.get("varName").getAsString().trim() : "hotbar";
-        if (varName.isEmpty() || mc.player == null || mc.player.inventory == null) {
+        if (varName.isEmpty() || ctxPlayer() == null || ctxPlayer().inventory == null) {
             return;
         }
 
@@ -5395,7 +5788,7 @@ public class PathSequenceEventListener {
             }
             appendCapturedStackSummary(stack, names, counts, registries, nbts);
         }
-        int selectedIndex = Math.max(0, Math.min(8, mc.player.inventory.currentItem));
+        int selectedIndex = Math.max(0, Math.min(8, ctxPlayer().inventory.currentItem));
         runtimeVariables.put(varName, snapshots);
         runtimeVariables.put(varName + "_slots", snapshots);
         runtimeVariables.put(varName + "_found", filled > 0);
@@ -5418,11 +5811,11 @@ public class PathSequenceEventListener {
     }
 
     private ItemStack getMainInventoryStack(int slotIndex) {
-        if (mc.player == null || mc.player.inventory == null || mc.player.inventory.mainInventory == null
-                || slotIndex < 0 || slotIndex >= mc.player.inventory.mainInventory.size()) {
+        if (ctxPlayer() == null || ctxPlayer().inventory == null || ctxPlayer().inventory.mainInventory == null
+                || slotIndex < 0 || slotIndex >= ctxPlayer().inventory.mainInventory.size()) {
             return ItemStack.EMPTY;
         }
-        return mc.player.inventory.mainInventory.get(slotIndex);
+        return ctxPlayer().inventory.mainInventory.get(slotIndex);
     }
 
     private Map<String, Object> buildCapturedStackSnapshot(String area, int slotIndex, ItemStack stack) {
@@ -5484,7 +5877,7 @@ public class PathSequenceEventListener {
         runtimeVariables.put(varName + "_names", new ArrayList<>());
         runtimeVariables.put(varName + "_distances", new ArrayList<>());
         runtimeVariables.put(varName + "_categories", new ArrayList<>());
-        if (player == null || mc.world == null) {
+        if (player == null || ctxWorld() == null) {
             return;
         }
         List<EntityLivingBase> entities = collectMatchingNearbyEntities(player, params, radius, true);
@@ -5671,12 +6064,12 @@ public class PathSequenceEventListener {
                 ? params.get("varName").getAsString().trim()
                 : "scoreboard";
         int lineIndex = params != null && params.has("lineIndex") ? params.get("lineIndex").getAsInt() : -1;
-        if (varName.isEmpty() || mc.player == null || mc.world == null) {
+        if (varName.isEmpty() || ctxPlayer() == null || ctxWorld() == null) {
             return;
         }
 
         runtimeVariables.put(varName + "_found", false);
-        Scoreboard scoreboard = mc.world.getScoreboard();
+        Scoreboard scoreboard = ctxWorld().getScoreboard();
         if (scoreboard == null) {
             return;
         }
@@ -5829,13 +6222,13 @@ public class PathSequenceEventListener {
             return slotIndex >= 0 && slotIndex < 9 ? getMainInventoryStack(slotIndex) : ItemStack.EMPTY;
         }
         if ("ARMOR".equals(normalized)) {
-            return slotIndex >= 0 && slotIndex < mc.player.inventory.armorInventory.size()
-                    ? mc.player.inventory.armorInventory.get(slotIndex)
+            return slotIndex >= 0 && slotIndex < ctxPlayer().inventory.armorInventory.size()
+                    ? ctxPlayer().inventory.armorInventory.get(slotIndex)
                     : ItemStack.EMPTY;
         }
         if ("OFFHAND".equals(normalized)) {
-            return slotIndex >= 0 && slotIndex < mc.player.inventory.offHandInventory.size()
-                    ? mc.player.inventory.offHandInventory.get(slotIndex)
+            return slotIndex >= 0 && slotIndex < ctxPlayer().inventory.offHandInventory.size()
+                    ? ctxPlayer().inventory.offHandInventory.get(slotIndex)
                     : ItemStack.EMPTY;
         }
         return getMainInventoryStack(slotIndex);
@@ -6056,7 +6449,7 @@ public class PathSequenceEventListener {
             }
             prepareForSequenceStartDispatch("restartCurrentStepTarget");
             startNavigationGoto(target[0], target[1], target[2], true);
-            initializeStepPathRetryMonitor(mc.player);
+            initializeStepPathRetryMonitor(ctxPlayer());
         } else {
             atTarget = true;
             if (shouldStopNavigationForStepTransition()) {
@@ -6066,18 +6459,6 @@ public class PathSequenceEventListener {
         }
     }
 
-    private void moveToStepTargetOrFinish() {
-        resetStepPathRetryMonitor();
-        resetStepArrivalWaitState();
-        if (currentSequence == null) {
-            return;
-        }
-        if (currentStepIndex >= currentSequence.getSteps().size()) {
-            atTarget = false;
-            return;
-        }
-        restartCurrentStepTarget(currentSequence.getSteps().get(currentStepIndex));
-    }
 
     private boolean hasReachedGotoTarget(EntityPlayerSP player, PathStep step, double[] target) {
         if (player == null || target == null || target.length < 3) {
@@ -6131,6 +6512,7 @@ public class PathSequenceEventListener {
             this.hotbarUseIntervalTicks = Math.max(0,
                     readIntParam(actionData.params, "intervalTicks", 0));
             this.hotbarUseWaitTicks = 0;
+            this.hotbarUseNextUseMillis = 0L;
             this.hotbarUseActionRunning = true;
         }
 
@@ -6159,8 +6541,9 @@ public class PathSequenceEventListener {
             return;
         }
 
-        if (hotbarUseWaitTicks > 0) {
-            hotbarUseWaitTicks--;
+        // Wall-clock interval — throttled bot sessions would otherwise stretch
+        // hotbarUseIntervalTicks by 1/rate.
+        if (hotbarUseNextUseMillis > 0L && System.currentTimeMillis() < hotbarUseNextUseMillis) {
             return;
         }
 
@@ -6177,12 +6560,12 @@ public class PathSequenceEventListener {
             return;
         }
 
-        hotbarUseWaitTicks = hotbarUseIntervalTicks;
+        hotbarUseNextUseMillis = System.currentTimeMillis() + hotbarUseIntervalTicks * 50L;
     }
 
     // --- 新增：狩猎模式的核心逻辑 ---
     private void executeHuntTick(EntityPlayerSP player) {
-        if (mc.world == null || player == null) {
+        if (ctxWorld() == null || player == null) {
             completeHuntAction();
             return;
         }
@@ -6196,10 +6579,15 @@ public class PathSequenceEventListener {
             if (hasNearbyHuntWhitelistRespawnTarget(player)) {
                 huntKillCompletionConfirming = false;
                 huntKillCompletionConfirmationElapsedTicks = 0;
+                huntKillCompletionConfirmationStartMillis = 0L;
                 huntKillCompletionConfirmationResumed = true;
                 setStatus(getStatus().split(" \\| ")[0] + " | " + I18n.format("status.path.hunting"));
                 recordDebugTrace("hunt kill completion confirmation target reappeared");
-            } else if (++huntKillCompletionConfirmationElapsedTicks >= huntKillCompletionConfirmTicks) {
+            } else if ((huntKillCompletionConfirmationElapsedTicks =
+                    huntKillCompletionConfirmationStartMillis > 0L
+                            ? (int) ((System.currentTimeMillis()
+                                    - huntKillCompletionConfirmationStartMillis) / 50L)
+                            : 0) >= huntKillCompletionConfirmTicks) {
                 recordDebugTrace("hunt kill completion confirmation passed");
                 completeHuntAction();
                 return;
@@ -6211,8 +6599,13 @@ public class PathSequenceEventListener {
             }
         }
 
+        if (huntForceEndStartMillis == 0L) {
+            huntForceEndStartMillis = System.currentTimeMillis();
+        }
+        huntForceEndElapsedTicks =
+                (int) ((System.currentTimeMillis() - huntForceEndStartMillis) / 50L);
         if (huntForceEndEnabled && huntForceEndTimeoutTicks > 0
-                && ++huntForceEndElapsedTicks >= huntForceEndTimeoutTicks) {
+                && huntForceEndElapsedTicks >= huntForceEndTimeoutTicks) {
             mythosScriptMod.LOGGER.info("中心搜怪击杀强制结束: {} 秒", huntForceEndTimeoutTicks / 20);
             recordDebugTrace("hunt force end timed out");
             completeHuntAction();
@@ -6426,17 +6819,6 @@ public class PathSequenceEventListener {
         return "other";
     }
 
-    private EntityLivingBase getKillAuraSynchronizedHuntTarget(EntityPlayerSP player) {
-        if (!KillAuraHandler.enabled || player == null || player.world == null) {
-            return null;
-        }
-        Optional<EntityLivingBase> activeTarget = KillAuraHandler.INSTANCE.getActiveTarget(player);
-        if (!activeTarget.isPresent()) {
-            return null;
-        }
-        EntityLivingBase target = activeTarget.get();
-        return isValidHuntCandidate(player, target) ? target : null;
-    }
 
     private void setHuntTarget(EntityLivingBase target) {
         this.huntTargetEntity = target;
@@ -6499,6 +6881,7 @@ public class PathSequenceEventListener {
         this.huntKillCompletionConfirmTicks = HUNT_KILL_COMPLETION_CONFIRM_DEFAULT_SECONDS * 20;
         this.huntWhitelistRespawnTimeoutTicks = 120 * 20;
         this.huntWhitelistRespawnElapsedTicks = 0;
+        this.huntWhitelistRespawnStartMillis = 0L;
         this.huntWhitelistRespawnWaiting = false;
         this.huntWhitelistRespawnCompletesAction = false;
         this.huntWhitelistRespawnWaitSatisfied = false;
@@ -6507,9 +6890,11 @@ public class PathSequenceEventListener {
         this.huntKillCompletionConfirming = false;
         this.huntKillCompletionConfirmationResumed = false;
         this.huntKillCompletionConfirmationElapsedTicks = 0;
+        this.huntKillCompletionConfirmationStartMillis = 0L;
         this.huntForceEndEnabled = false;
         this.huntForceEndTimeoutTicks = 60 * 20;
         this.huntForceEndElapsedTicks = 0;
+        this.huntForceEndStartMillis = 0L;
         this.huntEnableNameBlacklist = false;
         this.huntAreaSweepEnabled = true;
         this.huntAreaSweepCellSize = 8;
@@ -6545,37 +6930,6 @@ public class PathSequenceEventListener {
                 && huntNoDamageExcludedEntityIds.contains(entity.getEntityId());
     }
 
-    private void tickHuntNoDamageAttackTrackers(EntityPlayerSP player) {
-        if (!isHuntNoDamageExclusionEnabled() || player == null || player.world == null) {
-            huntNoDamageAttackTrackers.clear();
-            huntNoDamageExcludedEntityIds.clear();
-            return;
-        }
-
-        List<Integer> trackerIds = new ArrayList<>(huntNoDamageAttackTrackers.keySet());
-        for (Integer entityId : trackerIds) {
-            if (entityId == null) {
-                continue;
-            }
-            Entity entity = player.world.getEntityByID(entityId);
-            if (!(entity instanceof EntityLivingBase)) {
-                huntNoDamageAttackTrackers.remove(entityId);
-                huntNoDamageExcludedEntityIds.remove(entityId);
-                continue;
-            }
-            EntityLivingBase living = (EntityLivingBase) entity;
-            if (living.isDead || !living.isEntityAlive() || living.getHealth() <= 0.0F) {
-                huntNoDamageAttackTrackers.remove(entityId);
-                huntNoDamageExcludedEntityIds.remove(entityId);
-                continue;
-            }
-            HuntNoDamageAttackTracker tracker = huntNoDamageAttackTrackers.get(entityId);
-            if (tracker != null) {
-                updateHuntNoDamageAttackTracker(entityId, living, tracker);
-            }
-        }
-        pruneHuntNoDamageExcludedTargets(player);
-    }
 
     private void updateHuntNoDamageAttackTracker(int entityId, EntityLivingBase target,
             HuntNoDamageAttackTracker tracker) {
@@ -6715,6 +7069,7 @@ public class PathSequenceEventListener {
             huntWhitelistRespawnWaiting = true;
             huntWhitelistRespawnCompletesAction = completeWhenTargetAppears;
             huntWhitelistRespawnElapsedTicks = 0;
+            huntWhitelistRespawnStartMillis = System.currentTimeMillis();
             huntTargetEntity = null;
             stopHuntNavigationMode();
             KillAuraHandler.INSTANCE.stopAreaHuntAction();
@@ -6734,6 +7089,7 @@ public class PathSequenceEventListener {
         if (!huntKillCompletionConfirming) {
             huntKillCompletionConfirming = true;
             huntKillCompletionConfirmationElapsedTicks = 0;
+            huntKillCompletionConfirmationStartMillis = System.currentTimeMillis();
             huntTargetEntity = null;
             stopHuntNavigationMode();
             KillAuraHandler.INSTANCE.stopAreaHuntAction();
@@ -6755,10 +7111,14 @@ public class PathSequenceEventListener {
                 huntWhitelistRespawnCompletesAction = false;
                 huntWhitelistRespawnWaitSatisfied = true;
                 huntWhitelistRespawnElapsedTicks = 0;
+                huntWhitelistRespawnStartMillis = 0L;
                 setStatus(getStatus().split(" \\| ")[0] + " | " + I18n.format("status.path.hunting"));
             }
             return;
         }
+        huntWhitelistRespawnElapsedTicks = huntWhitelistRespawnStartMillis > 0L
+                ? (int) ((System.currentTimeMillis() - huntWhitelistRespawnStartMillis) / 50L)
+                : 0;
         if (huntWhitelistRespawnTimeoutTicks > 0
                 && huntWhitelistRespawnElapsedTicks >= huntWhitelistRespawnTimeoutTicks) {
             mythosScriptMod.LOGGER.warn("中心搜怪击杀等待白名单目标复活超时: {} 秒",
@@ -6767,7 +7127,6 @@ public class PathSequenceEventListener {
             completeHuntAction();
             return;
         }
-        huntWhitelistRespawnElapsedTicks++;
     }
 
     private boolean hasNearbyHuntWhitelistRespawnTarget(EntityPlayerSP player) {
@@ -6816,11 +7175,6 @@ public class PathSequenceEventListener {
         return Math.max(0.5D, Math.sqrt(Math.max(0.0D, huntTrackingDistanceSq)));
     }
 
-    private String normalizeHuntAttackMode(String mode) {
-        return KillAuraHandler.ATTACK_MODE_SEQUENCE.equalsIgnoreCase(mode)
-                ? KillAuraHandler.ATTACK_MODE_SEQUENCE
-                : KillAuraHandler.ATTACK_MODE_NORMAL;
-    }
 
     private boolean isHuntSequenceAttackMode() {
         return KillAuraHandler.ATTACK_MODE_SEQUENCE.equalsIgnoreCase(huntAttackMode);
@@ -6834,42 +7188,9 @@ public class PathSequenceEventListener {
         return huntAttackSequenceName == null ? "" : huntAttackSequenceName.trim();
     }
 
-    private boolean isWithinHuntDesiredDistance(double distance) {
-        if (isHuntFixedDistanceMode()) {
-            return Math.abs(distance - getHuntDesiredDistance()) <= HUNT_FIXED_DISTANCE_TOLERANCE;
-        }
-        return distance <= getHuntDesiredDistance();
-    }
 
-    private boolean shouldRunHuntMovementForDistance(double distance) {
-        if (isHuntFixedDistanceMode()) {
-            if (isHuntOrbitMode()) {
-                return true;
-            }
-            return Math.abs(distance - getHuntDesiredDistance()) > HUNT_FIXED_DISTANCE_TOLERANCE;
-        }
-        return distance > getHuntDesiredDistance();
-    }
 
-    private void rotatePlayerTowardHuntTarget(EntityPlayerSP player, EntityLivingBase target) {
-        if (player == null || target == null) {
-            return;
-        }
-        ModUtils.setPlayerViewAngles(player,
-                (float) Math.toDegrees(Math.atan2(target.posZ - player.posZ, target.posX - player.posX)) - 90.0F,
-                (float) -Math.toDegrees(Math.atan2(target.posY + target.getEyeHeight() * 0.85D
-                        - (player.posY + player.getEyeHeight()), Math.max(0.001D, player.getDistance(target)))));
-    }
 
-    private void tickHuntAttackSequenceExecutor(EntityPlayerSP player) {
-        if (!isAnyHuntAttackSequenceMode()) {
-            if (huntAttackSequenceExecutor.isRunning()) {
-                huntAttackSequenceExecutor.stop();
-            }
-            return;
-        }
-        huntAttackSequenceExecutor.tick(player);
-    }
 
     private boolean tryTriggerHuntAttackSequence(EntityPlayerSP player, EntityLivingBase target) {
         return tryTriggerHuntAttackSequence(player, target, getConfiguredHuntAttackSequenceName(), false);
@@ -6904,39 +7225,10 @@ public class PathSequenceEventListener {
         }
         huntAttackCooldownTicks = Math.max(0, useKillAuraDelay
                 ? KillAuraHandler.sampleCurrentConfigSequenceDelayTicks()
-                : KillAuraHandler.attackSequenceDelayTicks);
+                : KillAuraHandler.cfg().attackSequenceDelayTicks);
         return true;
     }
 
-    private boolean tryHuntAttack(EntityPlayerSP player, EntityLivingBase target) {
-        if (isHuntNoDamageExcludedTarget(target)) {
-            return false;
-        }
-        if (isHuntSequenceAttackMode()) {
-            boolean triggered = tryTriggerHuntAttackSequence(player, target);
-            if (triggered) {
-                recordHuntNoDamageAttackAttempt(target);
-            }
-            return triggered;
-        }
-        if (KillAuraHandler.isConfiguredSequenceAttackMode()) {
-            boolean triggered = tryTriggerKillAuraConfiguredAttackSequence(player, target);
-            if (triggered) {
-                recordHuntNoDamageAttackAttempt(target);
-            }
-            return triggered;
-        }
-        KillAuraHandler.INSTANCE.refreshHuntAttackBlocking(player, target);
-        if (huntAttackCooldownTicks > 0 || player == null || target == null) {
-            return false;
-        }
-        if (!KillAuraHandler.INSTANCE.tryAttackUsingCurrentConfigForHunt(player, target)) {
-            return false;
-        }
-        recordHuntNoDamageAttackAttempt(target);
-        huntAttackCooldownTicks = Math.max(0, KillAuraHandler.sampleCurrentConfigAttackCooldownTicks());
-        return true;
-    }
 
     private void driveContinuousHuntOrbit(EntityPlayerSP player, EntityLivingBase target) {
         huntOrbitController.tick(player, target,
@@ -6944,23 +7236,6 @@ public class PathSequenceEventListener {
                         true, true, true));
     }
 
-    private boolean shouldUseContinuousHuntOrbit(EntityPlayerSP player, EntityLivingBase target, double distance) {
-        if (!isHuntOrbitMode() || player == null || target == null) {
-            return false;
-        }
-        if (player.isElytraFlying()
-                || (player.capabilities != null && player.capabilities.isFlying)
-                || Math.abs(player.posY - target.posY) > HUNT_CONTINUOUS_ORBIT_MAX_VERTICAL_DELTA) {
-            return false;
-        }
-
-        double entryDistance = Math.max(getHuntDesiredDistance() + HUNT_CONTINUOUS_ORBIT_ENTRY_BUFFER,
-                KillAuraHandler.attackRange + 0.9D);
-        double maxDistance = huntOrbitController.isActive()
-                ? entryDistance + HUNT_CONTINUOUS_ORBIT_EXIT_BUFFER
-                : entryDistance;
-        return distance <= maxDistance;
-    }
 
     private KillAuraOrbitProcess getHuntOrbitProcess() {
         try {
@@ -6974,54 +7249,14 @@ public class PathSequenceEventListener {
     }
 
     private boolean requestHuntOrbitProcess(EntityLivingBase target) {
-        if (mc.player == null || mc.player.isElytraFlying()
-                || (mc.player.capabilities != null && mc.player.capabilities.isFlying)) {
+        if (ctxPlayer() == null || ctxPlayer().isElytraFlying()
+                || (ctxPlayer().capabilities != null && ctxPlayer().capabilities.isFlying)) {
             return false;
         }
         KillAuraOrbitProcess process = getHuntOrbitProcess();
         return process != null && process.requestOrbit(target, getHuntDesiredDistance());
     }
 
-    private boolean driveHuntOrbitMovement(EntityPlayerSP player, EntityLivingBase target, boolean orbitPlanned) {
-        if (player == null || target == null || !orbitPlanned) {
-            return false;
-        }
-        List<BetterBlockPos> orbitNodes = getHuntOrbitLoopNodes();
-        if (orbitNodes.size() < 2) {
-            return false;
-        }
-
-        updateHuntOrbitStuckState(player);
-
-        int nextIndex = chooseHuntOrbitLoopNodeIndex(player, orbitNodes);
-        if (nextIndex < 0 || nextIndex >= orbitNodes.size()) {
-            return false;
-        }
-
-        BetterBlockPos goal = orbitNodes.get(nextIndex);
-        double goalX = goal.x + 0.5D;
-        double goalY = goal.y;
-        double goalZ = goal.z + 0.5D;
-        double dx = player.posX - goalX;
-        double dz = player.posZ - goalZ;
-        boolean targetChanged = lastHuntGotoTargetEntityId != target.getEntityId();
-        boolean nodeChanged = nextIndex != huntOrbitLoopNodeIndex;
-        boolean gotoExpired = player.ticksExisted - huntLastOrbitGotoTick >= 8;
-        boolean orbitStuck = huntOrbitStuckTicks >= 4;
-        boolean farFromGoal = dx * dx + dz * dz > 3.0D;
-
-        if (targetChanged || nodeChanged || gotoExpired || orbitStuck || farFromGoal) {
-            startNavigationGoto(goalX, goalY, goalZ, true);
-            huntOrbitLoopNodeIndex = nextIndex;
-            huntLastOrbitGotoTick = player.ticksExisted;
-            lastHuntGotoTargetEntityId = target.getEntityId();
-            lastHuntGotoTargetX = goalX;
-            lastHuntGotoTargetY = goalY;
-            lastHuntGotoTargetZ = goalZ;
-            huntMovementStopped = false;
-        }
-        return true;
-    }
 
     private List<BetterBlockPos> getHuntOrbitLoopNodes() {
         KillAuraOrbitProcess process = getHuntOrbitProcess();
@@ -7113,31 +7348,6 @@ public class PathSequenceEventListener {
         lastHuntGotoTargetZ = Double.NaN;
     }
 
-    private void navigateHuntTowardsTarget(EntityPlayerSP player, EntityLivingBase target) {
-        if (player == null || target == null) {
-            return;
-        }
-        if (isHuntFixedDistanceMode()) {
-            double[] destination = computeFixedDistanceHuntDestination(player, target, getHuntDesiredDistance());
-            double[] safeDestination = findSafeHuntNavigationDestination(destination[0], destination[1], destination[2]);
-            if (safeDestination != null) {
-                startNavigationGoto(safeDestination[0], safeDestination[1], safeDestination[2]);
-            } else {
-                startNavigationGoto(destination[0], destination[1], destination[2]);
-            }
-            lastHuntGotoTargetEntityId = target.getEntityId();
-            lastHuntGotoTargetX = destination[0];
-            lastHuntGotoTargetY = destination[1];
-            lastHuntGotoTargetZ = destination[2];
-        } else if (shouldRefreshHuntGoto(target)) {
-            startNavigationGoto(target.posX, target.posY, target.posZ);
-            lastHuntGotoTargetEntityId = target.getEntityId();
-            lastHuntGotoTargetX = target.posX;
-            lastHuntGotoTargetY = target.posY;
-            lastHuntGotoTargetZ = target.posZ;
-        }
-        huntMovementStopped = false;
-    }
 
     private double[] computeFixedDistanceHuntDestination(EntityPlayerSP player, EntityLivingBase target, double desiredDistance) {
         double dx = player.posX - target.posX;
@@ -7179,14 +7389,14 @@ public class PathSequenceEventListener {
     }
 
     private double[] findSafeHuntNavigationDestination(double desiredX, double desiredY, double desiredZ) {
-        if (mc.world == null || mc.player == null) {
+        if (ctxWorld() == null || ctxPlayer() == null) {
             return null;
         }
 
         int baseX = MathHelper.floor(desiredX);
         int baseY = MathHelper.floor(desiredY);
         int baseZ = MathHelper.floor(desiredZ);
-        int maxFeetY = MathHelper.floor(mc.player.getEntityBoundingBox().minY + 0.001D) + 1;
+        int maxFeetY = MathHelper.floor(ctxPlayer().getEntityBoundingBox().minY + 0.001D) + 1;
         BlockPos bestStandPos = null;
 
         // Search every nearby X/Z position on the requested level first, then
@@ -7228,15 +7438,15 @@ public class PathSequenceEventListener {
     }
 
     private boolean isStandableHuntFeetPos(BlockPos standPos, int maxFeetY) {
-        if (mc.world == null || standPos == null) {
+        if (ctxWorld() == null || standPos == null) {
             return false;
         }
         if (standPos.getY() > maxFeetY) {
             return false;
         }
-        IBlockState feetState = mc.world.getBlockState(standPos);
-        IBlockState headState = mc.world.getBlockState(standPos.up());
-        IBlockState belowState = mc.world.getBlockState(standPos.down());
+        IBlockState feetState = ctxWorld().getBlockState(standPos);
+        IBlockState headState = ctxWorld().getBlockState(standPos.up());
+        IBlockState belowState = ctxWorld().getBlockState(standPos.down());
 
         boolean feetPassable = !feetState.getMaterial().blocksMovement();
         boolean headPassable = !headState.getMaterial().blocksMovement();
@@ -7302,16 +7512,6 @@ public class PathSequenceEventListener {
         return true;
     }
 
-    private boolean isLockedHuntTargetStillTrackable(EntityPlayerSP player, EntityLivingBase entity) {
-        return player != null
-                && entity != null
-                && entity != player
-                && entity.isEntityAlive()
-                && !entity.isDead
-                && entity.world == mc.world
-                && !isHuntNoDamageExcludedTarget(entity)
-                && isWithinHuntVerticalRange(entity);
-    }
 
     private boolean isWithinHuntVerticalRange(Entity entity) {
         if (entity == null) {
@@ -7360,27 +7560,6 @@ public class PathSequenceEventListener {
                 || entity.isCreatureType(EnumCreatureType.WATER_CREATURE, false);
     }
 
-    private int compareHuntTargets(EntityPlayerSP player, EntityLivingBase left, EntityLivingBase right) {
-        if (huntEnableNameWhitelist && !huntNameWhitelist.isEmpty()) {
-            int leftPriority = getActiveHuntWhitelistMatchIndex(getHuntFilterableEntityName(left));
-            int rightPriority = getActiveHuntWhitelistMatchIndex(getHuntFilterableEntityName(right));
-            if (leftPriority != rightPriority) {
-                return Integer.compare(leftPriority, rightPriority);
-            }
-        }
-        if (KillAuraHandler.enabled) {
-            int compareByPlayer = Double.compare(getKillAuraStyleDistanceSq(player, left),
-                    getKillAuraStyleDistanceSq(player, right));
-            if (compareByPlayer != 0) {
-                return compareByPlayer;
-            }
-        }
-        int compareByCenter = Double.compare(getDistanceSqToHuntCenter(left), getDistanceSqToHuntCenter(right));
-        if (compareByCenter != 0) {
-            return compareByCenter;
-        }
-        return Double.compare(player.getDistanceSq(left), player.getDistanceSq(right));
-    }
 
     private double getKillAuraStyleDistanceSq(EntityPlayerSP player, Entity entity) {
         if (player == null || entity == null) {
@@ -7394,11 +7573,6 @@ public class PathSequenceEventListener {
         return player.getDistanceSq(entity);
     }
 
-    private AxisAlignedBB getHuntSearchBounds() {
-        return new AxisAlignedBB(
-                huntCenterX - huntRadius, huntCenterY - huntDownRange, huntCenterZ - huntRadius,
-                huntCenterX + huntRadius, huntCenterY + huntUpRange, huntCenterZ + huntRadius);
-    }
 
     private double getDistanceSqToHuntCenter(Entity entity) {
         if (entity == null) {
@@ -7707,22 +7881,6 @@ public class PathSequenceEventListener {
         }
     }
 
-    private String readHuntModeParam(JsonObject params, String key, String defaultValue) {
-        if (params == null || key == null || !params.has(key)) {
-            return defaultValue;
-        }
-        try {
-            String mode = params.get(key).getAsString();
-            if (KillAuraHandler.HUNT_MODE_APPROACH.equalsIgnoreCase(mode)) {
-                return KillAuraHandler.HUNT_MODE_APPROACH;
-            }
-            if (KillAuraHandler.HUNT_MODE_FIXED_DISTANCE.equalsIgnoreCase(mode)) {
-                return KillAuraHandler.HUNT_MODE_FIXED_DISTANCE;
-            }
-        } catch (Exception ignored) {
-        }
-        return defaultValue;
-    }
     
     // --- 渲染搜怪范围可视化 ---
     @SubscribeEvent
@@ -7731,7 +7889,7 @@ public class PathSequenceEventListener {
             return;
         }
 
-        EntityPlayerSP player = mc.player;
+        EntityPlayerSP player = ctxPlayer();
         Entity viewer = mc.getRenderViewEntity();
         if (player == null || viewer == null) {
             return;
@@ -7819,7 +7977,7 @@ public class PathSequenceEventListener {
 
     // --- 新增：跟随实体模式的核心逻辑 ---
     private void executeFollowEntityTick(EntityPlayerSP player) {
-        if (mc.world == null || player == null) {
+        if (ctxWorld() == null || player == null) {
             completeFollowEntityAction();
             return;
         }
@@ -7863,14 +8021,14 @@ public class PathSequenceEventListener {
     }
 
     private Entity findFollowTarget(EntityPlayerSP player) {
-        if (player == null || mc.world == null) {
+        if (player == null || ctxWorld() == null) {
             return null;
         }
 
         List<Entity> candidates = new ArrayList<>();
         AxisAlignedBB searchBox = player.getEntityBoundingBox().grow(followSearchRadius);
 
-        for (Entity entity : mc.world.getLoadedEntityList()) {
+        for (Entity entity : ctxWorld().getLoadedEntityList()) {
             if (entity == null || entity == player || !entity.isEntityAlive()) {
                 continue;
             }

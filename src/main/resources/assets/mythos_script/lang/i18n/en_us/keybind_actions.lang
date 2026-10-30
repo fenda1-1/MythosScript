@@ -1,4 +1,6 @@
 # mythos_script i18n module: keybind_actions
+keybind.action.open_menu.name=Quick menu
+keybind.action.open_menu.desc=Toggle the MythosScript quick menu.
 keybind.action.open_command_palette.name=Open command palette
 keybind.action.open_command_palette.desc=Open the searchable command palette while the main menu is open.
 keybind.action.close_active_tab.name=Close active tab

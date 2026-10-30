@@ -431,7 +431,7 @@ public class KeybindManager {
             case RUN_FAVORITE_SEQUENCE_8: executeFavoriteSequence(mc, 7); break;
             case RUN_FAVORITE_SEQUENCE_9: executeFavoriteSequence(mc, 8); break;
             case STOP_SEQUENCE:
-                PathSequenceEventListener.instance.stopTracking();
+                PathSequenceEventListener.foregroundRunner().stopTracking();
                 mc.player
                         .sendMessage(new TextComponentString(TextFormatting.RED + I18n.format("msg.keybind.stop_all")));
                 break;
@@ -456,11 +456,11 @@ public class KeybindManager {
                                 TextFormatting.AQUA + I18n.format("msg.keybind.open_inventory_viewer")));
                 break;
             case TOGGLE_AUTO_EAT:
-                AutoEatHandler.autoEatEnabled = !AutoEatHandler.autoEatEnabled;
+                AutoEatHandler.setAutoEatEnabledSilently(!AutoEatHandler.autoEatEnabled());
                 AutoEatHandler.saveAutoEatConfig();
                 mc.player.sendMessage(new TextComponentString(I18n.format("msg.keybind.common_toggle_status",
                         I18n.format("keybind.action.toggle_auto_eat.name"),
-                        AutoEatHandler.autoEatEnabled ? I18n.format("gui.common.enabled")
+                        AutoEatHandler.autoEatEnabled() ? I18n.format("gui.common.enabled")
                                 : I18n.format("gui.common.disabled"))));
                 break;
             case TOGGLE_AUTO_FISHING:
@@ -479,18 +479,18 @@ public class KeybindManager {
                 AutoFollowHandler.toggleEnabledFromHotkey();
                 break;
             case TOGGLE_AUTO_PICKUP:
-                AutoPickupHandler.globalEnabled = !AutoPickupHandler.globalEnabled;
+                AutoPickupHandler.setGlobalEnabledSilently(!AutoPickupHandler.globalEnabled());
                 AutoPickupHandler.saveConfig();
                 mc.player.sendMessage(new TextComponentString(I18n.format("msg.keybind.common_toggle_status",
                         I18n.format("keybind.action.toggle_auto_pickup.name"),
-                        AutoPickupHandler.globalEnabled ? I18n.format("gui.common.enabled")
+                        AutoPickupHandler.globalEnabled() ? I18n.format("gui.common.enabled")
                                 : I18n.format("gui.common.disabled"))));
                 break;
             case TOGGLE_PACKET_CAPTURE:
-                PacketCaptureHandler.isCapturing = !PacketCaptureHandler.isCapturing;
+                PacketCaptureHandler.setCapturingForeground(!PacketCaptureHandler.isCapturingForeground());
                 mc.player.sendMessage(new TextComponentString(I18n.format("msg.keybind.common_toggle_status",
                         I18n.format("keybind.action.toggle_packet_capture.name"),
-                        PacketCaptureHandler.isCapturing ? I18n.format("gui.common.enabled")
+                        PacketCaptureHandler.isCapturingForeground() ? I18n.format("gui.common.enabled")
                                 : I18n.format("gui.common.disabled"))));
                 break;
             case EXECUTE_SPECIFIC_PACKET_SEQUENCE:
@@ -561,9 +561,9 @@ public class KeybindManager {
     }
 
     private static void toggleAutomationPause() {
-        boolean hasActive = PathSequenceEventListener.instance.isTracking();
+        boolean hasActive = PathSequenceEventListener.foregroundRunner().isTracking();
         hasActive |= PathSequenceEventListener.hasActiveBackgroundSequence();
-        boolean hasUnpaused = hasActive && !PathSequenceEventListener.instance.isPaused();
+        boolean hasUnpaused = hasActive && !PathSequenceEventListener.foregroundRunner().isPaused();
         hasUnpaused |= PathSequenceEventListener.hasUnpausedBackgroundSequence();
         if (!hasActive) return;
         if (hasUnpaused) {
@@ -770,6 +770,18 @@ public class KeybindManager {
         return copy;
     }
 
+    /**
+     * Primary (first) key bound to an action, or {@link Keyboard#KEY_NONE} if
+     * unbound. Lets the GUI toggle follow a user rebind instead of a hardcoded key.
+     */
+    public static int primaryKeyCode(BindableAction action) {
+        if (action == null) {
+            return Keyboard.KEY_NONE;
+        }
+        Keybind keybind = keybinds.get(action);
+        return keybind == null ? Keyboard.KEY_NONE : keybind.getKeyCode();
+    }
+
     public static boolean matchesKeybind(BindableAction action, int keyCode, Set<Integer> modifiers) {
         if (action == null) {
             return false;
@@ -802,6 +814,7 @@ public class KeybindManager {
     }
 
     private static void ensureDefaultKeybinds() {
+        putDefault(BindableAction.OPEN_MENU, Keyboard.KEY_F);
         putDefault(BindableAction.OPEN_RECENT_COMMAND, Keyboard.KEY_K, Keyboard.KEY_LCONTROL);
         putDefault(BindableAction.FOCUS_GLOBAL_SEARCH, Keyboard.KEY_F, Keyboard.KEY_LCONTROL, Keyboard.KEY_LSHIFT);
         putDefault(BindableAction.OPEN_RECENT_SEQUENCE, Keyboard.KEY_E, Keyboard.KEY_LCONTROL, Keyboard.KEY_LSHIFT);

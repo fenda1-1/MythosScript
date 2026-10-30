@@ -95,6 +95,10 @@ public class Baritone implements IBaritone {
     public BlockStateInterface bsi;
 
     Baritone(Minecraft mc) {
+        this(mc, null);
+    }
+
+    Baritone(Minecraft mc, IPlayerContext pinnedContext) {
         this.mc = mc;
         this.gameEventHandler = new GameEventHandler(this);
 
@@ -108,7 +112,7 @@ public class Baritone implements IBaritone {
 
         // Define this before behaviors try and get it, or else it will be null and the
         // builds will fail!
-        this.playerContext = new BaritonePlayerContext(this, mc);
+        this.playerContext = pinnedContext != null ? pinnedContext : new BaritonePlayerContext(this, mc);
 
         {
             this.lookBehavior = new LookBehavior(this);

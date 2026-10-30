@@ -30,9 +30,6 @@ public final class ModernDropdown {
         return values[selected];
     }
 
-    public void setSelectedIndex(int index) {
-        selected = clamp(index, 0, values.length - 1);
-    }
 
     public void setValue(String value) {
         if (value == null) {

@@ -5,7 +5,6 @@ import com.google.gson.JsonParser;
 import com.mythos.mythosScriptMod.config.FlightPathingConfig;
 import com.mythos.mythosScriptMod.system.ProfileManager;
 import com.mythos.mythosScriptMod.mythosScriptMod;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.util.math.MathHelper;
@@ -19,35 +18,76 @@ import java.io.FileWriter;
 
 public class FlyHandler {
 
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        public String flightMode = MODE_MOTION;
+        public boolean autoTakeoff = false;
+        public boolean stopMotionOnDisable = true;
+        public boolean enableNoCollision = true;
+        public boolean enableAntiKnockback = true;
+        public boolean enableAntiKick = true;
+        public float horizontalSpeed = 0.85F;
+        public float verticalSpeed = 0.42F;
+        public float glideFallSpeed = 0.04F;
+        public float sprintMultiplier = 1.25F;
+        public float pulseBoost = 0.28F;
+        public int pulseIntervalTicks = 4;
+        public int antiKickIntervalTicks = 16;
+        public float antiKickDistance = 0.04F;
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) FlyHandler::loadConfig);
+            return config;
+        }
+    }
+
+
     public static final FlyHandler INSTANCE = new FlyHandler();
 
     public static final String MODE_MOTION = "MOTION";
     public static final String MODE_GLIDE = "GLIDE";
     public static final String MODE_PULSE = "PULSE";
 
-    public static boolean enabled = false;
-    public static String flightMode = MODE_MOTION;
 
-    public static boolean autoTakeoff = true;
-    public static boolean stopMotionOnDisable = true;
-    public static boolean enableNoCollision = true;
-    public static boolean enableAntiKnockback = true;
-    public static boolean enableAntiKick = true;
 
-    public static float horizontalSpeed = 0.85F;
-    public static float verticalSpeed = 0.42F;
-    public static float glideFallSpeed = 0.04F;
-    public static float sprintMultiplier = 1.25F;
-    public static float pulseBoost = 0.28F;
-    public static int pulseIntervalTicks = 4;
-    public static int antiKickIntervalTicks = 16;
-    public static float antiKickDistance = 0.04F;
 
-    private int tickCounter = 0;
-    private int pendingTakeoffTicks = 0;
-    private volatile double pathingHorizontalSpeedCap = Double.POSITIVE_INFINITY;
-    private volatile double pathingVerticalSpeedCap = Double.POSITIVE_INFINITY;
-    private volatile double pathingHoldY = Double.NaN;
+    private static final java.util.concurrent.ConcurrentHashMap<String, RuntimeState> STATES =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static RuntimeState rt() {
+        return STATES.computeIfAbsent(
+                com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner(),
+                k -> new RuntimeState());
+    }
+
+    private static final class RuntimeState {
+        boolean enabled = false;
+        int tickCounter = 0;
+        int pendingTakeoffTicks = 0;
+        volatile double pathingHorizontalSpeedCap = Double.POSITIVE_INFINITY;
+        volatile double pathingVerticalSpeedCap = Double.POSITIVE_INFINITY;
+        volatile double pathingHoldY = Double.NaN;
+    }
 
     private FlyHandler() {
     }
@@ -57,25 +97,25 @@ public class FlyHandler {
     }
 
     private static File getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("keycommand_fly.json").toFile();
+        return ProfileManager.currentConfigFile("keycommand_fly.json").toFile();
     }
 
     public static void loadConfig() {
-        enabled = false;
-        flightMode = MODE_MOTION;
-        autoTakeoff = true;
-        stopMotionOnDisable = true;
-        enableNoCollision = true;
-        enableAntiKnockback = true;
-        enableAntiKick = true;
-        horizontalSpeed = 0.85F;
-        verticalSpeed = 0.42F;
-        glideFallSpeed = 0.04F;
-        sprintMultiplier = 1.25F;
-        pulseBoost = 0.28F;
-        pulseIntervalTicks = 4;
-        antiKickIntervalTicks = 16;
-        antiKickDistance = 0.04F;
+        rt().enabled = false;
+        cfg().flightMode = MODE_MOTION;
+        cfg().autoTakeoff = true;
+        cfg().stopMotionOnDisable = true;
+        cfg().enableNoCollision = true;
+        cfg().enableAntiKnockback = true;
+        cfg().enableAntiKick = true;
+        cfg().horizontalSpeed = 0.85F;
+        cfg().verticalSpeed = 0.42F;
+        cfg().glideFallSpeed = 0.04F;
+        cfg().sprintMultiplier = 1.25F;
+        cfg().pulseBoost = 0.28F;
+        cfg().pulseIntervalTicks = 4;
+        cfg().antiKickIntervalTicks = 16;
+        cfg().antiKickDistance = 0.04F;
 
         try {
             File configFile = getConfigFile();
@@ -90,50 +130,53 @@ public class FlyHandler {
                 json = new JsonParser().parse(reader).getAsJsonObject();
 
             }
+            // `enabled` is runtime state, not persisted config — a saved
+            // "enabled":true from bot2 would bleed into every other session
+            // owner via rt() and make all bots fly simultaneously.
             if (json.has("enabled")) {
-                enabled = json.get("enabled").getAsBoolean();
+                rt().enabled = false;
             }
             if (json.has("flightMode")) {
-                flightMode = json.get("flightMode").getAsString();
+                cfg().flightMode = json.get("flightMode").getAsString();
             }
             if (json.has("autoTakeoff")) {
-                autoTakeoff = json.get("autoTakeoff").getAsBoolean();
+                cfg().autoTakeoff = json.get("autoTakeoff").getAsBoolean();
             }
             if (json.has("stopMotionOnDisable")) {
-                stopMotionOnDisable = json.get("stopMotionOnDisable").getAsBoolean();
+                cfg().stopMotionOnDisable = json.get("stopMotionOnDisable").getAsBoolean();
             }
             if (json.has("enableNoCollision")) {
-                enableNoCollision = json.get("enableNoCollision").getAsBoolean();
+                cfg().enableNoCollision = json.get("enableNoCollision").getAsBoolean();
             }
             if (json.has("enableAntiKnockback")) {
-                enableAntiKnockback = json.get("enableAntiKnockback").getAsBoolean();
+                cfg().enableAntiKnockback = json.get("enableAntiKnockback").getAsBoolean();
             }
             if (json.has("enableAntiKick")) {
-                enableAntiKick = json.get("enableAntiKick").getAsBoolean();
+                cfg().enableAntiKick = json.get("enableAntiKick").getAsBoolean();
             }
             if (json.has("horizontalSpeed")) {
-                horizontalSpeed = json.get("horizontalSpeed").getAsFloat();
+                cfg().horizontalSpeed = json.get("horizontalSpeed").getAsFloat();
             }
             if (json.has("verticalSpeed")) {
-                verticalSpeed = json.get("verticalSpeed").getAsFloat();
+                cfg().verticalSpeed = json.get("verticalSpeed").getAsFloat();
             }
             if (json.has("glideFallSpeed")) {
-                glideFallSpeed = json.get("glideFallSpeed").getAsFloat();
+                cfg().glideFallSpeed = json.get("glideFallSpeed").getAsFloat();
             }
             if (json.has("sprintMultiplier")) {
-                sprintMultiplier = json.get("sprintMultiplier").getAsFloat();
+                cfg().sprintMultiplier = json.get("sprintMultiplier").getAsFloat();
             }
             if (json.has("pulseBoost")) {
-                pulseBoost = json.get("pulseBoost").getAsFloat();
+                cfg().pulseBoost = json.get("pulseBoost").getAsFloat();
             }
             if (json.has("pulseIntervalTicks")) {
-                pulseIntervalTicks = json.get("pulseIntervalTicks").getAsInt();
+                cfg().pulseIntervalTicks = json.get("pulseIntervalTicks").getAsInt();
             }
             if (json.has("antiKickIntervalTicks")) {
-                antiKickIntervalTicks = json.get("antiKickIntervalTicks").getAsInt();
+                cfg().antiKickIntervalTicks = json.get("antiKickIntervalTicks").getAsInt();
             }
             if (json.has("antiKickDistance")) {
-                antiKickDistance = json.get("antiKickDistance").getAsFloat();
+                cfg().antiKickDistance = json.get("antiKickDistance").getAsFloat();
             }
 
             normalizeConfig();
@@ -151,21 +194,20 @@ public class FlyHandler {
             }
 
             JsonObject json = new JsonObject();
-            json.addProperty("enabled", enabled);
-            json.addProperty("flightMode", flightMode);
-            json.addProperty("autoTakeoff", autoTakeoff);
-            json.addProperty("stopMotionOnDisable", stopMotionOnDisable);
-            json.addProperty("enableNoCollision", enableNoCollision);
-            json.addProperty("enableAntiKnockback", enableAntiKnockback);
-            json.addProperty("enableAntiKick", enableAntiKick);
-            json.addProperty("horizontalSpeed", horizontalSpeed);
-            json.addProperty("verticalSpeed", verticalSpeed);
-            json.addProperty("glideFallSpeed", glideFallSpeed);
-            json.addProperty("sprintMultiplier", sprintMultiplier);
-            json.addProperty("pulseBoost", pulseBoost);
-            json.addProperty("pulseIntervalTicks", pulseIntervalTicks);
-            json.addProperty("antiKickIntervalTicks", antiKickIntervalTicks);
-            json.addProperty("antiKickDistance", antiKickDistance);
+            json.addProperty("flightMode", cfg().flightMode);
+            json.addProperty("autoTakeoff", cfg().autoTakeoff);
+            json.addProperty("stopMotionOnDisable", cfg().stopMotionOnDisable);
+            json.addProperty("enableNoCollision", cfg().enableNoCollision);
+            json.addProperty("enableAntiKnockback", cfg().enableAntiKnockback);
+            json.addProperty("enableAntiKick", cfg().enableAntiKick);
+            json.addProperty("horizontalSpeed", cfg().horizontalSpeed);
+            json.addProperty("verticalSpeed", cfg().verticalSpeed);
+            json.addProperty("glideFallSpeed", cfg().glideFallSpeed);
+            json.addProperty("sprintMultiplier", cfg().sprintMultiplier);
+            json.addProperty("pulseBoost", cfg().pulseBoost);
+            json.addProperty("pulseIntervalTicks", cfg().pulseIntervalTicks);
+            json.addProperty("antiKickIntervalTicks", cfg().antiKickIntervalTicks);
+            json.addProperty("antiKickDistance", cfg().antiKickDistance);
 
             try (FileWriter writer = new FileWriter(configFile)) {
                 writer.write(json.toString());
@@ -176,24 +218,32 @@ public class FlyHandler {
     }
 
     public void toggleEnabled() {
-        setEnabled(!enabled);
+        setEnabled(!rt().enabled);
     }
 
+    // ------------------------------------------------------------------
+    // Runtime-switch accessors (boxed RuntimeState fields)
+    // ------------------------------------------------------------------
+
+    public static boolean enabled() { return rt().enabled; }
+
+    public static void setEnabledSilently(boolean targetEnabled) { rt().enabled = targetEnabled; }
+
     public void setEnabled(boolean targetEnabled) {
-        Minecraft mc = Minecraft.getMinecraft();
         normalizeConfig();
-        if (enabled == targetEnabled) {
+        if (rt().enabled == targetEnabled) {
             saveConfig();
             return;
         }
 
-        applyEnabledState(mc, targetEnabled);
+        applyEnabledState(targetEnabled);
 
         saveConfig();
 
-        if (mc.player != null) {
-            mc.player.sendMessage(new TextComponentString(
-                    I18n.format(enabled ? "msg.fly.enabled" : "msg.fly.disabled")));
+        EntityPlayerSP bp = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        if (bp != null) {
+            bp.sendMessage(new TextComponentString(
+                    I18n.format(rt().enabled ? "msg.fly.enabled" : "msg.fly.disabled")));
         }
     }
 
@@ -202,34 +252,33 @@ public class FlyHandler {
      * and user-facing chat messages remain owned by {@link #setEnabled}.
      */
     public void setEnabledForSettingsPreview(boolean targetEnabled) {
-        Minecraft mc = Minecraft.getMinecraft();
         normalizeConfig();
-        if (enabled != targetEnabled) {
-            applyEnabledState(mc, targetEnabled);
+        if (rt().enabled != targetEnabled) {
+            applyEnabledState(targetEnabled);
         }
     }
 
-    private void applyEnabledState(Minecraft mc, boolean targetEnabled) {
-        enabled = targetEnabled;
-        this.tickCounter = 0;
-        this.pendingTakeoffTicks = enabled && autoTakeoff ? 6 : 0;
+    private void applyEnabledState(boolean targetEnabled) {
+        rt().enabled = targetEnabled;
+        rt().tickCounter = 0;
+        rt().pendingTakeoffTicks = rt().enabled && cfg().autoTakeoff ? 6 : 0;
 
-        if (!enabled) {
+        if (!rt().enabled) {
             clearPathingHoldAltitude();
-            stopFlight(mc == null ? null : mc.player, stopMotionOnDisable);
+            stopFlight(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer(), cfg().stopMotionOnDisable);
         }
     }
 
     public void onClientDisconnect() {
-        if (!FlightPathingConfig.keepFlyEnabledOnDisconnect) {
-            enabled = false;
+        if (!FlightPathingConfig.cfg().keepFlyEnabledOnDisconnect) {
+            rt().enabled = false;
         }
-        this.tickCounter = 0;
-        this.pendingTakeoffTicks = 0;
-        this.pathingHorizontalSpeedCap = Double.POSITIVE_INFINITY;
-        this.pathingVerticalSpeedCap = Double.POSITIVE_INFINITY;
+        rt().tickCounter = 0;
+        rt().pendingTakeoffTicks = 0;
+        rt().pathingHorizontalSpeedCap = Double.POSITIVE_INFINITY;
+        rt().pathingVerticalSpeedCap = Double.POSITIVE_INFINITY;
         clearPathingHoldAltitude();
-        stopFlight(Minecraft.getMinecraft().player, true);
+        stopFlight(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer(), true);
     }
 
     @SubscribeEvent
@@ -238,13 +287,12 @@ public class FlyHandler {
             return;
         }
 
-        Minecraft mc = Minecraft.getMinecraft();
-        EntityPlayerSP player = mc.player;
-        if (player == null || mc.world == null) {
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        if (player == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null) {
             return;
         }
 
-        if (!enabled) {
+        if (!rt().enabled) {
             return;
         }
 
@@ -253,7 +301,7 @@ public class FlyHandler {
         }
 
         normalizeConfig();
-        this.tickCounter++;
+        rt().tickCounter++;
         applyFlight(player);
     }
 
@@ -269,20 +317,20 @@ public class FlyHandler {
         double motionX = horizontalMotion[0];
         double motionZ = horizontalMotion[1];
         double motionY = computeVerticalMotion(player, jump, sneak);
-        if (Double.isFinite(this.pathingHoldY)) {
+        if (Double.isFinite(rt().pathingHoldY)) {
             motionX = 0.0D;
             motionZ = 0.0D;
-            double yError = this.pathingHoldY - player.posY;
-            motionY = Math.max(-verticalSpeed, Math.min(verticalSpeed, yError * 0.45D));
+            double yError = rt().pathingHoldY - player.posY;
+            motionY = Math.max(-cfg().verticalSpeed, Math.min(cfg().verticalSpeed, yError * 0.45D));
             if (Math.abs(yError) < 0.03D) {
                 motionY = 0.0D;
             }
         }
-        this.pathingHorizontalSpeedCap = Double.POSITIVE_INFINITY;
-        this.pathingVerticalSpeedCap = Double.POSITIVE_INFINITY;
+        rt().pathingHorizontalSpeedCap = Double.POSITIVE_INFINITY;
+        rt().pathingVerticalSpeedCap = Double.POSITIVE_INFINITY;
 
-        if (enableAntiKick && !jump && !sneak && shouldApplyAntiKickPulse()) {
-            motionY = Math.min(motionY, -antiKickDistance);
+        if (cfg().enableAntiKick && !jump && !sneak && shouldApplyAntiKickPulse()) {
+            motionY = Math.min(motionY, -cfg().antiKickDistance);
         }
 
         player.motionX = motionX;
@@ -305,11 +353,11 @@ public class FlyHandler {
         forward /= (float) length;
         strafe /= (float) length;
 
-        double speed = horizontalSpeed;
+        double speed = cfg().horizontalSpeed;
         if (player.isSprinting()) {
-            speed *= sprintMultiplier;
+            speed *= cfg().sprintMultiplier;
         }
-        speed = Math.min(speed, this.pathingHorizontalSpeedCap);
+        speed = Math.min(speed, rt().pathingHorizontalSpeedCap);
 
         double yawRad = Math.toRadians(player.rotationYaw);
         double sin = Math.sin(yawRad);
@@ -321,46 +369,46 @@ public class FlyHandler {
     }
 
     private double computeVerticalMotion(EntityPlayerSP player, boolean jump, boolean sneak) {
-        if (this.pendingTakeoffTicks > 0 && autoTakeoff && player.onGround && !jump && !sneak) {
-            this.pendingTakeoffTicks--;
-            return Math.max(0.24D, pulseBoost);
+        if (rt().pendingTakeoffTicks > 0 && cfg().autoTakeoff && player.onGround && !jump && !sneak) {
+            rt().pendingTakeoffTicks--;
+            return Math.max(0.24D, cfg().pulseBoost);
         }
 
         if (!player.onGround) {
-            this.pendingTakeoffTicks = 0;
+            rt().pendingTakeoffTicks = 0;
         }
 
         if (jump) {
-            return Math.min(verticalSpeed, this.pathingVerticalSpeedCap);
+            return Math.min(cfg().verticalSpeed, rt().pathingVerticalSpeedCap);
         }
         if (sneak) {
-            return -Math.min(verticalSpeed, this.pathingVerticalSpeedCap);
+            return -Math.min(cfg().verticalSpeed, rt().pathingVerticalSpeedCap);
         }
 
-        if (MODE_GLIDE.equalsIgnoreCase(flightMode)) {
-            return -glideFallSpeed;
+        if (MODE_GLIDE.equalsIgnoreCase(cfg().flightMode)) {
+            return -cfg().glideFallSpeed;
         }
-        if (MODE_PULSE.equalsIgnoreCase(flightMode)) {
-            return (this.tickCounter % pulseIntervalTicks == 0) ? pulseBoost : -glideFallSpeed;
+        if (MODE_PULSE.equalsIgnoreCase(cfg().flightMode)) {
+            return (rt().tickCounter % cfg().pulseIntervalTicks == 0) ? cfg().pulseBoost : -cfg().glideFallSpeed;
         }
         return 0.0D;
     }
 
     public void setPathingSpeedCaps(double horizontalCap, double verticalCap) {
-        this.pathingHorizontalSpeedCap = Math.max(0.05D, horizontalCap);
-        this.pathingVerticalSpeedCap = Math.max(0.05D, verticalCap);
+        rt().pathingHorizontalSpeedCap = Math.max(0.05D, horizontalCap);
+        rt().pathingVerticalSpeedCap = Math.max(0.05D, verticalCap);
     }
 
     public void setPathingHoldAltitude(double y) {
-        this.pathingHoldY = y;
+        rt().pathingHoldY = y;
     }
 
     public void clearPathingHoldAltitude() {
-        this.pathingHoldY = Double.NaN;
+        rt().pathingHoldY = Double.NaN;
     }
 
     private boolean shouldApplyAntiKickPulse() {
-        return antiKickIntervalTicks > 0 && this.tickCounter % antiKickIntervalTicks == 0;
+        return cfg().antiKickIntervalTicks > 0 && rt().tickCounter % cfg().antiKickIntervalTicks == 0;
     }
 
     private void stopFlight(EntityPlayerSP player, boolean stopMotion) {
@@ -373,28 +421,28 @@ public class FlyHandler {
                 player.velocityChanged = true;
             }
 
-            if (!KillAuraHandler.enabled) {
+            if (!KillAuraHandler.enabled()) {
                 KillAuraHandler.INSTANCE.applyMovementProtection(player, false, false, false);
             }
         }
     }
 
     private static void normalizeConfig() {
-        if (!MODE_GLIDE.equalsIgnoreCase(flightMode) && !MODE_PULSE.equalsIgnoreCase(flightMode)) {
-            flightMode = MODE_MOTION;
-        } else if (MODE_GLIDE.equalsIgnoreCase(flightMode)) {
-            flightMode = MODE_GLIDE;
+        if (!MODE_GLIDE.equalsIgnoreCase(cfg().flightMode) && !MODE_PULSE.equalsIgnoreCase(cfg().flightMode)) {
+            cfg().flightMode = MODE_MOTION;
+        } else if (MODE_GLIDE.equalsIgnoreCase(cfg().flightMode)) {
+            cfg().flightMode = MODE_GLIDE;
         } else {
-            flightMode = MODE_PULSE;
+            cfg().flightMode = MODE_PULSE;
         }
 
-        horizontalSpeed = MathHelper.clamp(horizontalSpeed, 0.05F, 10.00F);
-        verticalSpeed = MathHelper.clamp(verticalSpeed, 0.05F, 10.00F);
-        glideFallSpeed = MathHelper.clamp(glideFallSpeed, 0.00F, 0.50F);
-        sprintMultiplier = MathHelper.clamp(sprintMultiplier, 1.00F, 10.00F);
-        pulseBoost = MathHelper.clamp(pulseBoost, 0.05F, 10F);
-        pulseIntervalTicks = MathHelper.clamp(pulseIntervalTicks, 1, 40);
-        antiKickIntervalTicks = MathHelper.clamp(antiKickIntervalTicks, 4, 80);
-        antiKickDistance = MathHelper.clamp(antiKickDistance, 0.01F, 0.20F);
+        cfg().horizontalSpeed = MathHelper.clamp(cfg().horizontalSpeed, 0.05F, 10.00F);
+        cfg().verticalSpeed = MathHelper.clamp(cfg().verticalSpeed, 0.05F, 10.00F);
+        cfg().glideFallSpeed = MathHelper.clamp(cfg().glideFallSpeed, 0.00F, 0.50F);
+        cfg().sprintMultiplier = MathHelper.clamp(cfg().sprintMultiplier, 1.00F, 10.00F);
+        cfg().pulseBoost = MathHelper.clamp(cfg().pulseBoost, 0.05F, 10F);
+        cfg().pulseIntervalTicks = MathHelper.clamp(cfg().pulseIntervalTicks, 1, 40);
+        cfg().antiKickIntervalTicks = MathHelper.clamp(cfg().antiKickIntervalTicks, 4, 80);
+        cfg().antiKickDistance = MathHelper.clamp(cfg().antiKickDistance, 0.01F, 0.20F);
     }
 }

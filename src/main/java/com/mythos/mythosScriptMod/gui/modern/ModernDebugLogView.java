@@ -1225,10 +1225,6 @@ final class ModernDebugLogView implements ModernSettingsTab {
         }
     }
 
-    private int getModuleCount(DebugModule module) {
-        Integer count = moduleCounts.get(module);
-        return count == null ? 0 : count;
-    }
 
     private int moduleColor(DebugModule module) {
         Group group = groupFor(module);

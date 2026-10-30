@@ -40,6 +40,10 @@ public final class BaritoneProvider implements IBaritoneProvider {
 
     private final List<IBaritone> all;
     private final List<IBaritone> allView;
+    // Baritones pinned to Nexus bot sessions. Deliberately kept out of `all` so
+    // the vanilla mixin tick does not drive them with the mounted session's
+    // fields — NexusTickBridge ticks each inside its own withContext.
+    private final java.util.Map<String, IBaritone> sessionBaritones = new java.util.concurrent.ConcurrentHashMap<>();
 
     public BaritoneProvider() {
         this.all = new CopyOnWriteArrayList<>();
@@ -58,6 +62,55 @@ public final class BaritoneProvider implements IBaritoneProvider {
     @Override
     public List<IBaritone> getAllBaritones() {
         return this.allView;
+    }
+
+    /** One baritone per bot session, keyed by username. */
+    public synchronized IBaritone sessionBaritone(String key,
+            java.util.function.Supplier<net.minecraft.client.entity.EntityPlayerSP> player,
+            java.util.function.Supplier<net.minecraft.world.World> world) {
+        return sessionBaritones.computeIfAbsent(key, k -> {
+            com.mythos.mythosScriptMod.shadowbaritone.utils.player.SessionPlayerContext ctx =
+                    new com.mythos.mythosScriptMod.shadowbaritone.utils.player.SessionPlayerContext(
+                            Minecraft.getMinecraft(), player, world);
+            Baritone b = new Baritone(Minecraft.getMinecraft(), ctx);
+            ctx.bind(b);
+            return b;
+        });
+    }
+
+    @Override
+    public IBaritone getBaritoneForPlayer(net.minecraft.client.entity.EntityPlayerSP player) {
+        if (player != null) {
+            String name = player.getName();
+            IBaritone b = sessionBaritones.get(name);
+            if (b != null) return b;
+            // Nexus: lazily pin this session (including the mounted/human one)
+            // to its own player/world suppliers so ctx.world() never follows
+            // the mc.world swap on a mount switch — that swap otherwise makes
+            // WorldProvider tear down the running path's cached world.
+            // Absent Nexus this is a no-op and falls through to primary.
+            try {
+                if (com.mythos.mythosScriptMod.mcp.NexusSessions.present()) {
+                    final Object session =
+                            com.mythos.mythosScriptMod.mcp.NexusSessions.resolveForPlayer(player);
+                    if (session != null) {
+                        return sessionBaritone(name,
+                                () -> com.mythos.mythosScriptMod.mcp.NexusSessions.player(session),
+                                () -> com.mythos.mythosScriptMod.mcp.NexusSessions.world(session));
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        return IBaritoneProvider.super.getBaritoneForPlayer(player);
+    }
+
+    @Override
+    public IBaritone getBaritoneForConnection(net.minecraft.client.network.NetHandlerPlayClient connection) {
+        for (IBaritone baritone : sessionBaritones.values()) {
+            net.minecraft.client.entity.EntityPlayerSP p = baritone.getPlayerContext().player();
+            if (p != null && p.connection == connection) return baritone;
+        }
+        return IBaritoneProvider.super.getBaritoneForConnection(connection);
     }
 
     @Override

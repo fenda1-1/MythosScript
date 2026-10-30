@@ -26,41 +26,113 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class AutoEatHandler {
-    public static boolean autoEatEnabled = false;
-    public static int foodLevelThreshold = 12;
-    public static boolean autoMoveFoodEnabled = true;
-    public static boolean eatWithLookDown = false;
-    public static boolean smoothLookDown = true;
-    public static boolean onlyDuringSequenceStepPathing = true;
-    public static int targetHotbarSlot = 9;
-    public static final List<String> DEFAULT_FOOD_KEYWORDS = Arrays.asList("牛排", "面包", "苹果", "曲奇饼");
-    public static List<String> foodKeywords = new ArrayList<>(DEFAULT_FOOD_KEYWORDS);
 
-    public static boolean isEating = false;
-    public static int originalHotbarSlot = -1;
-    public static ItemStack swappedItem = ItemStack.EMPTY;
-    private static int eatTimeoutTicks = 0;
-    private static int eatStartFoodLevel = 20;
-    private static boolean eatStartedUsingHand = false;
-    private static boolean pitchAdjusted = false;
-    private static float originalPitch = 0.0F;
-    private static int eatRetryAttempts = 0;
-    private static int eatActiveHotbarSlot = -1;
-    private static int eatStartStackCount = 0;
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        public int foodLevelThreshold = 12;
+        public boolean autoMoveFoodEnabled = true;
+        public boolean eatWithLookDown = false;
+        public boolean smoothLookDown = true;
+        public boolean onlyDuringSequenceStepPathing = true;
+        public int targetHotbarSlot = 9;
+        public List<String> foodKeywords = new ArrayList<>(DEFAULT_FOOD_KEYWORDS);
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) AutoEatHandler::loadAutoEatConfig);
+            return config;
+        }
+    }
+
+    public static final List<String> DEFAULT_FOOD_KEYWORDS = Arrays.asList("牛排", "面包", "苹果", "曲奇饼");
+
     private static final int EAT_ATTEMPT_TIMEOUT_TICKS = 100;
     private static final int MAX_EAT_RETRY_ATTEMPTS = 4;
     private static final float EAT_LOOKDOWN_TARGET_PITCH = 80.0F;
     private static final float EAT_LOOKDOWN_MIN_STEP = 3.0F;
     private static final float EAT_LOOKDOWN_MAX_STEP = 14.0F;
 
+    private static final ConcurrentHashMap<String, RuntimeState> STATES = new ConcurrentHashMap<>();
+
+    private static RuntimeState rt() {
+        return STATES.computeIfAbsent(com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner(),
+                k -> new RuntimeState());
+    }
+
+    private static final class RuntimeState {
+        boolean autoEatEnabled = false;
+        boolean isEating = false;
+        int originalHotbarSlot = -1;
+        ItemStack swappedItem = ItemStack.EMPTY;
+        int eatTimeoutTicks = 0;
+        int eatStartFoodLevel = 20;
+        boolean eatStartedUsingHand = false;
+        boolean pitchAdjusted = false;
+        float originalPitch = 0.0F;
+        int eatRetryAttempts = 0;
+        int eatActiveHotbarSlot = -1;
+        int eatStartStackCount = 0;
+    }
+
+    // ------------------------------------------------------------------
+    // Runtime-switch accessors (boxed RuntimeState fields)
+    // ------------------------------------------------------------------
+
+    public static boolean autoEatEnabled() { return rt().autoEatEnabled; }
+
+    public static void setAutoEatEnabledSilently(boolean value) { rt().autoEatEnabled = value; }
+
+    public static boolean isEating() {
+        return rt().isEating;
+    }
+
+    public static void resetRuntimeState() {
+        RuntimeState rt = rt();
+        rt.isEating = false;
+        rt.originalHotbarSlot = -1;
+        rt.swappedItem = ItemStack.EMPTY;
+        rt.eatTimeoutTicks = 0;
+        rt.eatStartFoodLevel = 20;
+        rt.eatStartedUsingHand = false;
+        rt.pitchAdjusted = false;
+        rt.originalPitch = 0.0F;
+        rt.eatRetryAttempts = 0;
+        rt.eatActiveHotbarSlot = -1;
+        rt.eatStartStackCount = 0;
+    }
+
     static {
         loadAutoEatConfig();
     }
 
     private static File getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("keycommand_autoeat.json").toFile();
+        return ProfileManager.currentConfigFile("keycommand_autoeat.json").toFile();
+    }
+
+    private static File getRuntimeConfigFile() {
+        return ProfileManager.getCurrentRuntimeProfileDir().resolve("keycommand_autoeat.json").toFile();
     }
 
     public static void loadAutoEatConfig() {
@@ -72,30 +144,38 @@ public class AutoEatHandler {
                         .readJsonObject(configFile.toPath());
                 JsonObject json = readResult.getRoot();
                 needsRewrite = readResult.usedLegacyCharset();
-                autoEatEnabled = json.has("enabled") && json.get("enabled").getAsBoolean();
-                foodLevelThreshold = json.has("foodLevelThreshold") ? json.get("foodLevelThreshold").getAsInt() : 12;
-                autoMoveFoodEnabled = !json.has("autoMoveFoodEnabled")
+                File runtimeFile = getRuntimeConfigFile();
+                if (runtimeFile.exists()) {
+                    JsonConfigCharsetCompat.ReadResult rres = JsonConfigCharsetCompat
+                            .readJsonObject(runtimeFile.toPath());
+                    JsonObject rj = rres.getRoot();
+                    rt().autoEatEnabled = rj.has("enabled") && rj.get("enabled").getAsBoolean();
+                } else {
+                    rt().autoEatEnabled = json.has("enabled") && json.get("enabled").getAsBoolean();
+                }
+                cfg().foodLevelThreshold = json.has("foodLevelThreshold") ? json.get("foodLevelThreshold").getAsInt() : 12;
+                cfg().autoMoveFoodEnabled = !json.has("autoMoveFoodEnabled")
                         || json.get("autoMoveFoodEnabled").getAsBoolean();
-                eatWithLookDown = json.has("eatWithLookDown") && json.get("eatWithLookDown").getAsBoolean();
-                smoothLookDown = !json.has("smoothLookDown") || json.get("smoothLookDown").getAsBoolean();
-                onlyDuringSequenceStepPathing = !json.has("onlyDuringSequenceStepPathing")
+                cfg().eatWithLookDown = json.has("eatWithLookDown") && json.get("eatWithLookDown").getAsBoolean();
+                cfg().smoothLookDown = !json.has("smoothLookDown") || json.get("smoothLookDown").getAsBoolean();
+                cfg().onlyDuringSequenceStepPathing = !json.has("onlyDuringSequenceStepPathing")
                         || json.get("onlyDuringSequenceStepPathing").getAsBoolean();
-                targetHotbarSlot = json.has("targetHotbarSlot") ? json.get("targetHotbarSlot").getAsInt() : 9;
+                cfg().targetHotbarSlot = json.has("targetHotbarSlot") ? json.get("targetHotbarSlot").getAsInt() : 9;
 
-                foodKeywords = new ArrayList<>();
+                cfg().foodKeywords = new ArrayList<>();
                 if (json.has("foodKeywords") && json.get("foodKeywords").isJsonArray()) {
                     json.getAsJsonArray("foodKeywords").forEach(e -> {
                         if (e != null && e.isJsonPrimitive()) {
                             String keyword = e.getAsString().trim();
                             if (!keyword.isEmpty()) {
-                                foodKeywords.add(keyword);
+                                cfg().foodKeywords.add(keyword);
                             }
                         }
                     });
                 }
 
-                if (shouldResetToDefaultKeywords(foodKeywords)) {
-                    foodKeywords = new ArrayList<>(DEFAULT_FOOD_KEYWORDS);
+                if (shouldResetToDefaultKeywords(cfg().foodKeywords)) {
+                    cfg().foodKeywords = new ArrayList<>(DEFAULT_FOOD_KEYWORDS);
                     needsRewrite = true;
                 }
                 normalizeConfigValues();
@@ -116,22 +196,29 @@ public class AutoEatHandler {
                 configFile.getParentFile().mkdirs();
             }
             JsonObject json = new JsonObject();
-            json.addProperty("enabled", autoEatEnabled);
-            json.addProperty("foodLevelThreshold", foodLevelThreshold);
-            json.addProperty("autoMoveFoodEnabled", autoMoveFoodEnabled);
-            json.addProperty("eatWithLookDown", eatWithLookDown);
-            json.addProperty("smoothLookDown", smoothLookDown);
-            json.addProperty("onlyDuringSequenceStepPathing", onlyDuringSequenceStepPathing);
-            json.addProperty("targetHotbarSlot", targetHotbarSlot);
+            json.addProperty("foodLevelThreshold", cfg().foodLevelThreshold);
+            json.addProperty("autoMoveFoodEnabled", cfg().autoMoveFoodEnabled);
+            json.addProperty("eatWithLookDown", cfg().eatWithLookDown);
+            json.addProperty("smoothLookDown", cfg().smoothLookDown);
+            json.addProperty("onlyDuringSequenceStepPathing", cfg().onlyDuringSequenceStepPathing);
+            json.addProperty("targetHotbarSlot", cfg().targetHotbarSlot);
 
             com.google.gson.JsonArray keywordArray = new com.google.gson.JsonArray();
-            for (String keyword : foodKeywords) {
+            for (String keyword : cfg().foodKeywords) {
                 if (keyword != null && !keyword.trim().isEmpty()) {
                     keywordArray.add(keyword.trim());
                 }
             }
             json.add("foodKeywords", keywordArray);
             JsonConfigCharsetCompat.writeJsonObject(configFile.toPath(), json);
+
+            File runtimeFile = getRuntimeConfigFile();
+            if (!runtimeFile.getParentFile().exists()) {
+                runtimeFile.getParentFile().mkdirs();
+            }
+            JsonObject rjson = new JsonObject();
+            rjson.addProperty("enabled", rt().autoEatEnabled);
+            JsonConfigCharsetCompat.writeJsonObject(runtimeFile.toPath(), rjson);
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("保存自动进食配置失败", e);
         }
@@ -143,29 +230,29 @@ public class AutoEatHandler {
      * @param player 玩家实体
      */
     public static void checkAutoEat(EntityPlayerSP player) {
-        if (player == null || !autoEatEnabled)
+        if (player == null || !rt().autoEatEnabled)
             return;
 
-        if (isEating) {
+        if (rt().isEating) {
             continueEatingProcess(player);
             return;
         }
 
-        if (ModConfig.isGuiOpen() || player.getFoodStats().getFoodLevel() > foodLevelThreshold)
+        if (ModConfig.isGuiOpen() || player.getFoodStats().getFoodLevel() > cfg().foodLevelThreshold)
             return;
 
-        if (onlyDuringSequenceStepPathing && !PathSequenceEventListener.instance.isAutoEatStepPathingActive()) {
+        if (cfg().onlyDuringSequenceStepPathing && !PathSequenceEventListener.foregroundRunner().isAutoEatStepPathingActive()) {
             return;
         }
 
         int hotbarFoodSlot = findBestFoodInHotbar(player);
         if (hotbarFoodSlot != -1) {
-            AutoEatHandler.originalHotbarSlot = player.inventory.currentItem;
+            rt().originalHotbarSlot = player.inventory.currentItem;
             handleEatingProcess(player, hotbarFoodSlot);
             return;
         }
 
-        if (!autoMoveFoodEnabled) {
+        if (!cfg().autoMoveFoodEnabled) {
             return;
         }
 
@@ -174,21 +261,21 @@ public class AutoEatHandler {
             return;
 
         int sourceContainerSlot = findBestFoodInMainInventory(container, player);
-        int targetContainerSlot = getContainerSlotByPlayerInventoryIndex(container, player, targetHotbarSlot - 1);
+        int targetContainerSlot = getContainerSlotByPlayerInventoryIndex(container, player, cfg().targetHotbarSlot - 1);
         if (sourceContainerSlot != -1 && targetContainerSlot != -1 && sourceContainerSlot != targetContainerSlot) {
             moveOrSwapItemByClick(sourceContainerSlot, targetContainerSlot);
         }
     }
 
     private static void normalizeConfigValues() {
-        foodLevelThreshold = Math.max(0, Math.min(20, foodLevelThreshold));
-        targetHotbarSlot = Math.max(1, Math.min(9, targetHotbarSlot));
+        cfg().foodLevelThreshold = Math.max(0, Math.min(20, cfg().foodLevelThreshold));
+        cfg().targetHotbarSlot = Math.max(1, Math.min(9, cfg().targetHotbarSlot));
 
-        if (foodKeywords == null) {
-            foodKeywords = new ArrayList<>();
+        if (cfg().foodKeywords == null) {
+            cfg().foodKeywords = new ArrayList<>();
         }
         List<String> normalized = new ArrayList<>();
-        for (String keyword : foodKeywords) {
+        for (String keyword : cfg().foodKeywords) {
             if (keyword != null) {
                 String trimmed = keyword.trim();
                 if (!trimmed.isEmpty()) {
@@ -199,7 +286,7 @@ public class AutoEatHandler {
         if (normalized.isEmpty()) {
             normalized.addAll(DEFAULT_FOOD_KEYWORDS);
         }
-        foodKeywords = normalized;
+        cfg().foodKeywords = normalized;
     }
 
     private static boolean shouldResetToDefaultKeywords(List<String> keywords) {
@@ -287,74 +374,41 @@ public class AutoEatHandler {
     }
 
     private static void clickContainerSlot(int slot) {
-        EntityPlayerSP player = Minecraft.getMinecraft().player;
-        if (player == null || player.openContainer == null || Minecraft.getMinecraft().playerController == null) {
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
+        if (player == null || player.openContainer == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundController() == null) {
             return;
         }
         if (slot < 0 || slot >= player.openContainer.inventorySlots.size()) {
             return;
         }
-        Minecraft.getMinecraft().playerController.windowClick(player.openContainer.windowId, slot, 0, ClickType.PICKUP,
+        com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().windowClick(player.openContainer.windowId, slot, 0, ClickType.PICKUP,
                 player);
     }
 
-    private static void swapItemWithHotbar2(EntityPlayerSP player, int sourcePlayerInvSlot) {
-        if (player == null || sourcePlayerInvSlot < 0 || sourcePlayerInvSlot > 35
-                || Minecraft.getMinecraft().playerController == null || player.openContainer == null) {
-            return;
-        }
 
-        int sourceContainerSlot = getContainerSlotByPlayerInventoryIndex(player.openContainer, player,
-                sourcePlayerInvSlot);
-        if (sourceContainerSlot == -1) {
-            return;
-        }
-
-        int currentHotbar = player.inventory.currentItem;
-        Minecraft.getMinecraft().playerController.windowClick(
-                player.openContainer.windowId,
-                sourceContainerSlot,
-                currentHotbar,
-                ClickType.SWAP,
-                player);
-    }
-
-    private static int findInventorySlotByItem(ItemStack target) {
-        EntityPlayerSP player = Minecraft.getMinecraft().player;
-        if (player == null || target == null || target.isEmpty()) {
-            return -1;
-        }
-
-        for (int i = 9; i < 36; i++) {
-            if (ItemStack.areItemStacksEqual(player.inventory.getStackInSlot(i), target)) {
-                return i;
-            }
-        }
-        return -1;
-    }
 
     // 进食处理方法
     private static void handleEatingProcess(EntityPlayerSP player, int slot) {
-        if (ModConfig.isDebugFlagEnabled(DebugModule.AUTO_EAT) && Minecraft.getMinecraft().player != null) {
+        if (ModConfig.isDebugFlagEnabled(DebugModule.AUTO_EAT) && com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
             ItemStack foodStack = player.inventory.getStackInSlot(slot);
-            Minecraft.getMinecraft().player.sendMessage(new TextComponentString(
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(
                     String.format("§d[调试] §7开始自动进食 [%s]。", foodStack.getDisplayName())));
         }
-        AutoEatHandler.isEating = true;
-        AutoEatHandler.eatTimeoutTicks = EAT_ATTEMPT_TIMEOUT_TICKS;
-        AutoEatHandler.eatStartFoodLevel = player.getFoodStats().getFoodLevel();
-        AutoEatHandler.eatStartedUsingHand = false;
-        AutoEatHandler.eatRetryAttempts = 0;
-        AutoEatHandler.eatActiveHotbarSlot = slot;
+        rt().isEating = true;
+        rt().eatTimeoutTicks = EAT_ATTEMPT_TIMEOUT_TICKS;
+        rt().eatStartFoodLevel = player.getFoodStats().getFoodLevel();
+        rt().eatStartedUsingHand = false;
+        rt().eatRetryAttempts = 0;
+        rt().eatActiveHotbarSlot = slot;
         ItemStack startingStack = player.inventory.getStackInSlot(slot);
-        AutoEatHandler.eatStartStackCount = startingStack.isEmpty() ? 0 : startingStack.getCount();
+        rt().eatStartStackCount = startingStack.isEmpty() ? 0 : startingStack.getCount();
 
         EmbeddedNavigationHandler.INSTANCE.pause();
 
-        pitchAdjusted = false;
-        if (eatWithLookDown) {
-            originalPitch = player.rotationPitch;
-            pitchAdjusted = true;
+        rt().pitchAdjusted = false;
+        if (cfg().eatWithLookDown) {
+            rt().originalPitch = player.rotationPitch;
+            rt().pitchAdjusted = true;
             applyLookDownPitch(player);
         }
 
@@ -376,9 +430,9 @@ public class AutoEatHandler {
             return;
         }
 
-        if (eatActiveHotbarSlot >= 0 && player.inventory.currentItem != eatActiveHotbarSlot) {
-            player.inventory.currentItem = eatActiveHotbarSlot;
-            player.connection.sendPacket(new CPacketHeldItemChange(eatActiveHotbarSlot));
+        if (rt().eatActiveHotbarSlot >= 0 && player.inventory.currentItem != rt().eatActiveHotbarSlot) {
+            player.inventory.currentItem = rt().eatActiveHotbarSlot;
+            player.connection.sendPacket(new CPacketHeldItemChange(rt().eatActiveHotbarSlot));
         }
 
         applyLookDownPitch(player);
@@ -386,15 +440,15 @@ public class AutoEatHandler {
         tryStartEatingUse(player);
 
         if (player.isHandActive()) {
-            eatStartedUsingHand = true;
+            rt().eatStartedUsingHand = true;
         }
 
-        boolean hungerRecovered = player.getFoodStats().getFoodLevel() > eatStartFoodLevel;
+        boolean hungerRecovered = player.getFoodStats().getFoodLevel() > rt().eatStartFoodLevel;
         boolean stackConsumed = hasConsumedFoodStack(player);
-        boolean finishedUseWithoutSuccess = eatStartedUsingHand && !player.isHandActive() && !hungerRecovered
+        boolean finishedUseWithoutSuccess = rt().eatStartedUsingHand && !player.isHandActive() && !hungerRecovered
                 && !stackConsumed;
-        eatTimeoutTicks--;
-        boolean timeout = eatTimeoutTicks <= 0 && !hungerRecovered && !stackConsumed;
+        rt().eatTimeoutTicks--;
+        boolean timeout = rt().eatTimeoutTicks <= 0 && !hungerRecovered && !stackConsumed;
 
         if (hungerRecovered || stackConsumed) {
             finalizeEating(player, false);
@@ -411,15 +465,15 @@ public class AutoEatHandler {
             player.stopActiveHand();
         }
 
-        if (player != null && pitchAdjusted) {
-            player.rotationPitch = originalPitch;
+        if (player != null && rt().pitchAdjusted) {
+            player.rotationPitch = rt().originalPitch;
         }
 
         setUseKeyState(false);
 
-        if (player != null && originalHotbarSlot != -1) {
-            player.inventory.currentItem = originalHotbarSlot;
-            player.connection.sendPacket(new CPacketHeldItemChange(originalHotbarSlot));
+        if (player != null && rt().originalHotbarSlot != -1) {
+            player.inventory.currentItem = rt().originalHotbarSlot;
+            player.connection.sendPacket(new CPacketHeldItemChange(rt().originalHotbarSlot));
         }
 
         EmbeddedNavigationHandler.INSTANCE.resume();
@@ -441,16 +495,16 @@ public class AutoEatHandler {
     // 辅助重置方法
     private static void resetEatingState() {
         setUseKeyState(false);
-        AutoEatHandler.isEating = false;
-        AutoEatHandler.originalHotbarSlot = -1;
-        AutoEatHandler.swappedItem = ItemStack.EMPTY;
-        AutoEatHandler.eatTimeoutTicks = 0;
-        AutoEatHandler.eatStartFoodLevel = 20;
-        AutoEatHandler.eatStartedUsingHand = false;
-        AutoEatHandler.pitchAdjusted = false;
-        AutoEatHandler.eatRetryAttempts = 0;
-        AutoEatHandler.eatActiveHotbarSlot = -1;
-        AutoEatHandler.eatStartStackCount = 0;
+        AutoEatHandler.rt().isEating = false;
+        AutoEatHandler.rt().originalHotbarSlot = -1;
+        AutoEatHandler.rt().swappedItem = ItemStack.EMPTY;
+        AutoEatHandler.rt().eatTimeoutTicks = 0;
+        AutoEatHandler.rt().eatStartFoodLevel = 20;
+        AutoEatHandler.rt().eatStartedUsingHand = false;
+        AutoEatHandler.rt().pitchAdjusted = false;
+        AutoEatHandler.rt().eatRetryAttempts = 0;
+        AutoEatHandler.rt().eatActiveHotbarSlot = -1;
+        AutoEatHandler.rt().eatStartStackCount = 0;
     }
 
     private static boolean isPreferredFoodItem(ItemStack stack) {
@@ -458,11 +512,11 @@ public class AutoEatHandler {
     }
 
     private static boolean isMatchingFoodKeyword(ItemStack stack) {
-        if (foodKeywords == null || foodKeywords.isEmpty()) {
+        if (cfg().foodKeywords == null || cfg().foodKeywords.isEmpty()) {
             return true;
         }
         String name = stack.getDisplayName().toLowerCase(Locale.ROOT);
-        for (String keyword : foodKeywords) {
+        for (String keyword : cfg().foodKeywords) {
             if (keyword == null)
                 continue;
             String trimmed = keyword.trim();
@@ -474,12 +528,12 @@ public class AutoEatHandler {
     }
 
     private static int getFoodPriority(ItemStack stack) {
-        if (foodKeywords == null || foodKeywords.isEmpty()) {
+        if (cfg().foodKeywords == null || cfg().foodKeywords.isEmpty()) {
             return 0;
         }
         String name = stack.getDisplayName().toLowerCase(Locale.ROOT);
-        for (int i = 0; i < foodKeywords.size(); i++) {
-            String keyword = foodKeywords.get(i);
+        for (int i = 0; i < cfg().foodKeywords.size(); i++) {
+            String keyword = cfg().foodKeywords.get(i);
             if (keyword == null)
                 continue;
             String trimmed = keyword.trim();
@@ -491,24 +545,24 @@ public class AutoEatHandler {
     }
 
     private static void tryStartEatingUse(EntityPlayerSP player) {
-        if (player == null || Minecraft.getMinecraft().playerController == null) {
+        if (player == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundController() == null) {
             return;
         }
         if (!player.isHandActive()) {
-            Minecraft.getMinecraft().playerController.processRightClick(player, player.world, EnumHand.MAIN_HAND);
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundController().processRightClick(player, player.world, EnumHand.MAIN_HAND);
         }
         setUseKeyState(true);
     }
 
     private static boolean hasConsumedFoodStack(EntityPlayerSP player) {
-        if (player == null || eatActiveHotbarSlot < 0 || eatActiveHotbarSlot > 8) {
+        if (player == null || rt().eatActiveHotbarSlot < 0 || rt().eatActiveHotbarSlot > 8) {
             return false;
         }
-        ItemStack current = player.inventory.getStackInSlot(eatActiveHotbarSlot);
+        ItemStack current = player.inventory.getStackInSlot(rt().eatActiveHotbarSlot);
         if (current == null || current.isEmpty()) {
-            return eatStartedUsingHand;
+            return rt().eatStartedUsingHand;
         }
-        return current.getCount() < eatStartStackCount;
+        return current.getCount() < rt().eatStartStackCount;
     }
 
     private static void retryEatingUse(EntityPlayerSP player) {
@@ -516,25 +570,25 @@ public class AutoEatHandler {
             finalizeEating(null, true);
             return;
         }
-        if (eatRetryAttempts >= MAX_EAT_RETRY_ATTEMPTS) {
+        if (rt().eatRetryAttempts >= MAX_EAT_RETRY_ATTEMPTS) {
             finalizeEating(player, true);
             return;
         }
-        eatRetryAttempts++;
-        eatTimeoutTicks = EAT_ATTEMPT_TIMEOUT_TICKS;
-        eatStartedUsingHand = false;
-        ItemStack current = eatActiveHotbarSlot >= 0 && eatActiveHotbarSlot <= 8
-                ? player.inventory.getStackInSlot(eatActiveHotbarSlot)
+        rt().eatRetryAttempts++;
+        rt().eatTimeoutTicks = EAT_ATTEMPT_TIMEOUT_TICKS;
+        rt().eatStartedUsingHand = false;
+        ItemStack current = rt().eatActiveHotbarSlot >= 0 && rt().eatActiveHotbarSlot <= 8
+                ? player.inventory.getStackInSlot(rt().eatActiveHotbarSlot)
                 : ItemStack.EMPTY;
-        eatStartStackCount = current.isEmpty() ? 0 : current.getCount();
+        rt().eatStartStackCount = current.isEmpty() ? 0 : current.getCount();
         tryStartEatingUse(player);
     }
 
     private static void applyLookDownPitch(EntityPlayerSP player) {
-        if (player == null || !eatWithLookDown || !pitchAdjusted) {
+        if (player == null || !cfg().eatWithLookDown || !rt().pitchAdjusted) {
             return;
         }
-        if (!smoothLookDown) {
+        if (!cfg().smoothLookDown) {
             player.rotationPitch = EAT_LOOKDOWN_TARGET_PITCH;
             return;
         }

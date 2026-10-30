@@ -62,7 +62,6 @@ final class PacketWorkbenchState {
         void setAdaptive(boolean value) { adaptive = value; }
         void setThreshold(int value) { threshold = clamp(value, 200, 10000); }
         void setModulo(int value) { modulo = clamp(value, 2, 64); }
-        void cycleMode() { mode = mode.next(); }
         List<String> whitelist() { return Collections.unmodifiableList(white); }
         List<String> blacklist() { return Collections.unmodifiableList(black); }
         int max() { return max; }
@@ -199,7 +198,6 @@ final class PacketWorkbenchState {
             int target = up ? index - 1 : index + 1;
             if (valid(index) && target >= 0 && target < working.packets.size()) Collections.swap(working.packets, index, target);
         }
-        boolean hasOriginal() { return original != null; }
         boolean isDirty() { return original == null ? !working.packets.isEmpty() : !sameSequence(original, working); }
         void markSaved() { original = PacketDrafts.copySequence(working); }
         boolean valid(int index) { return index >= 0 && index < working.packets.size(); }

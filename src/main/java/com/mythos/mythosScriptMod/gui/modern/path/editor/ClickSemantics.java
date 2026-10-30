@@ -97,12 +97,6 @@ public final class ClickSemantics {
         return resolve(clickType, button).label();
     }
 
-    public static String displayClickType(String clickType) {
-        String type = ModUtils.normalizeClickTypeName(clickType).toLowerCase(Locale.ROOT);
-        String key = "gui.path.action_editor.option.click_type." + type;
-        String translated = I18n.format(key);
-        return translated.equals(key) ? ModUtils.clickTypeToDisplayName(clickType) : translated;
-    }
 
     public static String displayButton(String clickType, int button) {
         String type = ModUtils.normalizeClickTypeName(clickType);
@@ -139,7 +133,4 @@ public final class ClickSemantics {
         return resolve(clickType, button).supportsSlotLimits;
     }
 
-    public static boolean isIllegalSwapButton(String clickType, int button) {
-        return "SWAP".equals(ModUtils.normalizeClickTypeName(clickType)) && (button < 0 || button > 8);
-    }
 }

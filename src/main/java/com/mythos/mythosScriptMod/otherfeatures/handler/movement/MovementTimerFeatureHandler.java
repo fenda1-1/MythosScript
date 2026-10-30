@@ -12,18 +12,20 @@ final class MovementTimerFeatureHandler {
         }
         float timerSpeed = MovementFeatureManager.getConfiguredValue("timer_accel", MovementFeatureManager.DEFAULT_TIMER_SPEED);
         SpeedHandler.applyTimerBoost(timerSpeed);
-        manager.externalTimerApplied = true;
-        manager.lastTimerSpeed = timerSpeed;
+        MovementFeatureManager.RuntimeState rt = MovementFeatureManager.rt();
+        rt.externalTimerApplied = true;
+        rt.lastTimerSpeed = timerSpeed;
     }
 
     static void reset(MovementFeatureManager manager, boolean force) {
-        if (!manager.externalTimerApplied && !force) {
+        MovementFeatureManager.RuntimeState rt = MovementFeatureManager.rt();
+        if (!rt.externalTimerApplied && !force) {
             return;
         }
         if (!SpeedHandler.isTimerManagedBySpeed()) {
             SpeedHandler.restoreVanillaTimer();
         }
-        manager.externalTimerApplied = false;
-        manager.lastTimerSpeed = MovementFeatureManager.DEFAULT_TIMER_SPEED;
+        rt.externalTimerApplied = false;
+        rt.lastTimerSpeed = MovementFeatureManager.DEFAULT_TIMER_SPEED;
     }
 }

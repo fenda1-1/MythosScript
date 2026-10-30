@@ -113,24 +113,6 @@ final class PacketInterceptRulesPanel extends PacketPanelBase {
         drawButton(font, validateBounds, "gui.modern.pktint.u014", mx, my); drawButton(font, saveBounds, "gui.modern.pktint.u015", mx, my, true, true); drawButton(font, cancelBounds, "gui.modern.pktint.u016", mx, my);
     }
 
-    private void drawCategoryNavigation(FontRenderer font, int mx, int my) {
-        int y = listBounds.y + 32;
-        ModernUiRenderer.drawSubtlePanel(listBounds.x + 6, y, 48, 20, 3,
-                "__all__".equals(selectedCategory) ? ModernUiRenderer.SELECTED_SURFACE : ModernUiRenderer.SURFACE,
-                "__all__".equals(selectedCategory) ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
-        centeredLabel(font, "全部", new ModernMainLayout.Rect(listBounds.x + 6, y, 48, 20), ModernUiRenderer.TEXT);
-        int x = listBounds.x + 58;
-        for (String value : state.categories()) {
-            int width = Math.min(110, Math.max(48, font.getStringWidth(value) + 18));
-            ModernMainLayout.Rect r = new ModernMainLayout.Rect(x, y, width, 20);
-            ModernUiRenderer.drawSubtlePanel(r.x, r.y, r.width, r.height, 3,
-                    value.equals(selectedCategory) ? ModernUiRenderer.SELECTED_SURFACE : r.contains(mx, my) ? ModernUiRenderer.SURFACE_HOVER : ModernUiRenderer.SURFACE,
-                    value.equals(selectedCategory) ? ModernUiRenderer.ACCENT : ModernUiRenderer.BORDER_SUBTLE);
-            centeredLabel(font, value, r, ModernUiRenderer.TEXT);
-            x += width + 4;
-            if (x >= listBounds.right() - 20) break;
-        }
-    }
 
     private List<Integer> visibleRuleIndices() {
         List<Integer> result = new ArrayList<Integer>();
@@ -398,24 +380,6 @@ final class PacketInterceptRulesPanel extends PacketPanelBase {
         if (hit(saveBounds, x, y)) { if (saveDraft()) owner.back(); return true; }
         if (hit(cancelBounds, x, y)) { owner.requestBack(); return true; }
         return true;
-    }
-    private void openInterceptContextMenu(int x, int y) {
-        List<PacketContextMenu.Item> items = new ArrayList<PacketContextMenu.Item>();
-        items.add(new PacketContextMenu.Item("创建分组", () -> promptCategory(false)));
-        if (!"__all__".equals(selectedCategory)) {
-            items.add(new PacketContextMenu.Item("重命名分组", () -> promptCategory(true)));
-            items.add(new PacketContextMenu.Item("删除分组", () -> { state.deleteCategory(selectedCategory); selectedCategory = "__all__"; }));
-        }
-        items.add(new PacketContextMenu.Item("gui.modern.pktint.u011", () -> { sync(); state.add(); if (!"__all__".equals(selectedCategory)) state.rules().get(state.rules().size() - 1).category = selectedCategory; select(state.rules().size() - 1); }));
-        if (selected >= 0 && !"__all__".equals(selectedCategory)) {
-            items.add(new PacketContextMenu.Item("移动到分类", () -> navigationActions.choose(
-                    "移动到分类", state.categories(), state.rules().get(selected).category,
-                    value -> { sync(); state.rules().get(selected).category = value; selectedCategory = value; select(selected); })));
-        }
-        items.add(new PacketContextMenu.Item("gui.modern.pktint.u012", () -> {
-            if (selected >= 0) { state.remove(selected); selected = Math.min(selected, state.rules().size() - 1); if (selected >= 0) select(selected); else selected = -1; }
-        }));
-        openContextMenu(x, y, items);
     }
     private void promptCategory(boolean rename) {
         final String old = selectedCategory;

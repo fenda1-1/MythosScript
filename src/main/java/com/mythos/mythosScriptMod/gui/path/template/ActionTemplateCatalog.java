@@ -7,6 +7,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mythos.mythosScriptMod.path.PathSequenceManager.ActionData;
+import com.mythos.mythosScriptMod.utils.JsonCopy;
 import com.mythos.mythosScriptMod.system.ProfileManager;
 import com.mythos.mythosScriptMod.mythosScriptMod;
 
@@ -43,9 +44,6 @@ public final class ActionTemplateCatalog {
         private ActionTemplateCatalog() {
         }
 
-        public static List<ActionTemplate> getBuiltinTemplates() {
-                return Collections.unmodifiableList(BUILTIN_TEMPLATES);
-        }
 
         public static synchronized List<ActionTemplate> getTemplates() {
                 ensureCustomLoaded();
@@ -94,8 +92,7 @@ public final class ActionTemplateCatalog {
                                 }
                                 JsonObject actionObject = new JsonObject();
                                 actionObject.addProperty("type", action.type);
-                                actionObject.add("params", action.params == null ? new JsonObject()
-                                                : new JsonParser().parse(action.params.toString()).getAsJsonObject());
+                                actionObject.add("params", JsonCopy.deepCopyObject(action.params));
                                 actions.add(actionObject);
                         }
                         object.add("actions", actions);
@@ -103,18 +100,6 @@ public final class ActionTemplateCatalog {
                 return object;
         }
 
-        public static synchronized List<String> getCategories() {
-                ensureCustomLoaded();
-                Set<String> categories = new LinkedHashSet<String>();
-                for (ActionTemplate template : BUILTIN_TEMPLATES) {
-                        categories.add(template.getCategory());
-                }
-                categories.addAll(CUSTOM_CATEGORIES);
-                for (ActionTemplate template : CUSTOM_TEMPLATES) {
-                        categories.add(template.getCategory());
-                }
-                return new ArrayList<String>(categories);
-        }
 
         public static synchronized boolean isBuiltinCategory(String category) {
                 String normalized = normalizeCategory(category);
@@ -126,69 +111,9 @@ public final class ActionTemplateCatalog {
                 return false;
         }
 
-        public static synchronized boolean isCustomCategory(String category) {
-                ensureCustomLoaded();
-                String normalized = normalizeCategory(category);
-                return !normalized.isEmpty() && CUSTOM_CATEGORIES.contains(normalized);
-        }
 
-        public static synchronized boolean addCustomCategory(String category) {
-                ensureCustomLoaded();
-                String normalized = normalizeCategory(category);
-                if (normalized.isEmpty() || isBuiltinCategory(normalized) || CUSTOM_CATEGORIES.contains(normalized)) {
-                        return false;
-                }
-                CUSTOM_CATEGORIES.add(normalized);
-                saveCustomTemplates();
-                return true;
-        }
 
-        public static synchronized boolean deleteCustomCategory(String category) {
-                ensureCustomLoaded();
-                String normalized = normalizeCategory(category);
-                if (normalized.isEmpty() || isBuiltinCategory(normalized)) {
-                        return false;
-                }
-                boolean changed = CUSTOM_CATEGORIES.remove(normalized);
-                Iterator<ActionTemplate> iterator = CUSTOM_TEMPLATES.iterator();
-                while (iterator.hasNext()) {
-                        ActionTemplate template = iterator.next();
-                        if (safe(template.getCategory()).equals(normalized)) {
-                                iterator.remove();
-                                changed = true;
-                        }
-                }
-                if (changed) {
-                        saveCustomTemplates();
-                }
-                return changed;
-        }
 
-        public static synchronized boolean renameCustomCategory(String oldCategory, String newCategory) {
-                ensureCustomLoaded();
-                String oldName = normalizeCategory(oldCategory);
-                String newName = normalizeCategory(newCategory);
-                if (oldName.isEmpty() || newName.isEmpty() || oldName.equals(newName)
-                                || isBuiltinCategory(oldName) || isBuiltinCategory(newName)
-                                || !CUSTOM_CATEGORIES.contains(oldName) || CUSTOM_CATEGORIES.contains(newName)) {
-                        return false;
-                }
-                int categoryIndex = CUSTOM_CATEGORIES.indexOf(oldName);
-                if (categoryIndex < 0) {
-                        return false;
-                }
-                CUSTOM_CATEGORIES.set(categoryIndex, newName);
-                for (int i = 0; i < CUSTOM_TEMPLATES.size(); i++) {
-                        ActionTemplate template = CUSTOM_TEMPLATES.get(i);
-                        if (safe(template.getCategory()).equals(oldName)) {
-                                CUSTOM_TEMPLATES.set(i, new ActionTemplate(template.getId(), newName,
-                                                template.getName(), template.getSummary(), template.getUseCase(),
-                                                template.getNote(), template.getActions(), true));
-                        }
-                }
-                saveCustomTemplates();
-                return true;
-        }
 
         public static synchronized ActionTemplate addCustomTemplate(String category, String name, String summary,
                         String useCase, String note, List<ActionData> actions) {
@@ -440,8 +365,7 @@ public final class ActionTemplateCatalog {
                         }
                         JsonObject actionObject = new JsonObject();
                         actionObject.addProperty("type", action.type);
-                        actionObject.add("params", action.params == null ? new JsonObject()
-                                        : new JsonParser().parse(action.params.toString()).getAsJsonObject());
+                        actionObject.add("params", JsonCopy.deepCopyObject(action.params));
                         actions.add(actionObject);
                 }
                 object.add("actions", actions);
@@ -540,7 +464,6 @@ public final class ActionTemplateCatalog {
                 templates.add(bossPatrolAcrossPoints());
                 templates.add(playerDetectedRetreat());
                 templates.add(targetMissingRetryNextPoint());
-                templates.add(waitRespawnKillContinue());
                 templates.add(safeMenuReopenRecovery());
                 templates.add(retryTargetScanThenNextPoint());
                 templates.add(switchRouteByStateVar());
@@ -549,91 +472,20 @@ public final class ActionTemplateCatalog {
                 templates.add(forEachPointPatrolCheck());
                 templates.add(forEachListBatchNotify());
                 templates.add(whileConditionUntilAreaClear());
+                templates.add(chunkRandomWalk());
+                templates.add(randomWalkAroundAnchor());
+                templates.add(timedLoopUntilDeadline());
+                templates.add(countedRoundsThenStop());
+                templates.add(healthLowRetreatAndRecover());
+                templates.add(waitHungerThenContinue());
+                templates.add(inventoryFullDepositThenReturn());
+                templates.add(retryCommandUntilArrived());
+                templates.add(rememberPositionAndReturn());
+                templates.add(nearestHostileApproachAndHunt());
+                templates.add(roundRobinPointsByCounter());
                 return Collections.unmodifiableList(templates);
         }
 
-        private static ActionTemplate waitBossRespawnAndKillOnce() {
-                return template("boss_respawn_kill_once", CATEGORY_COMBAT,
-                                "等待 Boss 复活并击杀 1 次",
-                                "附近没有 Boss 时等待，出现后执行一次中心搜怪并结束当前动作块。",
-                                "适合定点刷单个 Boss、精英怪、刷新点怪物。可作为单独步骤插入到刷怪路线中。",
-                                "把“Boss 名称关键字”改成实际怪物名；如果一次 hunt 不能稳定完成击杀，可以把 hunt 后面的跳过动作改成等待击杀提示或数据包。",
-                                actions(
-                                                action("condition_entity_nearby",
-                                                                params("entityName", "Boss 名称关键字", "radius", 24,
-                                                                                "skipCount", 2)),
-                                                action("hunt", params("radius", 24, "huntUpRange", 8, "huntDownRange",
-                                                                8,
-                                                                "noTargetSkipCount", 0, "enableNameWhitelist", true,
-                                                                "nameWhitelistText",
-                                                                "Boss 名称关键字", "enableNameBlacklist", false,
-                                                                "nameBlacklistText", "",
-                                                                "showHuntRange", true)),
-                                                action("skip_actions", params("count", 2)),
-                                                action("delay", params("ticks", "200", "normalizeDelayTo20Tps", true)),
-                                                action("goto_action", params("targetActionIndex", 0))));
-        }
-
-        private static ActionTemplate killBossCountLoop() {
-                return template("boss_kill_count_loop", CATEGORY_COMBAT,
-                                "累计击杀 N 次 Boss",
-                                "用变量记录目标数量与当前击杀次数，未达成时继续等待刷新并循环。",
-                                "适合日常任务、成就任务、需要固定击杀次数后退出的 Boss 场景。",
-                                "默认通过“击杀”数据包文本确认击杀。不同服务器提示文本不同，请把 packetText 和 Boss 名称改成实际值。",
-                                actions(
-                                                action("set_var",
-                                                                params("name", "sequence.boss_kill_target", "value", 5,
-                                                                                "valueType",
-                                                                                "number")),
-                                                action("set_var",
-                                                                params("name", "sequence.boss_kill_count", "value", 0,
-                                                                                "valueType",
-                                                                                "number")),
-                                                action("condition_expression", params("expressions",
-                                                                strings("sequence.boss_kill_count < sequence.boss_kill_target"),
-                                                                "skipCount", 7)),
-                                                action("condition_entity_nearby",
-                                                                params("entityName", "Boss 名称关键字", "radius", 24,
-                                                                                "skipCount", 4)),
-                                                action("hunt", params("radius", 24, "huntUpRange", 8, "huntDownRange",
-                                                                8,
-                                                                "noTargetSkipCount", 0, "enableNameWhitelist", true,
-                                                                "nameWhitelistText",
-                                                                "Boss 名称关键字", "showHuntRange", true)),
-                                                action("wait_until_packet_text",
-                                                                params("packetText", "击杀", "preExecuteCount", 0,
-                                                                                "timeoutTicks", 120,
-                                                                                "timeoutSkipCount", 0)),
-                                                action("set_var",
-                                                                params("name", "sequence.boss_kill_count", "expression",
-                                                                                "sequence.boss_kill_count + 1",
-                                                                                "valueType", "number")),
-                                                action("goto_action", params("targetActionIndex", 2)),
-                                                action("delay", params("ticks", "200", "normalizeDelayTo20Tps", true)),
-                                                action("goto_action", params("targetActionIndex", 2)),
-                                                action("system_message", params("message", "Boss 击杀数量已达成"))));
-        }
-
-        private static ActionTemplate waitBossHudAndKill() {
-                return template("boss_hud_respawn_kill", CATEGORY_COMBAT,
-                                "等待刷新提示后击杀 Boss",
-                                "等待 HUD 或聊天识别到刷新文本，再启动白名单搜怪并等待击杀提示。",
-                                "适合服务器有“Boss 已刷新/出现”提示，但实体刷新位置或加载时间不稳定的 Boss。",
-                                "把刷新提示、Boss 名称、击杀提示改成实际文本。HUD 捕获不到时可改成 wait_until_packet_text。",
-                                actions(
-                                                action("wait_until_hud_text",
-                                                                params("contains", "Boss已刷新", "timeoutTicks", 0,
-                                                                                "timeoutSkipCount", 0)),
-                                                action("hunt", params("radius", 32, "huntUpRange", 10, "huntDownRange",
-                                                                10,
-                                                                "noTargetSkipCount", 0, "enableNameWhitelist", true,
-                                                                "nameWhitelistText",
-                                                                "Boss 名称关键字", "showHuntRange", true)),
-                                                action("wait_until_packet_text",
-                                                                params("packetText", "击杀", "preExecuteCount", 0,
-                                                                                "timeoutTicks", 200,
-                                                                                "timeoutSkipCount", 0))));
-        }
 
         private static ActionTemplate huntWhitelistBlacklist() {
                 return template("hunt_whitelist_blacklist", CATEGORY_COMBAT,
@@ -1978,15 +1830,7 @@ public final class ActionTemplateCatalog {
                                                                 params("entityType", "player", "radius", 8, "minCount", 1,
                                                                                 "skipCount", 1)),
                                                 action("goto_label", params("targetLabel", "point_b")),
-                                                action("wait_until_entity_nearby",
-                                                                params("entityName", "Boss 名称关键字", "radius", 24,
-                                                                                "minCount", 1, "timeoutTicks", 60,
-                                                                                "timeoutSkipCount", 0)),
-                                                action("hunt", params("radius", 24, "entityType", "hostile",
-                                                                "huntUpRange", 8, "huntDownRange", 8,
-                                                                "enableNameWhitelist", true,
-                                                                "nameWhitelistText", "Boss 名称关键字",
-                                                                "showHuntRange", true)),
+                                                action("hunt", bossHuntParams(24, 8, 1, true, 3, false)),
                                                 action("goto_label", params("targetLabel", "point_b")),
                                                 action("label", params("labelName", "point_b")),
                                                 action("condition_entity_nearby",
@@ -2020,24 +1864,6 @@ public final class ActionTemplateCatalog {
                                                                                 "minCount", 1, "timeoutTicks", 80,
                                                                                 "timeoutSkipCount", 1)),
                                                 action("goto_label", params("targetLabel", "next_point"))));
-        }
-
-        private static ActionTemplate waitRespawnKillContinue() {
-                return template("wait_respawn_kill_continue", CATEGORY_COMBAT,
-                                "等待复活 -> 击杀 -> 继续",
-                                "在当前点等待目标刷新，击杀后立刻继续后续动作。",
-                                "适合刷单个精英、守定点 Boss、等刷新后打一轮就走。",
-                                "把实体名称、半径和后续逻辑改成实际值；若击杀确认要更稳，可改成等待数据包文本或计分板文本。",
-                                actions(
-                                                action("wait_until_entity_nearby",
-                                                                params("entityName", "Boss 名称关键字", "radius", 24,
-                                                                                "minCount", 1, "timeoutTicks", 200,
-                                                                                "timeoutSkipCount", 0)),
-                                                action("hunt", params("radius", 24, "entityType", "hostile",
-                                                                "huntUpRange", 8, "huntDownRange", 8,
-                                                                "enableNameWhitelist", true,
-                                                                "nameWhitelistText", "Boss 名称关键字",
-                                                                "showHuntRange", true))));
         }
 
         private static ActionTemplate safeMenuReopenRecovery() {
@@ -2352,6 +2178,317 @@ public final class ActionTemplateCatalog {
         private static ActionTemplate template(String id, String category, String name, String summary, String useCase,
                         String note, List<ActionData> actions) {
                 return new ActionTemplate(id, category, name, summary, useCase, note, actions);
+        }
+
+        private static JsonArray whitelistEntries(String name, int killCount) {
+                JsonArray array = new JsonArray();
+                JsonObject entry = new JsonObject();
+                entry.addProperty("name", name);
+                entry.addProperty("killCount", killCount);
+                array.add(entry);
+                return array;
+        }
+
+        private static JsonObject bossHuntParams(int radius, int vertical, int killCount, boolean waitRespawn,
+                        int confirmSeconds, boolean waitAfterCompletion) {
+                JsonObject json = params("radius", radius, "entityType", "hostile",
+                                "huntUpRange", vertical, "huntDownRange", vertical, "noTargetSkipCount", 0,
+                                "enableNameWhitelist", true,
+                                "nameWhitelistEntries", whitelistEntries("Boss 名称关键字", killCount),
+                                "nameWhitelistText", "Boss 名称关键字",
+                                "waitForWhitelistRespawn", waitRespawn,
+                                "whitelistRespawnTimeoutSeconds", 300,
+                                "waitForWhitelistRespawnAfterCompletion", waitAfterCompletion,
+                                "confirmKillCompletion", confirmSeconds > 0,
+                                "killCompletionConfirmSeconds", Math.max(1, confirmSeconds),
+                                "enableNameBlacklist", false, "nameBlacklistText", "",
+                                "showHuntRange", true);
+                return json;
+        }
+
+        private static ActionTemplate waitBossRespawnAndKillOnce() {
+                return template("boss_respawn_kill_once", CATEGORY_COMBAT,
+                                "等待 Boss 复活并击杀 1 次",
+                                "一个中心搜怪动作完成：没刷新就原地等待，出现后击杀 1 次，确认没再出现后继续后续动作。",
+                                "适合定点刷单个 Boss、精英怪、刷新点怪物。可直接插入刷怪路线。",
+                                "改白名单里的“Boss 名称关键字”。等待上限 whitelistRespawnTimeoutSeconds（默认 300 秒），超时后继续执行后续动作；killCount 改成需要的击杀数。",
+                                actions(action("hunt", bossHuntParams(24, 8, 1, true, 3, false))));
+        }
+
+        private static ActionTemplate killBossCountLoop() {
+                return template("boss_kill_count_loop", CATEGORY_COMBAT,
+                                "累计击杀 N 次 Boss",
+                                "白名单条目自带击杀数：每次击杀后自动等待复活，达到次数后结束搜怪并提示。",
+                                "适合日常任务、成就任务、需要固定击杀次数后退出的 Boss 场景。",
+                                "nameWhitelistEntries 里的 killCount 就是目标次数（默认 5）；勾选“击杀完成后等待复活”保证每次之间等刷新。若需要强制时限，可打开 forceEndHunt。",
+                                actions(
+                                                action("hunt", bossHuntParams(24, 8, 5, true, 3, true)),
+                                                action("system_message", params("message", "Boss 击杀数量已达成"))));
+        }
+
+        private static ActionTemplate waitBossHudAndKill() {
+                return template("boss_hud_respawn_kill", CATEGORY_COMBAT,
+                                "等待刷新提示后击杀 Boss",
+                                "等待 HUD/聊天出现刷新提示，再启动白名单搜怪；搜怪自带等待出现和击杀确认，不再需要额外的击杀数据包判断。",
+                                "适合服务器有“Boss 已刷新/出现”提示，但实体加载时间不稳定的 Boss。",
+                                "把刷新提示和 Boss 名称改成实际文本。HUD 捕获不到时可改成 wait_until_packet_text。",
+                                actions(
+                                                action("wait_until_hud_text",
+                                                                params("contains", "Boss已刷新", "timeoutTicks", 0,
+                                                                                "timeoutSkipCount", 0)),
+                                                action("hunt", bossHuntParams(32, 10, 1, true, 3, false))));
+        }
+
+        private static ActionTemplate chunkRandomWalk() {
+                return template("chunk_random_walk", CATEGORY_CAPTURE,
+                                "当前区块内随机走动",
+                                "用表达式在玩家所在区块(16x16)内随机选一个坐标，!goto 过去，到达或超时后停一下。",
+                                "适合挂机防踢、区块内随机巡逻、刷怪点附近小范围游走。整个步骤循环执行即可不断换位置。",
+                                "sequence.tx / sequence.tz 是目标坐标；到达判定半径 2 格，超时 140 tick 后继续。想限制在别的范围，改 set_var 里的表达式。",
+                                actions(
+                                                action("set_var", params("name", "sequence.tx", "valueType", "number",
+                                                                "expression", "floor(player_x / 16) * 16 + floor(random() * 16)")),
+                                                action("set_var", params("name", "sequence.tz", "valueType", "number",
+                                                                "expression", "floor(player_z / 16) * 16 + floor(random() * 16)")),
+                                                action("command", params("command", "!goto ${sequence.tx} ${sequence.tz}")),
+                                                action("wait_until_expression", params("expressions",
+                                                                strings("abs(player_x - sequence.tx) <= 2 && abs(player_z - sequence.tz) <= 2"),
+                                                                "timeoutTicks", "140", "timeoutSkipCount", "0")),
+                                                action("delay", params("ticks", "20"))));
+        }
+
+        private static ActionTemplate randomWalkAroundAnchor() {
+                return template("random_walk_around_anchor", CATEGORY_CAPTURE,
+                                "围绕起点随机游走",
+                                "首次记录起点坐标，之后每轮在起点 ±半径 内随机选点前往，不会越走越远。",
+                                "适合刷怪点附近游走拉怪、挂机防踢但要求不离开某块区域。",
+                                "sequence.walk_radius 控制半径（默认 8）。label/goto_label 让本模板自循环；不需要循环时删掉最后的 goto_label。",
+                                actions(
+                                                action("set_var", params("name", "sequence.anchor_x", "valueType", "number",
+                                                                "expression", "player_block_x")),
+                                                action("set_var", params("name", "sequence.anchor_z", "valueType", "number",
+                                                                "expression", "player_block_z")),
+                                                action("set_var", params("name", "sequence.walk_radius", "value", 8,
+                                                                "valueType", "number")),
+                                                action("label", params("labelName", "anchor_walk_loop")),
+                                                action("set_var", params("name", "sequence.tx", "valueType", "number",
+                                                                "expression", "sequence.anchor_x + randomint(0 - sequence.walk_radius, sequence.walk_radius)")),
+                                                action("set_var", params("name", "sequence.tz", "valueType", "number",
+                                                                "expression", "sequence.anchor_z + randomint(0 - sequence.walk_radius, sequence.walk_radius)")),
+                                                action("command", params("command", "!goto ${sequence.tx} ${sequence.tz}")),
+                                                action("wait_until_expression", params("expressions",
+                                                                strings("abs(player_x - sequence.tx) <= 2 && abs(player_z - sequence.tz) <= 2"),
+                                                                "timeoutTicks", "160", "timeoutSkipCount", "0")),
+                                                action("delay", params("ticks", "20~60")),
+                                                action("goto_label", params("targetLabel", "anchor_walk_loop"))));
+        }
+
+        private static ActionTemplate timedLoopUntilDeadline() {
+                return template("timed_loop_until_deadline", CATEGORY_FLOW,
+                                "限时循环（按秒计数）",
+                                "每轮执行一段动作后累加耗时变量，达到时长上限就退出循环。",
+                                "适合“刷 10 分钟后去补给/换线”这类按时长切换的流程。",
+                                "sequence.loop_limit_s 为总秒数（默认 600）；每轮固定 delay 20 tick ≈ 1 秒，按实际每轮耗时调整 sequence.loop_cost_s。把 system_message 替换成你的循环体，可以有多个动作。",
+                                actions(
+                                                action("set_var", params("name", "sequence.loop_elapsed_s", "value", 0,
+                                                                "valueType", "number")),
+                                                action("set_var", params("name", "sequence.loop_limit_s", "value", 600,
+                                                                "valueType", "number")),
+                                                action("set_var", params("name", "sequence.loop_cost_s", "value", 1,
+                                                                "valueType", "number")),
+                                                action("label", params("labelName", "timed_loop")),
+                                                action("condition_expression", params("expressions",
+                                                                strings("sequence.loop_elapsed_s < sequence.loop_limit_s"),
+                                                                "skipCount", 4)),
+                                                action("system_message", params("message", "循环体：已运行 ${sequence.loop_elapsed_s} 秒")),
+                                                action("delay", params("ticks", "20", "normalizeDelayTo20Tps", true)),
+                                                action("set_var", params("name", "sequence.loop_elapsed_s", "valueType", "number",
+                                                                "expression", "sequence.loop_elapsed_s + sequence.loop_cost_s")),
+                                                action("goto_label", params("targetLabel", "timed_loop")),
+                                                action("system_message", params("message", "已达到时长上限，继续后续动作"))));
+        }
+
+        private static ActionTemplate countedRoundsThenStop() {
+                return template("counted_rounds_then_stop", CATEGORY_FLOW,
+                                "执行 N 轮后停止序列",
+                                "用变量记录本序列已运行轮数，每次步骤跑到这里 +1，达到上限就停止当前序列。",
+                                "适合整条序列循环运行时，只想跑固定轮数（比如每天 20 轮副本）。",
+                                "放在步骤末尾。sequence.round_limit 为轮数上限（默认 20）。首轮初始化依赖 sequence.round_count 不存在时视为 0，若你的序列会重置变量请改成全局变量 global.*。",
+                                actions(
+                                                action("set_var", params("name", "sequence.round_limit", "value", 20,
+                                                                "valueType", "number")),
+                                                action("set_var", params("name", "sequence.round_count", "valueType", "number",
+                                                                "expression", "(sequence.round_count ?? 0) + 1")),
+                                                action("system_message", params("message", "第 ${sequence.round_count} / ${sequence.round_limit} 轮")),
+                                                action("condition_expression", params("expressions",
+                                                                strings("sequence.round_count >= sequence.round_limit"),
+                                                                "skipCount", 2)),
+                                                action("system_message", params("message", "已完成全部轮数，停止序列")),
+                                                action("stop_current_sequence", params())));
+        }
+
+        private static ActionTemplate healthLowRetreatAndRecover() {
+                return template("health_low_retreat_recover", CATEGORY_SUPPORT,
+                                "低血量撤离并回血",
+                                "血量低于阈值时执行撤离指令，原地等血量回满再继续；血量正常则直接跳过。",
+                                "适合刷怪路线中途插入的安全检查。",
+                                "sequence.low_hp 为撤离阈值（默认 8，满血 20），sequence.safe_hp 为恢复阈值。把 /home 换成你的撤离方式。",
+                                actions(
+                                                action("set_var", params("name", "sequence.low_hp", "value", 8,
+                                                                "valueType", "number")),
+                                                action("set_var", params("name", "sequence.safe_hp", "value", 18,
+                                                                "valueType", "number")),
+                                                action("condition_expression", params("expressions",
+                                                                strings("player_health <= sequence.low_hp"),
+                                                                "skipCount", 3)),
+                                                action("command", params("command", "/home")),
+                                                action("wait_until_expression", params("expressions",
+                                                                strings("player_health >= sequence.safe_hp"),
+                                                                "timeoutTicks", "1200", "timeoutSkipCount", "0")),
+                                                action("system_message", params("message", "血量已恢复到 ${player_health}，继续"))));
+        }
+
+        private static ActionTemplate waitHungerThenContinue() {
+                return template("wait_hunger_then_continue", CATEGORY_SUPPORT,
+                                "饥饿值不足时自动进食并等待",
+                                "饥饿值低于阈值时开启自动进食，等待吃到目标值后继续。",
+                                "适合长时间挂机、跑图前的状态检查。",
+                                "sequence.min_food 默认 14（满 20）。背包里需要有食物；食物关键字在 autoeat 的 foodKeywordsText 中修改。",
+                                actions(
+                                                action("set_var", params("name", "sequence.min_food", "value", 14,
+                                                                "valueType", "number")),
+                                                action("condition_expression", params("expressions",
+                                                                strings("player_food < sequence.min_food"),
+                                                                "skipCount", 2)),
+                                                action("autoeat", params("enabled", true, "foodLevelThreshold", 18,
+                                                                "autoMoveFoodEnabled", true, "eatWithLookDown", false,
+                                                                "targetHotbarSlot", 9, "foodKeywordsText", "")),
+                                                action("wait_until_expression", params("expressions",
+                                                                strings("player_food >= 18"),
+                                                                "timeoutTicks", "600", "timeoutSkipCount", "0"))));
+        }
+
+        private static ActionTemplate inventoryFullDepositThenReturn() {
+                return template("inventory_full_deposit_return", CATEGORY_INVENTORY,
+                                "背包满了就去存仓再回来",
+                                "扫描主背包 36 格，已占用格数达到阈值时记录当前位置、执行存仓子序列，然后 !goto 回原位。",
+                                "适合刷怪/挖矿掉落多、需要定期清背包的长时间挂机。",
+                                "sequence.inv_full_at 默认 34 格；“存仓序列”换成你实际的存仓/出售序列名。回原位用 !goto，需要 Baritone。",
+                                actions(
+                                                action("capture_inventory_slot", params("varName", "sequence.inv",
+                                                                "slotArea", "MAIN", "slotIndices",
+                                                                "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35")),
+                                                action("set_var", params("name", "sequence.inv_full_at", "value", 34,
+                                                                "valueType", "number")),
+                                                action("condition_expression", params("expressions",
+                                                                strings("sequence.inv_filled_count >= sequence.inv_full_at"),
+                                                                "skipCount", 6)),
+                                                action("set_var", params("name", "sequence.back_x", "valueType", "number",
+                                                                "expression", "player_block_x")),
+                                                action("set_var", params("name", "sequence.back_y", "valueType", "number",
+                                                                "expression", "player_block_y")),
+                                                action("set_var", params("name", "sequence.back_z", "valueType", "number",
+                                                                "expression", "player_block_z")),
+                                                action("run_sequence", params("sequenceName", "存仓序列",
+                                                                "executeMode", "always", "backgroundExecution", false)),
+                                                action("command", params("command",
+                                                                "!goto ${sequence.back_x} ${sequence.back_y} ${sequence.back_z}")),
+                                                action("wait_until_expression", params("expressions",
+                                                                strings("abs(player_x - sequence.back_x) <= 2 && abs(player_z - sequence.back_z) <= 2"),
+                                                                "timeoutTicks", "1200", "timeoutSkipCount", "0"))));
+        }
+
+        private static ActionTemplate retryCommandUntilArrived() {
+                return template("retry_command_until_arrived", CATEGORY_TELEPORT,
+                                "传送指令失败自动重试",
+                                "执行传送指令后检查是否到达目标区域，没到就延迟重试，超过次数提示失败。",
+                                "适合 /warp、/home、菜单传送偶尔失败或被卡传送冷却的场景。",
+                                "改目标坐标 sequence.dest_x / dest_z、指令和次数。到达判定半径 6 格。",
+                                actions(
+                                                action("set_var", params("name", "sequence.dest_x", "value", 0,
+                                                                "valueType", "number")),
+                                                action("set_var", params("name", "sequence.dest_z", "value", 0,
+                                                                "valueType", "number")),
+                                                action("retry_block", params("conditionsText",
+                                                                "abs(player_x - sequence.dest_x) <= 6 && abs(player_z - sequence.dest_z) <= 6",
+                                                                "bodyCount", 2, "retryCount", 4,
+                                                                "retryDelayTicks", 60, "attemptVar", "sequence.tp_attempt")),
+                                                action("command", params("command", "/warp 目标地图")),
+                                                action("delay", params("ticks", "60", "normalizeDelayTo20Tps", true)),
+                                                action("condition_expression", params("expressions",
+                                                                strings("abs(player_x - sequence.dest_x) > 6 || abs(player_z - sequence.dest_z) > 6"),
+                                                                "skipCount", 1)),
+                                                action("system_message", params("message", "传送重试 ${sequence.tp_attempt} 次仍未到达"))));
+        }
+
+        private static ActionTemplate rememberPositionAndReturn() {
+                return template("remember_position_and_return", CATEGORY_CAPTURE,
+                                "记住当前位置，办完事再回来",
+                                "把当前方块坐标存入变量，中间执行任意动作，最后 !goto 回到记录点并等待到达。",
+                                "适合中途去补给/交任务/开菜单后需要回原刷怪点。",
+                                "中间的 system_message 换成你的动作；sequence.ret_* 可以在其他动作里用 ${sequence.ret_x} 引用。",
+                                actions(
+                                                action("set_var", params("name", "sequence.ret_x", "valueType", "number",
+                                                                "expression", "player_block_x")),
+                                                action("set_var", params("name", "sequence.ret_y", "valueType", "number",
+                                                                "expression", "player_block_y")),
+                                                action("set_var", params("name", "sequence.ret_z", "valueType", "number",
+                                                                "expression", "player_block_z")),
+                                                action("system_message", params("message",
+                                                                "已记录 ${sequence.ret_x} ${sequence.ret_y} ${sequence.ret_z}，此处插入中途动作")),
+                                                action("command", params("command",
+                                                                "!goto ${sequence.ret_x} ${sequence.ret_y} ${sequence.ret_z}")),
+                                                action("wait_until_expression", params("expressions",
+                                                                strings("abs(player_x - sequence.ret_x) <= 1.5 && abs(player_z - sequence.ret_z) <= 1.5"),
+                                                                "timeoutTicks", "1200", "timeoutSkipCount", "0"))));
+        }
+
+        private static ActionTemplate nearestHostileApproachAndHunt() {
+                return template("nearest_target_approach_hunt", CATEGORY_COMBAT,
+                                "扫描远处目标，走过去再搜怪",
+                                "大半径扫描目标实体，找到就 !goto 到它的坐标附近，再用小半径中心搜怪击杀；找不到直接跳过。",
+                                "适合目标分散、搜怪半径够不着但在视野里的刷怪点。",
+                                "改 entityName 关键字和扫描半径。走到距离 6 格内或 200 tick 超时后开始搜怪。",
+                                actions(
+                                                action("capture_nearby_entity", params("varName", "sequence.far_target",
+                                                                "entityName", "目标名称关键字", "radius", 48)),
+                                                action("condition_expression", params("expressions",
+                                                                strings("sequence.far_target_found == true"),
+                                                                "skipCount", 3)),
+                                                action("command", params("command",
+                                                                "!goto ${sequence.far_target_block_x} ${sequence.far_target_block_y} ${sequence.far_target_block_z}")),
+                                                action("wait_until_expression", params("expressions",
+                                                                strings("abs(player_x - sequence.far_target_x) <= 6 && abs(player_z - sequence.far_target_z) <= 6"),
+                                                                "timeoutTicks", "200", "timeoutSkipCount", "0")),
+                                                action("hunt", params("radius", 12, "entityType", "hostile",
+                                                                "huntUpRange", 6, "huntDownRange", 6, "noTargetSkipCount", 0,
+                                                                "enableNameWhitelist", true, "nameWhitelistText", "目标名称关键字",
+                                                                "showHuntRange", true))));
+        }
+
+        private static ActionTemplate roundRobinPointsByCounter() {
+                return template("round_robin_points_by_counter", CATEGORY_FLOW,
+                                "按计数轮换刷怪点",
+                                "用计数变量 % 点数 选出本轮的点位，switch_var 跳到对应的 !goto，下次自动换下一个点。",
+                                "适合多个刷新点轮流刷、避免一直蹲同一点。",
+                                "sequence.rr_points 为点数（默认 3），casesText 和后面的 !goto 坐标按点数增减。整条序列循环运行时每轮换一个点。",
+                                actions(
+                                                action("set_var", params("name", "sequence.rr_points", "value", 3,
+                                                                "valueType", "number")),
+                                                action("set_var", params("name", "sequence.rr_index", "valueType", "number",
+                                                                "expression", "(sequence.rr_round ?? 0) % sequence.rr_points")),
+                                                action("set_var", params("name", "sequence.rr_round", "valueType", "number",
+                                                                "expression", "(sequence.rr_round ?? 0) + 1")),
+                                                action("switch_var", params("sourceVar", "sequence.rr_index",
+                                                                "casesText", "0=2\n1=2\n2=2", "defaultCount", 0)),
+                                                action("command", params("command", "!goto 100 64 100")),
+                                                action("goto_label", params("targetLabel", "rr_arrived")),
+                                                action("command", params("command", "!goto 200 64 100")),
+                                                action("goto_label", params("targetLabel", "rr_arrived")),
+                                                action("command", params("command", "!goto 200 64 200")),
+                                                action("goto_label", params("targetLabel", "rr_arrived")),
+                                                action("label", params("labelName", "rr_arrived")),
+                                                action("system_message", params("message", "本轮点位 #${sequence.rr_index}"))));
         }
 
         private static List<ActionData> actions(ActionData... actions) {

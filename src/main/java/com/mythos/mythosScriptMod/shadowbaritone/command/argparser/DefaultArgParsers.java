@@ -23,8 +23,13 @@ import com.mythos.mythosScriptMod.shadowbaritone.api.command.argument.ICommandAr
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 public class DefaultArgParsers {
+
+    /** Shared float/double format regex — compiled once instead of per call. */
+    private static final Pattern FLOAT_DOUBLE_PATTERN =
+            Pattern.compile("^([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)|)$");
 
     public enum IntArgumentParser implements IArgParser.Stateless<Integer> {
         INSTANCE;
@@ -65,7 +70,7 @@ public class DefaultArgParsers {
         @Override
         public Float parseArg(ICommandArgument arg) throws RuntimeException {
             String value = arg.getValue();
-            if (!value.matches("^([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)|)$")) {
+            if (!FLOAT_DOUBLE_PATTERN.matcher(value).matches()) {
                 throw new IllegalArgumentException("failed float format check");
             }
             return Float.parseFloat(value);
@@ -83,7 +88,7 @@ public class DefaultArgParsers {
         @Override
         public Double parseArg(ICommandArgument arg) throws RuntimeException {
             String value = arg.getValue();
-            if (!value.matches("^([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)|)$")) {
+            if (!FLOAT_DOUBLE_PATTERN.matcher(value).matches()) {
                 throw new IllegalArgumentException("failed double format check");
             }
             return Double.parseDouble(value);

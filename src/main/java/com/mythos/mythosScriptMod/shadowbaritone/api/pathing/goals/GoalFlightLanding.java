@@ -21,7 +21,7 @@ public class GoalFlightLanding extends GoalBlock {
     public boolean isInGoal(int x, int y, int z) {
         long xDiff = (long) x - this.x;
         long zDiff = (long) z - this.z;
-        long range = FlightPathingConfig.arrivalRange;
+        long range = FlightPathingConfig.cfg().arrivalRange;
         return y == this.y && xDiff * xDiff + zDiff * zDiff <= range * range;
     }
 
@@ -30,7 +30,7 @@ public class GoalFlightLanding extends GoalBlock {
         double xDiff = (double) x - this.x;
         double zDiff = (double) z - this.z;
         double horizontalDistance = Math.max(0.0D,
-                Math.sqrt(xDiff * xDiff + zDiff * zDiff) - FlightPathingConfig.arrivalRange);
+                Math.sqrt(xDiff * xDiff + zDiff * zDiff) - FlightPathingConfig.cfg().arrivalRange);
         return GoalYLevel.calculate(this.y, y) + GoalXZ.calculate(horizontalDistance, 0.0D);
     }
 }

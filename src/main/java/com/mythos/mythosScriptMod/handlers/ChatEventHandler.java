@@ -168,7 +168,7 @@ public class ChatEventHandler {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onMouseInput(GuiScreenEvent.MouseInputEvent.Pre event) {
-        if (!ChatOptimizationConfig.INSTANCE.enableSmartCopy || !(event.getGui() instanceof GuiChat)) {
+        if (!ChatOptimizationConfig.instance().enableSmartCopy || !(event.getGui() instanceof GuiChat)) {
             return;
         }
 

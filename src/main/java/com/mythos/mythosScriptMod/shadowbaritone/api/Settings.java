@@ -421,7 +421,7 @@ public final class Settings {
     /**
      * Enables the dedicated parkour planner and executor.
      */
-    public final Setting<Boolean> parkourMode = new Setting<>(true);
+    public final Setting<Boolean> parkourMode = new Setting<>(false);
 
     /**
      * Allow Baritone to use the player's existing flight capability for pathing.
@@ -457,6 +457,9 @@ public final class Settings {
 
     /** Records every client tick to a separate timestamped parkour JSONL file. */
     public final Setting<Boolean> parkourDebugLog = new Setting<>(false);
+
+    /** Records every blink-pathing hop to a separate timestamped blink JSONL file. */
+    public final Setting<Boolean> blinkDebugLog = new Setting<>(false);
 
     /**
      * Reuse previously solved parkour input sequences for the same goal instead

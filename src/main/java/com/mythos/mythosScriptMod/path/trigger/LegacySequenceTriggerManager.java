@@ -13,6 +13,7 @@ import com.mythos.mythosScriptMod.path.PathSequenceManager.PathSequence;
 import com.mythos.mythosScriptMod.path.runtime.ScopedRuntimeVariables;
 import com.mythos.mythosScriptMod.system.ProfileManager;
 import com.mythos.mythosScriptMod.mythosScriptMod;
+import com.mythos.mythosScriptMod.utils.JsonCopy;
 
 import java.io.Reader;
 import java.io.Writer;
@@ -789,164 +790,18 @@ public final class LegacySequenceTriggerManager {
                         "chat_miss|" + normalizedExpected);
     }
 
-    private static boolean matchesGuiOpen(JsonObject params, JsonObject eventData) {
-        String expectedTitle = getStringParam(params, "guiTitle");
-        String expectedClass = getStringParam(params, "guiClass");
-        String actualTitle = getStringValue(eventData, "title");
-        String actualGui = getStringValue(eventData, "gui");
-        if (!expectedTitle.isEmpty() && !safe(actualTitle).toLowerCase(Locale.ROOT)
-                .contains(expectedTitle.toLowerCase(Locale.ROOT))) {
-            return false;
-        }
-        if (!expectedClass.isEmpty() && !safe(actualGui).toLowerCase(Locale.ROOT)
-                .contains(expectedClass.toLowerCase(Locale.ROOT))) {
-            return false;
-        }
-        return true;
-    }
 
-    private static boolean matchesPacket(JsonObject params, JsonObject eventData) {
-        String packetText = getStringParam(params, "packetText");
-        String channel = getStringParam(params, "channel");
-        String direction = getStringParam(params, "direction");
-        if (!packetText.isEmpty()) {
-            String combined = (getStringValue(eventData, "packet") + " | "
-                    + getStringValue(eventData, "decoded") + " | "
-                    + getStringValue(eventData, "packetClass")).toLowerCase(Locale.ROOT);
-            if (!combined.contains(packetText.toLowerCase(Locale.ROOT))) {
-                return false;
-            }
-        }
-        if (!channel.isEmpty() && !getStringValue(eventData, "channel").toLowerCase(Locale.ROOT)
-                .contains(channel.toLowerCase(Locale.ROOT))) {
-            return false;
-        }
-        if (!direction.isEmpty() && !direction.equalsIgnoreCase(getStringValue(eventData, "direction"))) {
-            return false;
-        }
-        return true;
-    }
 
-    private static boolean matchesTimer(JsonObject params, JsonObject eventData) {
-        int intervalSeconds = Math.max(1, getIntParam(params, "intervalSeconds", 1));
-        long tick = getLongParam(eventData, "tick", 0L);
-        return intervalSeconds <= 1 || tick % (intervalSeconds * 20L) == 0L;
-    }
 
-    private static boolean matchesPlayerIdle(JsonObject params, JsonObject eventData) {
-        long requiredIdleMs = Math.max(0L, getLongParam(params, "idleMs", 1000L));
-        boolean excludePathTracking = getBooleanParam(params, "excludePathTracking", true);
-        boolean ignoreDamageReset = getBooleanParam(params, "ignoreDamageReset", false);
-        long actualIdleMs;
-        if (excludePathTracking) {
-            actualIdleMs = ignoreDamageReset
-                    ? Math.max(0L, getLongParam(eventData, "idleMsExcludingPathTrackingIgnoringDamage", 0L))
-                    : Math.max(0L, getLongParam(eventData, "idleMsExcludingPathTracking", 0L));
-        } else {
-            actualIdleMs = ignoreDamageReset
-                    ? Math.max(0L, getLongParam(eventData, "idleMsIgnoringDamage", 0L))
-                    : Math.max(0L, getLongParam(eventData, "idleMs", 0L));
-        }
-        return actualIdleMs >= requiredIdleMs;
-    }
 
-    private static boolean matchesHpLow(JsonObject params, JsonObject eventData) {
-        double threshold = getDoubleParam(params, "hpThreshold", 6.0D);
-        double hp = getDoubleParam(eventData, "hp", Double.MAX_VALUE);
-        return hp <= threshold;
-    }
 
-    private static boolean matchesFoodLow(JsonObject params, JsonObject eventData) {
-        double threshold = getDoubleParam(params, "foodThreshold", 12.0D);
-        double food = getDoubleParam(eventData, "food", Double.MAX_VALUE);
-        return food <= threshold;
-    }
 
-    private static boolean matchesEntityNearby(JsonObject params, JsonObject eventData) {
-        String entityText = getStringParam(params, "entityText");
-        int minCount = Math.max(0, getIntParam(params, "minCount", 1));
-        long count = getLongParam(eventData, "count", 0L);
-        if (count < minCount) {
-            return false;
-        }
-        if (entityText.isEmpty()) {
-            return true;
-        }
-        return getStringValue(eventData, "after").toLowerCase(Locale.ROOT)
-                .contains(entityText.toLowerCase(Locale.ROOT));
-    }
 
-    private static boolean matchesItemPickup(JsonObject params, JsonObject eventData) {
-        String itemText = getStringParam(params, "itemText");
-        int minCount = Math.max(0, getIntParam(params, "minCount", 1));
-        long count = getLongParam(eventData, "count", 0L);
-        if (count < minCount) {
-            return false;
-        }
-        if (itemText.isEmpty()) {
-            return true;
-        }
-        String itemName = getStringValue(eventData, "itemName");
-        String registryName = getStringValue(eventData, "registryName");
-        String combined = (itemName + " | " + registryName).toLowerCase(Locale.ROOT);
-        return combined.contains(itemText.toLowerCase(Locale.ROOT));
-    }
 
-    private static boolean matchesDamageEvent(JsonObject params, JsonObject eventData) {
-        double minDamage = getDoubleParam(params, "minDamage", 0.0D);
-        double damage = getDoubleParam(eventData, "damage", 0.0D);
-        if (damage < minDamage) {
-            return false;
-        }
-        String expectedSource = getStringParam(params, "damageSource");
-        if (expectedSource.isEmpty()) {
-            return true;
-        }
-        String actualSource = getStringValue(eventData, "damageSource");
-        return actualSource.toLowerCase(Locale.ROOT).contains(expectedSource.toLowerCase(Locale.ROOT));
-    }
 
-    private static boolean matchesAreaChanged(JsonObject params, JsonObject eventData) {
-        String fromText = getStringParam(params, "fromText");
-        String toText = getStringParam(params, "toText");
-        if (!fromText.isEmpty() && !getStringValue(eventData, "from").toLowerCase(Locale.ROOT)
-                .contains(fromText.toLowerCase(Locale.ROOT))) {
-            return false;
-        }
-        if (!toText.isEmpty() && !getStringValue(eventData, "to").toLowerCase(Locale.ROOT)
-                .contains(toText.toLowerCase(Locale.ROOT))) {
-            return false;
-        }
-        return true;
-    }
 
-    private static boolean matchesInventoryFull(JsonObject params, JsonObject eventData) {
-        int minFilledSlots = Math.max(0, getIntParam(params, "minFilledSlots", 0));
-        long filledSlots = getLongParam(eventData, "filledSlots", 0L);
-        long totalSlots = getLongParam(eventData, "totalSlots", 0L);
-        long effectiveMin = minFilledSlots > 0 ? minFilledSlots : totalSlots;
-        return filledSlots >= effectiveMin;
-    }
 
-    private static boolean matchesTextParam(JsonObject params, String paramKey, JsonObject eventData, String dataKey) {
-        String expected = getStringParam(params, paramKey);
-        if (expected.isEmpty()) {
-            return true;
-        }
-        return getStringValue(eventData, dataKey).toLowerCase(Locale.ROOT)
-                .contains(expected.toLowerCase(Locale.ROOT));
-    }
 
-    private static boolean matchesChat(JsonObject params, JsonObject eventData) {
-        String expected = getStringParam(params, "chatText");
-        if (expected.isEmpty()) {
-            return true;
-        }
-        String normalizedExpected = expected.toLowerCase(Locale.ROOT);
-        return getStringValue(eventData, "message").toLowerCase(Locale.ROOT).contains(normalizedExpected)
-                || getStringValue(eventData, "displayedMessage").toLowerCase(Locale.ROOT)
-                        .contains(normalizedExpected);
-    }
 
     private static void writeTriggerContext(String triggerType, JsonObject eventData, TriggerRule rule) {
         Map<String, Object> triggerMap = new LinkedHashMap<>();
@@ -1182,7 +1037,7 @@ public final class LegacySequenceTriggerManager {
             return new JsonObject();
         }
         try {
-            return new JsonParser().parse(source.toString()).getAsJsonObject();
+            return JsonCopy.deepCopyObject(source);
         } catch (Exception ignored) {
             return new JsonObject();
         }

@@ -159,9 +159,6 @@ public class InventoryViewerManager {
         return copiedTargetName;
     }
 
-    public static synchronized long getCopiedAt() {
-        return copiedAt;
-    }
 
     public static synchronized int getCopyVersion() {
         return copyVersion;

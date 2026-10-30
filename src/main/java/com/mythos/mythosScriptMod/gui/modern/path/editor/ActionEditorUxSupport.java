@@ -15,7 +15,7 @@ import net.minecraft.client.resources.I18n;
 public final class ActionEditorUxSupport {
     private static final Set<String> EMPTY_PARAM_ACTIONS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
             "disconnect", "hidecurrentgui", "close_container_window", "restart_sequence",
-            "no_stop_navigation", "debug_print_gui_summary", "runlastsequence")));
+            "no_stop_navigation", "debug_print_gui_summary")));
 
     private static final Set<String> HOTBAR_KEYS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
             "targetHotbarSlot", "tempslot")));
@@ -35,9 +35,6 @@ public final class ActionEditorUxSupport {
     private ActionEditorUxSupport() {
     }
 
-    public static boolean isEmptyParamAction(String type) {
-        return EMPTY_PARAM_ACTIONS.contains(normalize(type));
-    }
 
     public static String emptyParamTitle(String type) {
         return I18n.format("gui.path.action_editor.empty.no_params");
@@ -57,13 +54,7 @@ public final class ActionEditorUxSupport {
         return COORD_KEYS.contains(key) || "yaw".equals(key) || "pitch".equals(key) || "x".equals(key) || "y".equals(key);
     }
 
-    public static boolean isKeyValueKey(String key) {
-        return KEY_VALUE_KEYS.contains(key);
-    }
 
-    public static boolean isLineListKey(String key) {
-        return LINE_LIST_KEYS.contains(key);
-    }
 
     public static boolean isClickButtonKey(String type, String key) {
         if (!BUTTON_KEYS.contains(key)) {

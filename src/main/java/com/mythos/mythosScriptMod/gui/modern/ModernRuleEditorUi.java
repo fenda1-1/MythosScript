@@ -172,18 +172,6 @@ public final class ModernRuleEditorUi {
                 Math.max(2, grown / 2), thumbColor);
     }
 
-    /** Draws a non-destructive rounded validation outline around an existing control. */
-    public static void drawValidationBorder(int x, int y, int width, int height) {
-        if (width <= 0 || height <= 0) {
-            return;
-        }
-        int color = 0xFFE06A78;
-        int stroke = 2;
-        ModernUiRenderer.drawRoundedRect(x - 2, y - 2, width + 4, stroke, 1, color);
-        ModernUiRenderer.drawRoundedRect(x - 2, y + height, width + 4, stroke, 1, color);
-        ModernUiRenderer.drawRoundedRect(x - 2, y, stroke, Math.max(1, height), 1, color);
-        ModernUiRenderer.drawRoundedRect(x + width, y, stroke, Math.max(1, height), 1, color);
-    }
 
     public static boolean contains(int x, int y, int width, int height, int mouseX, int mouseY) {
         return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;

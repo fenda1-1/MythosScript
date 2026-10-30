@@ -8,6 +8,7 @@ import net.minecraft.client.resources.I18n;
  * 每个枚举都包含一个显示名称和描述。
  */
 public enum BindableAction {
+    OPEN_MENU("keybind.action.open_menu.name", "keybind.action.open_menu.desc"),
     OPEN_COMMAND_PALETTE("keybind.action.open_command_palette.name", "keybind.action.open_command_palette.desc"),
     CLOSE_ACTIVE_TAB("keybind.action.close_active_tab.name", "keybind.action.close_active_tab.desc"),
     CLOSE_ALL_TABS("keybind.action.close_all_tabs.name", "keybind.action.close_all_tabs.desc"),
@@ -227,7 +228,4 @@ public enum BindableAction {
         return featureGroup != null && !featureId.isEmpty();
     }
 
-    public boolean isMovementFeatureToggle() {
-        return featureGroup == FeatureGroup.MOVEMENT;
-    }
 }

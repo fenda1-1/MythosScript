@@ -28,6 +28,19 @@ public final class McpScreenshot {
         if (minecraft.displayWidth <= 0 || minecraft.displayHeight <= 0
                 || (long) minecraft.displayWidth * minecraft.displayHeight > 8388608)
             throw new IllegalStateException("Framebuffer dimensions outside screenshot budget");
+        // An unmounted Nexus session has no rendered framebuffer — its world is
+        // never drawn (no RenderGlobal). An offscreen renderWorldPass produces a
+        // black frame, so fail honestly instead of shipping a black png.
+        if (parameters.has("_nexusSession")) {
+            String mounted = mountedUsername();
+            if (mounted == null) mounted = "<you>"; // null = human mounted
+            String want = parameters.get("_nexusSession").getAsString();
+            if (!mounted.equalsIgnoreCase(want)) {
+                return object("available", false, "mode", "unmounted_session",
+                        "reason", "Session '" + want + "' is not mounted; its world has no rendered framebuffer. Mount it (mythos_nexus_mount) or use mythos_worldview for terrain data.",
+                        "mounted", mounted);
+            }
+        }
         BufferedImage source = ScreenShotHelper.createScreenshot(minecraft.displayWidth, minecraft.displayHeight, minecraft.getFramebuffer());
         double scale = Math.min(width / (double) source.getWidth(), height / (double) source.getHeight());
         int scaledWidth = Math.max(1, (int) (source.getWidth() * scale));
@@ -53,6 +66,15 @@ public final class McpScreenshot {
         }
         return object("available", true, "mode", "framebuffer", "path", destination.toAbsolutePath().toString(),
                 "width", scaledWidth, "height", scaledHeight, "timestampMs", System.currentTimeMillis(), "renderer", vendor);
+    }
+
+    private static String mountedUsername() {
+        try {
+            Class<?> ns = Class.forName("com.mythos.mythosScriptMod.mcp.NexusSessions");
+            return (String) ns.getMethod("mountedUsername").invoke(null);
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     private static boolean isStubRendering() {

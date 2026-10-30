@@ -79,9 +79,6 @@ public class TerrainScannerHandler {
             return scanning;
         }
 
-        public int getRadius() {
-            return radius;
-        }
 
         public int getProcessedBlocks() {
             return processedBlocks;
@@ -95,17 +92,11 @@ public class TerrainScannerHandler {
             return blockCount;
         }
 
-        public String getOutputFileName() {
-            return outputFileName;
-        }
 
         public String getErrorMessage() {
             return errorMessage;
         }
 
-        public long getStartedAt() {
-            return startedAt;
-        }
 
         public long getFinishedAt() {
             return finishedAt;

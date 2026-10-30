@@ -24,7 +24,7 @@ public class BaritoneSettingsConfig {
     }.getType();
 
     private static Path getLegacyConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("baritone_settings.json");
+        return ProfileManager.currentConfigFile("baritone_settings.json");
     }
 
     public static void load() {
@@ -62,14 +62,6 @@ public class BaritoneSettingsConfig {
         }
     }
 
-    public static void clearValue(String key) {
-        if (key == null) {
-            return;
-        }
-        if (KEY_USE_BUILTIN_BARITONE.equalsIgnoreCase(key)) {
-            forceBuiltinBaritone();
-        }
-    }
 
     public static void clearAll() {
         forceBuiltinBaritone();
@@ -79,9 +71,6 @@ public class BaritoneSettingsConfig {
         return true;
     }
 
-    public static void setUseBuiltinBaritone(boolean useBuiltinBaritone) {
-        forceBuiltinBaritone();
-    }
 
     public static String getNavigationModeDisplayName() {
         return "内置直调";

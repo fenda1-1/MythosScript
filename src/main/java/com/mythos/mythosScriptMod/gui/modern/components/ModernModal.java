@@ -16,14 +16,8 @@ public final class ModernModal implements ModernComponent {
     private boolean open;
     private boolean dismissOnOutsideClick = true;
 
-    public ModernModal setScreenBounds(ModernMainLayout.Rect screenBounds) {
-        this.screenBounds = screenBounds;
-        return this;
-    }
 
     public ModernModal setTitle(String title) { this.title = title == null ? "" : title; return this; }
-    public ModernModal setSubtitle(String subtitle) { this.subtitle = subtitle == null ? "" : subtitle; return this; }
-    public ModernModal setDismissOnOutsideClick(boolean value) { dismissOnOutsideClick = value; return this; }
     public ModernModal open() { open = true; return this; }
     public void close() { open = false; body.clearFocus(); }
     public boolean isOpen() { return open; }

@@ -49,14 +49,43 @@ import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class AutoEscapeHandler {
+
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        private final List<AutoEscapeRule> rules = new CopyOnWriteArrayList<>();
+        private final List<String> categories = new CopyOnWriteArrayList<>();
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) AutoEscapeHandler::loadConfig);
+            return config;
+        }
+    }
+
     public static final AutoEscapeHandler INSTANCE = new AutoEscapeHandler();
 
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final List<AutoEscapeRule> rules = new CopyOnWriteArrayList<>();
-    private static final List<String> categories = new CopyOnWriteArrayList<>();
     private static final String CATEGORY_DEFAULT = "默认";
-    private static boolean masterEnabled = true;
 
     private enum RuntimeState {
         IDLE,
@@ -65,20 +94,33 @@ public class AutoEscapeHandler {
         RESTARTING
     }
 
-    private static RuntimeState runtimeState = RuntimeState.IDLE;
-    private static AutoEscapeRule activeRule = null;
-    private static String activeEscapeSequenceName = "";
-    private static String pendingRestartSequenceName = "";
-    private static long restartExecuteAtMs = 0L;
-    private static long lastNotifyAtMs = 0L;
+    // --- 运行时状态（per-session，按 NexusSessions.currentTickOwner() 键控）---
+    private static final java.util.concurrent.ConcurrentHashMap<String, SessionRuntime> STATES =
+        new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static SessionRuntime rt() {
+        return STATES.computeIfAbsent(
+            com.mythos.mythosScriptMod.mcp.NexusSessions.currentTickOwner(),
+            k -> new SessionRuntime());
+    }
+
+    private static final class SessionRuntime {
+        boolean masterEnabled = true;
+        RuntimeState runtimeState = RuntimeState.IDLE;
+        AutoEscapeRule activeRule = null;
+        String activeEscapeSequenceName = "";
+        String pendingRestartSequenceName = "";
+        long restartExecuteAtMs = 0L;
+        long lastNotifyAtMs = 0L;
+    }
 
     private AutoEscapeHandler() {
     }
 
     public static synchronized void loadConfig() {
-        rules.clear();
-        categories.clear();
-        masterEnabled = true;
+        cfg().rules.clear();
+        cfg().categories.clear();
+        rt().masterEnabled = true;
 
         Path configFile = getConfigFile();
         if (!Files.exists(configFile)) {
@@ -94,8 +136,19 @@ public class AutoEscapeHandler {
 
             if (parsed != null && parsed.isJsonObject()) {
                 JsonObject root = parsed.getAsJsonObject();
-                if (root.has("masterEnabled") && root.get("masterEnabled").isJsonPrimitive()) {
-                    masterEnabled = root.get("masterEnabled").getAsBoolean();
+                Path runtimeFile = getRuntimeConfigFile();
+                if (Files.exists(runtimeFile)) {
+                    try (BufferedReader rr = Files.newBufferedReader(runtimeFile, StandardCharsets.UTF_8)) {
+                        JsonElement rp = new JsonParser().parse(rr);
+                        if (rp != null && rp.isJsonObject()) {
+                            JsonObject rj = rp.getAsJsonObject();
+                            if (rj.has("masterEnabled") && rj.get("masterEnabled").isJsonPrimitive()) {
+                                rt().masterEnabled = rj.get("masterEnabled").getAsBoolean();
+                            }
+                        }
+                    }
+                } else if (root.has("masterEnabled") && root.get("masterEnabled").isJsonPrimitive()) {
+                    rt().masterEnabled = root.get("masterEnabled").getAsBoolean();
                 }
                 if (root.has("categories") && root.get("categories").isJsonArray()) {
                     JsonArray categoryArray = root.getAsJsonArray("categories");
@@ -116,7 +169,7 @@ public class AutoEscapeHandler {
                 loadedRules = GSON.fromJson(parsed, listType);
             }
 
-            categories.addAll(loadedCategories);
+            cfg().categories.addAll(loadedCategories);
             if (loadedRules != null) {
                 for (AutoEscapeRule rule : loadedRules) {
                     if (rule == null) {
@@ -124,13 +177,13 @@ public class AutoEscapeHandler {
                     }
                     rule.normalize();
                     rule.resetRuntimeState();
-                    rules.add(rule);
+                    cfg().rules.add(rule);
                 }
             }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("加载自动逃离规则失败", e);
-            rules.clear();
-            categories.clear();
+            cfg().rules.clear();
+            cfg().categories.clear();
         }
 
         ensureCategoriesSynced();
@@ -145,12 +198,19 @@ public class AutoEscapeHandler {
             Files.createDirectories(configFile.getParent());
 
             JsonObject root = new JsonObject();
-            root.addProperty("masterEnabled", masterEnabled);
-            root.add("categories", GSON.toJsonTree(new ArrayList<>(categories)));
+            root.add("categories", GSON.toJsonTree(new ArrayList<>(cfg().categories)));
             root.add("rules", GSON.toJsonTree(snapshotRules()));
 
             try (BufferedWriter writer = Files.newBufferedWriter(configFile, StandardCharsets.UTF_8)) {
                 GSON.toJson(root, writer);
+            }
+
+            Path runtimeFile = getRuntimeConfigFile();
+            Files.createDirectories(runtimeFile.getParent());
+            JsonObject rjson = new JsonObject();
+            rjson.addProperty("masterEnabled", rt().masterEnabled);
+            try (BufferedWriter rw = Files.newBufferedWriter(runtimeFile, StandardCharsets.UTF_8)) {
+                GSON.toJson(rjson, rw);
             }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("保存自动逃离规则失败", e);
@@ -158,20 +218,22 @@ public class AutoEscapeHandler {
     }
 
     public static synchronized List<AutoEscapeRule> getRulesSnapshot() {
-        return new ArrayList<>(rules);
+        return new ArrayList<>(cfg().rules);
     }
 
     public static synchronized List<String> getCategoriesSnapshot() {
         ensureCategoriesSynced();
-        return new ArrayList<>(categories);
+        return new ArrayList<>(cfg().categories);
     }
 
+    public static boolean masterEnabled() { return rt().masterEnabled; }
+
     public static synchronized boolean isMasterEnabled() {
-        return masterEnabled;
+        return rt().masterEnabled;
     }
 
     public static synchronized void setMasterEnabled(boolean enabled) {
-        masterEnabled = enabled;
+        rt().masterEnabled = enabled;
         if (!enabled) {
             resetRuntimeState();
         }
@@ -188,11 +250,11 @@ public class AutoEscapeHandler {
                 normalized.add(normalizeCategory(category));
             }
         }
-        for (String category : categories) {
+        for (String category : cfg().categories) {
             normalized.add(normalizeCategory(category));
         }
-        categories.clear();
-        categories.addAll(normalized);
+        cfg().categories.clear();
+        cfg().categories.addAll(normalized);
         saveConfig();
     }
 
@@ -202,7 +264,7 @@ public class AutoEscapeHandler {
         if (containsCategoryIgnoreCase(normalized)) {
             return false;
         }
-        categories.add(normalized);
+        cfg().categories.add(normalized);
         saveConfig();
         return true;
     }
@@ -220,15 +282,15 @@ public class AutoEscapeHandler {
         }
 
         boolean changed = false;
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizedOld)) {
-                categories.set(i, normalizedNew);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizedOld)) {
+                cfg().categories.set(i, normalizedNew);
                 changed = true;
                 break;
             }
         }
 
-        for (AutoEscapeRule rule : rules) {
+        for (AutoEscapeRule rule : cfg().rules) {
             if (rule != null && normalizeCategory(rule.category).equalsIgnoreCase(normalizedOld)) {
                 rule.category = normalizedNew;
                 changed = true;
@@ -249,7 +311,7 @@ public class AutoEscapeHandler {
         ensureCategoriesSynced();
 
         boolean changed = removeCategoryIgnoreCase(normalized);
-        for (AutoEscapeRule rule : rules) {
+        for (AutoEscapeRule rule : cfg().rules) {
             if (rule != null && normalizeCategory(rule.category).equalsIgnoreCase(normalized)) {
                 rule.category = CATEGORY_DEFAULT;
                 changed = true;
@@ -266,7 +328,7 @@ public class AutoEscapeHandler {
     }
 
     public static synchronized void replaceAllRules(List<AutoEscapeRule> newRules) {
-        rules.clear();
+        cfg().rules.clear();
         if (newRules != null) {
             for (AutoEscapeRule rule : newRules) {
                 if (rule == null) {
@@ -274,7 +336,7 @@ public class AutoEscapeHandler {
                 }
                 rule.normalize();
                 rule.resetRuntimeState();
-                rules.add(rule);
+                cfg().rules.add(rule);
             }
         }
         ensureCategoriesSynced();
@@ -283,20 +345,21 @@ public class AutoEscapeHandler {
     }
 
     public static boolean isEmergencyLockActive() {
-        return runtimeState != RuntimeState.IDLE;
+        return rt().runtimeState != RuntimeState.IDLE;
     }
 
     public static boolean isEscapeSequenceRunning() {
-        return runtimeState == RuntimeState.ESCAPING;
+        return rt().runtimeState == RuntimeState.ESCAPING;
     }
 
     public static void resetRuntimeState() {
-        runtimeState = RuntimeState.IDLE;
-        activeRule = null;
-        activeEscapeSequenceName = "";
-        pendingRestartSequenceName = "";
-        restartExecuteAtMs = 0L;
-        lastNotifyAtMs = 0L;
+        SessionRuntime rt = rt();
+        rt.runtimeState = RuntimeState.IDLE;
+        rt.activeRule = null;
+        rt.activeEscapeSequenceName = "";
+        rt.pendingRestartSequenceName = "";
+        rt.restartExecuteAtMs = 0L;
+        rt.lastNotifyAtMs = 0L;
         for (AutoEscapeRule rule : snapshotRules()) {
             rule.resetRuntimeState();
         }
@@ -309,12 +372,14 @@ public class AutoEscapeHandler {
         }
         PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("auto_escape");
         try {
-        if (event.phase != TickEvent.Phase.START || mc.player == null || mc.world == null || event.player != mc.player) {
+        if (event.phase != TickEvent.Phase.START || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null || event.player != com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer()) {
             return;
         }
 
-        if (!isMasterEnabled()) {
-            if (runtimeState != RuntimeState.IDLE) {
+        SessionRuntime rt = rt();
+
+        if (!rt.masterEnabled) {
+            if (rt.runtimeState != RuntimeState.IDLE) {
                 resetRuntimeState();
             }
             return;
@@ -329,7 +394,7 @@ public class AutoEscapeHandler {
                 continue;
             }
             rule.normalize();
-            boolean matched = rule.enabled && hasMatchingThreatNearby(mc.player, rule);
+            boolean matched = rule.enabled && hasMatchingThreatNearby(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer(), rule);
             if (matched) {
                 anyThreatPresent = true;
                 if (candidateRule == null && !rule.triggerLatched && hasValidEscapeSequence(rule)) {
@@ -341,34 +406,34 @@ public class AutoEscapeHandler {
             }
         }
 
-        if (runtimeState == RuntimeState.ESCAPING) {
-            if (!PathSequenceEventListener.instance.isTracking()) {
+        if (rt.runtimeState == RuntimeState.ESCAPING) {
+            if (!PathSequenceEventListener.foregroundRunner().isTracking()) {
                 onEscapeSequenceCompleted();
             }
             return;
         }
 
-        if (runtimeState == RuntimeState.RESTARTING) {
-            if (!PathSequenceEventListener.instance.isTracking()) {
+        if (rt.runtimeState == RuntimeState.RESTARTING) {
+            if (!PathSequenceEventListener.foregroundRunner().isTracking()) {
                 onRestartSequenceCompleted();
             }
             return;
         }
 
-        if (runtimeState == RuntimeState.WAITING_RESTART && shouldIgnoreTargetsUntilRestartComplete()) {
-            if (pendingRestartSequenceName == null || pendingRestartSequenceName.trim().isEmpty()) {
+        if (rt.runtimeState == RuntimeState.WAITING_RESTART && shouldIgnoreTargetsUntilRestartComplete()) {
+            if (rt.pendingRestartSequenceName == null || rt.pendingRestartSequenceName.trim().isEmpty()) {
                 resetRuntimeState();
                 return;
             }
 
             if (anyThreatPresent) {
                 // 威胁仍在范围内：顺延重启计时，等目标离开后才开始倒计时
-                restartExecuteAtMs = System.currentTimeMillis()
-                        + Math.max(0, activeRule.restartDelaySeconds) * 1000L;
+                rt.restartExecuteAtMs = System.currentTimeMillis()
+                        + Math.max(0, rt.activeRule.restartDelaySeconds) * 1000L;
                 return;
             }
 
-            if (System.currentTimeMillis() >= restartExecuteAtMs) {
+            if (System.currentTimeMillis() >= rt.restartExecuteAtMs) {
                 runPendingRestartSequence();
             }
             return;
@@ -379,20 +444,20 @@ public class AutoEscapeHandler {
             return;
         }
 
-        if (runtimeState == RuntimeState.WAITING_RESTART) {
-            if (pendingRestartSequenceName == null || pendingRestartSequenceName.trim().isEmpty()) {
+        if (rt.runtimeState == RuntimeState.WAITING_RESTART) {
+            if (rt.pendingRestartSequenceName == null || rt.pendingRestartSequenceName.trim().isEmpty()) {
                 resetRuntimeState();
                 return;
             }
 
             if (anyThreatPresent) {
                 // 威胁仍在范围内：顺延重启计时，等目标离开后才开始倒计时
-                restartExecuteAtMs = System.currentTimeMillis()
-                        + Math.max(0, activeRule == null ? 0 : activeRule.restartDelaySeconds) * 1000L;
+                rt.restartExecuteAtMs = System.currentTimeMillis()
+                        + Math.max(0, rt.activeRule == null ? 0 : rt.activeRule.restartDelaySeconds) * 1000L;
                 return;
             }
 
-            if (System.currentTimeMillis() >= restartExecuteAtMs) {
+            if (System.currentTimeMillis() >= rt.restartExecuteAtMs) {
                 runPendingRestartSequence();
             }
         }
@@ -402,29 +467,30 @@ public class AutoEscapeHandler {
     }
 
     private static void onEscapeSequenceCompleted() {
-        if (activeRule == null) {
+        SessionRuntime rt = rt();
+        if (rt.activeRule == null) {
             resetRuntimeState();
             return;
         }
 
-        if (activeRule.restartEnabled) {
+        if (rt.activeRule.restartEnabled) {
             // Empty restart sequence means "restart the current (escape) sequence".
-            String restartName = activeRule.restartSequenceName == null
-                    ? "" : activeRule.restartSequenceName.trim();
-            if (restartName.isEmpty() && activeRule.escapeSequenceName != null) {
-                restartName = activeRule.escapeSequenceName.trim();
+            String restartName = rt.activeRule.restartSequenceName == null
+                    ? "" : rt.activeRule.restartSequenceName.trim();
+            if (restartName.isEmpty() && rt.activeRule.escapeSequenceName != null) {
+                restartName = rt.activeRule.escapeSequenceName.trim();
             }
             if (restartName.isEmpty()) {
                 notifyPlayer(TextFormatting.AQUA + "[自动逃离] " + TextFormatting.GREEN + "逃离序列已完成。");
                 resetRuntimeState();
                 return;
             }
-            pendingRestartSequenceName = restartName;
-            restartExecuteAtMs = System.currentTimeMillis() + Math.max(0, activeRule.restartDelaySeconds) * 1000L;
-            runtimeState = RuntimeState.WAITING_RESTART;
+            rt.pendingRestartSequenceName = restartName;
+            rt.restartExecuteAtMs = System.currentTimeMillis() + Math.max(0, rt.activeRule.restartDelaySeconds) * 1000L;
+            rt.runtimeState = RuntimeState.WAITING_RESTART;
             notifyPlayer(TextFormatting.AQUA + "[自动逃离] " + TextFormatting.GREEN
                     + "逃离序列已完成，将在 "
-                    + TextFormatting.YELLOW + Math.max(0, activeRule.restartDelaySeconds)
+                    + TextFormatting.YELLOW + Math.max(0, rt.activeRule.restartDelaySeconds)
                     + TextFormatting.GREEN + " 秒后执行后续序列。");
             return;
         }
@@ -438,7 +504,8 @@ public class AutoEscapeHandler {
     }
 
     private static void runPendingRestartSequence() {
-        String sequenceName = pendingRestartSequenceName == null ? "" : pendingRestartSequenceName.trim();
+        SessionRuntime rt = rt();
+        String sequenceName = rt.pendingRestartSequenceName == null ? "" : rt.pendingRestartSequenceName.trim();
         if (sequenceName.isEmpty()) {
             resetRuntimeState();
             return;
@@ -456,9 +523,9 @@ public class AutoEscapeHandler {
         notifyPlayer(TextFormatting.AQUA + "[自动逃离] " + TextFormatting.GREEN
                 + "开始执行后续序列: " + TextFormatting.WHITE + sequenceName);
         if (shouldIgnoreTargetsUntilRestartComplete()) {
-            pendingRestartSequenceName = "";
-            restartExecuteAtMs = 0L;
-            runtimeState = RuntimeState.RESTARTING;
+            rt.pendingRestartSequenceName = "";
+            rt.restartExecuteAtMs = 0L;
+            rt.runtimeState = RuntimeState.RESTARTING;
             return;
         }
         resetRuntimeState();
@@ -479,11 +546,12 @@ public class AutoEscapeHandler {
             return;
         }
 
-        activeRule = rule;
-        activeEscapeSequenceName = sequenceName;
-        pendingRestartSequenceName = "";
-        restartExecuteAtMs = 0L;
-        runtimeState = RuntimeState.ESCAPING;
+        SessionRuntime rt = rt();
+        rt.activeRule = rule;
+        rt.activeEscapeSequenceName = sequenceName;
+        rt.pendingRestartSequenceName = "";
+        rt.restartExecuteAtMs = 0L;
+        rt.runtimeState = RuntimeState.ESCAPING;
 
         stopCurrentSequenceImmediately();
         PathSequenceManager.runPathSequenceOnce(sequenceName);
@@ -495,14 +563,14 @@ public class AutoEscapeHandler {
     private static void stopCurrentSequenceImmediately() {
         EmbeddedNavigationHandler.INSTANCE.stop();
         PathSequenceManager.clearRunSequenceCallStack();
-        if (PathSequenceEventListener.instance.isTracking()) {
-            PathSequenceEventListener.instance.stopTracking();
+        if (PathSequenceEventListener.foregroundRunner().isTracking()) {
+            PathSequenceEventListener.foregroundRunner().stopTracking();
         }
         GuiInventory.isLooping = false;
     }
 
     private static boolean hasMatchingThreatNearby(EntityPlayerSP player, AutoEscapeRule rule) {
-        if (player == null || mc.world == null || rule == null) {
+        if (player == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null || rule == null) {
             return false;
         }
         if (isBlockedByAreaBlacklist(player, rule)) {
@@ -512,7 +580,7 @@ public class AutoEscapeHandler {
         double range = rule.detectionRange <= 0 ? AutoEscapeRule.DEFAULT_DETECTION_RANGE : rule.detectionRange;
         AxisAlignedBB box = player.getEntityBoundingBox().grow(range);
 
-        List<Entity> entities = mc.world.getEntitiesWithinAABB(Entity.class, box);
+        List<Entity> entities = com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().getEntitiesWithinAABB(Entity.class, box);
         for (Entity entity : entities) {
             if (entity == null || entity == player) {
                 continue;
@@ -538,10 +606,10 @@ public class AutoEscapeHandler {
     }
 
     public static String getCurrentAreaKey() {
-        if (mc == null || mc.player == null) {
+        if (mc == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null) {
             return "";
         }
-        return buildAreaKey(mc.player.dimension, mc.player.chunkCoordX, mc.player.chunkCoordZ);
+        return buildAreaKey(com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().dimension, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().chunkCoordX, com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().chunkCoordZ);
     }
 
     private static boolean isBlockedByAreaBlacklist(EntityPlayerSP player, AutoEscapeRule rule) {
@@ -736,36 +804,42 @@ public class AutoEscapeHandler {
     }
 
     private static boolean shouldIgnoreTargetsUntilRestartComplete() {
-        return activeRule != null
-                && activeRule.restartEnabled
-                && activeRule.ignoreTargetsUntilRestartComplete;
+        SessionRuntime rt = rt();
+        return rt.activeRule != null
+                && rt.activeRule.restartEnabled
+                && rt.activeRule.ignoreTargetsUntilRestartComplete;
     }
 
     private static void notifyPlayer(String message) {
+        SessionRuntime rt = rt();
         long now = System.currentTimeMillis();
-        if (now - lastNotifyAtMs < 300L) {
+        if (now - rt.lastNotifyAtMs < 300L) {
             return;
         }
-        lastNotifyAtMs = now;
-        if (mc.player != null) {
-            mc.player.sendMessage(new TextComponentString(message));
+        rt.lastNotifyAtMs = now;
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new TextComponentString(message));
         }
     }
 
     private static Path getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("auto_escape_rules.json");
+        return ProfileManager.currentConfigFile("auto_escape_rules.json");
+    }
+
+    private static Path getRuntimeConfigFile() {
+        return ProfileManager.getCurrentRuntimeProfileDir().resolve("auto_escape_rules.json");
     }
 
     private static synchronized List<AutoEscapeRule> snapshotRules() {
-        return new ArrayList<>(rules);
+        return new ArrayList<>(cfg().rules);
     }
 
     private static void ensureCategoriesSynced() {
         LinkedHashSet<String> normalized = new LinkedHashSet<>();
-        for (String category : categories) {
+        for (String category : cfg().categories) {
             normalized.add(normalizeCategory(category));
         }
-        for (AutoEscapeRule rule : rules) {
+        for (AutoEscapeRule rule : cfg().rules) {
             if (rule == null) {
                 continue;
             }
@@ -776,8 +850,8 @@ public class AutoEscapeHandler {
         if (normalized.isEmpty()) {
             normalized.add(CATEGORY_DEFAULT);
         }
-        categories.clear();
-        categories.addAll(normalized);
+        cfg().categories.clear();
+        cfg().categories.addAll(normalized);
     }
 
     private static String normalizeCategory(String category) {
@@ -786,7 +860,7 @@ public class AutoEscapeHandler {
     }
 
     private static boolean containsCategoryIgnoreCase(String category) {
-        for (String existing : categories) {
+        for (String existing : cfg().categories) {
             if (normalizeCategory(existing).equalsIgnoreCase(normalizeCategory(category))) {
                 return true;
             }
@@ -795,9 +869,9 @@ public class AutoEscapeHandler {
     }
 
     private static boolean removeCategoryIgnoreCase(String category) {
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
-                categories.remove(i);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
+                cfg().categories.remove(i);
                 return true;
             }
         }

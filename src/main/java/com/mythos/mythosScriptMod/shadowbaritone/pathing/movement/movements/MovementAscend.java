@@ -43,6 +43,13 @@ public class MovementAscend extends Movement {
     // while still leaving enough room for the jump to begin before collision.
     private static final double NORMAL_ASCEND_JUMP_START_DISTANCE = 0.85D;
 
+    /**
+     * Maximum vertical rise a normal jump can clear: the player apex is ~1.25
+     * blocks, matching an 11-layer snow pile (a full 8-layer block plus a 3-layer
+     * top = 1.25 above the base). A 12-layer pile needs 1.375 and is unreachable.
+     */
+    static final double SNOW_MAX_JUMP_RISE = 1.25D;
+
     private int ticksWithoutPlacement = 0;
 
     public MovementAscend(IBaritone baritone, BetterBlockPos src, BetterBlockPos dest) {
@@ -165,6 +172,19 @@ public class MovementAscend extends Movement {
                 && context.bsi.worldContainsLoadedChunk(destX, destZ)
                 && destFeet.getValue(BlockSnow.LAYERS) >= 6) {
             return COST_INF;
+        }
+        // The integer cell height ignores the extra snow collision that raises the
+        // real landing surface. A 4-5 layer feet cell (or a >8-layer support under
+        // it) can push the required jump past the ~1.25 block apex even when
+        // height==1, so compare the actual surfaces on both ends.
+        if (MovementHelper.isSnowState(destFeet) || MovementHelper.isSnowState(toPlace)
+                || MovementHelper.isSnowState(context.get(x, y, z))
+                || MovementHelper.isSnowState(context.get(x, y - 1, z))) {
+            double jumpRise = MovementHelper.walkingSurfaceY(context.bsi, destX, destY, destZ)
+                    - MovementHelper.walkingSurfaceY(context.bsi, x, y, z);
+            if (jumpRise > SNOW_MAX_JUMP_RISE) {
+                return COST_INF;
+            }
         }
         // we can jump from soul sand, but not from a bottom slab
         boolean jumpingFromBottomSlab = MovementHelper.isBottomSlab(srcDown);

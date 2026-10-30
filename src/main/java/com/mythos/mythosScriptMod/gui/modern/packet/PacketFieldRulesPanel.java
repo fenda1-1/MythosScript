@@ -476,26 +476,6 @@ final class PacketFieldRulesPanel extends PacketPanelBase {
         return true;
     }
 
-    private void openFieldContextMenu(int x, int y) {
-        List<PacketContextMenu.Item> items = new ArrayList<PacketContextMenu.Item>();
-        items.add(new PacketContextMenu.Item("创建分组", () -> promptCategory(false)));
-        if (!"__all__".equals(selectedCategory)) {
-            items.add(new PacketContextMenu.Item("重命名分组", () -> promptCategory(true)));
-            items.add(new PacketContextMenu.Item("删除分组", () -> {
-                if (PacketFieldRuleManager.deleteCategory(selectedCategory)) { selectedCategory = "__all__"; refreshCategories(); }
-            }));
-        }
-        items.add(new PacketContextMenu.Item("gui.modern.pktfield.u002", () -> { sync(); state.add(); if (!"__all__".equals(selectedCategory)) state.models().get(state.models().size() - 1).category = selectedCategory; select(state.models().size() - 1); }));
-        if (selected >= 0 && !"__all__".equals(selectedCategory)) {
-            items.add(new PacketContextMenu.Item("移动到分类", () -> navigationActions.choose(
-                    "移动到分类", categories, state.models().get(selected).category,
-                    value -> { sync(); state.models().get(selected).category = value; selectedCategory = value; select(selected); })));
-        }
-        items.add(new PacketContextMenu.Item("gui.modern.pktfield.u003", () -> {
-            if (selected >= 0) { state.remove(selected); selected = Math.min(selected, state.models().size() - 1); if (selected >= 0) select(selected); else clearEditor(); }
-        }));
-        openContextMenu(x, y, items);
-    }
 
     private void promptCategory(boolean rename) {
         final String old = selectedCategory;

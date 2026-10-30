@@ -149,10 +149,11 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             "toggle_autoeat", "toggle_autofishing", "toggle_auto_pickup", "toggle_kill_aura",
             "toggle_auto_follow", "toggle_fly",
             "toggle_conditional_execution", "toggle_auto_escape", "toggle_baritone_free_look",
-            "toggle_baritone_human_like", "toggle_baritone_flight", "toggle_other_feature", "hunt",
+            "toggle_baritone_human_like", "toggle_baritone_flight", "toggle_baritone_blink",
+            "toggle_other_feature", "hunt",
             "follow_entity", "use_hotbar_item", "use_held_item", "move_inventory_item_to_hotbar",
             "spread_inventory_item", "stack_inventory_item", "pickup_nearby_items", "switch_hotbar_slot",
-            "silentuse", "runlastsequence", "send_packet", "run_sequence", "run_template",
+            "silentuse", "send_packet", "run_sequence", "run_template",
             "stop_current_sequence", "sequence_control"));
 
     private enum AuxiliaryView {
@@ -288,12 +289,6 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     private boolean recordingActionToolsExpanded = true;
     private boolean recordingControlToolsExpanded = true;
     private ModernMainLayout.Rect navSearchBounds;
-    private ModernMainLayout.Rect navCategoryAddBounds;
-    private ModernMainLayout.Rect navSubCategoryAddBounds;
-    private ModernMainLayout.Rect navCategoryMoreBounds;
-    private ModernMainLayout.Rect navSequenceAddBounds;
-    private ModernMainLayout.Rect navSequenceCopyBounds;
-    private ModernMainLayout.Rect navSequenceMoreBounds;
     private ModernMainLayout.Rect headerBackBounds;
     private ModernMainLayout.Rect headerRunBounds;
     private ModernMainLayout.Rect headerMoreBounds;
@@ -348,7 +343,6 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     private ModernMainLayout.Rect expressionPreviewScrollThumb;
     private ModernMainLayout.Rect expressionCodeEditorBounds;
     private ModernMainLayout.Rect expressionEditorExpandBounds;
-    private final List<String> actionPageVisibleTypes = new ArrayList<>();
     private final List<String> recentActionTypes = new ArrayList<>();
     private int actionPageRenderedRecentLimit = -1;
     private final List<ActionLibraryNode> actionPageRoots = new ArrayList<>();
@@ -560,6 +554,11 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     private ModernMainLayout.Rect templateCategoryScrollThumb;
     private ModernMainLayout.Rect templateScrollTrack;
     private ModernMainLayout.Rect templateScrollThumb;
+    private final ModernHoverScrollbar templateActionScrollbar = new ModernHoverScrollbar();
+    private ModernMainLayout.Rect templateActionViewport;
+    private int templateActionScroll;
+    private int templateActionMaxScroll;
+    private int templateActionScrollOwner = -1;
     private ModernMainLayout.Rect templateCategoryDividerBounds;
     private ModernMainLayout.Rect templateListDividerBounds;
     private ModernMainLayout.Rect templateCategoryBounds;
@@ -927,7 +926,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         ensureField("variable.rename", 128);
         ensureField("recording.name", 128);
         ensureField("recording.radius", 12);
-        ensureField("recording.packetWindowSeconds", 12);
+        ensureField("recording.packetCount", 12);
         ensureField("move.chest.maxTake", 8);
         ensureField("move.chest.maxPut", 8);
         bindMoveChestHost();
@@ -1346,6 +1345,10 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             applyTemplateScrollFromMouse(mouseY);
             return true;
         }
+        if (templateActionScrollbar.isDragging()) {
+            templateActionScrollbar.applyDrag(mouseX, mouseY);
+            return true;
+        }
         if (draggingExpressionTemplateScroll) {
             applyExpressionTemplateScrollFromMouse(mouseY);
             return true;
@@ -1454,6 +1457,10 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         }
         if (state == 0 && draggingTemplateScroll) {
             draggingTemplateScroll = false;
+            return true;
+        }
+        if (state == 0 && templateActionScrollbar.isDragging()) {
+            templateActionScrollbar.endDrag();
             return true;
         }
         if (state == 0 && draggingExpressionTemplateScroll) {
@@ -2598,15 +2605,9 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         sequenceNoteFormatChips = null;
     }
 
-    private ModernMainLayout.Rect stepAddBounds;
     private ModernMainLayout.Rect stepRunBounds;
-    private ModernMainLayout.Rect stepCopyBounds;
-    private ModernMainLayout.Rect stepDeleteBounds;
-    private ModernMainLayout.Rect stepUpBounds;
-    private ModernMainLayout.Rect stepDownBounds;
     private ModernMainLayout.Rect stepGetCoordsBounds;
     private ModernMainLayout.Rect stepClearCoordsBounds;
-    private ModernMainLayout.Rect actionAddBounds;
     private ModernMainLayout.Rect actionMoreBounds;
 
     private void drawStepTools(FontRenderer font, int mouseX, int mouseY) {
@@ -2878,8 +2879,27 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         variablePanelHostBound = true;
     }
 
+    private void drawPacketPickerRow(FontRenderer font, ModernMainLayout.Rect row,
+            ModernActionEditorSchema.Field field, int mouseX, int mouseY) {
+        ModernUiRenderer.drawSubtlePanel(row.x, row.y, row.width, row.height, 5,
+                ModernUiRenderer.SHELL, ModernUiRenderer.BORDER_SUBTLE);
+        ModernUiRenderer.drawText(font, field.label, row.x + 10, row.y + 8, ModernUiRenderer.TEXT,
+                Math.max(60, row.width - 180));
+        if (!safe(field.hint).isEmpty()) {
+            ModernUiRenderer.drawText(font, field.hint, row.x + 10, row.y + 23, ModernUiRenderer.MUTED_TEXT,
+                    Math.max(60, row.width - 180));
+        }
+        ModernMainLayout.Rect pick = new ModernMainLayout.Rect(row.right() - 160, row.y + 8, 150, 24);
+        drawButton(font, pick, "gui.modern.path.schema.u314", false, false, canEditStep(), mouseX, mouseY);
+        parameterHits.add(new ParameterHit(field.key, pick, field));
+    }
+
     private void drawSchemaParameterRow(FontRenderer font, ModernMainLayout.Rect row,
             ModernActionEditorSchema.Field field, int mouseX, int mouseY) {
+        if ("__pickPacket".equals(field.key)) {
+            drawPacketPickerRow(font, row, field, mouseX, mouseY);
+            return;
+        }
         if (field.kind == ModernActionEditorSchema.Kind.MOVE_CANVAS) {
             if (selectedAction != null && selectedAction.params == null) {
                 selectedAction.params = new JsonObject();
@@ -3113,6 +3133,10 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         }
         if (isSystemMessageField(field)) {
             return 142;
+        }
+        if (isSendPacketConditionalField(field)) {
+            String wanted = "channel".equals(field.key) ? "channel" : "packetId";
+            return sendPacketTargetType().equals(wanted) ? PARAM_ROW_HEIGHT : 0;
         }
         return PARAM_ROW_HEIGHT;
     }
@@ -4133,6 +4157,26 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     private boolean isSystemMessageField(ModernActionEditorSchema.Field field) {
         return field != null && "message".equals(field.key) && selectedAction != null
                 && "system_message".equalsIgnoreCase(safe(selectedAction.type));
+    }
+
+    /** channel/packetId are mutually exclusive on a send_packet action: only the
+     *  one matching the {@code targetType} selector is rendered. */
+    private boolean isSendPacketConditionalField(ModernActionEditorSchema.Field field) {
+        return field != null && field.key != null && selectedAction != null
+                && "send_packet".equalsIgnoreCase(safe(selectedAction.type))
+                && ("channel".equals(field.key) || "packetId".equals(field.key));
+    }
+
+    private String sendPacketTargetType() {
+        if (selectedAction == null || selectedAction.params == null) {
+            return "packetId";
+        }
+        String type = jsonValue(selectedAction.params.get("targetType")).trim();
+        if (!type.isEmpty()) {
+            return type;
+        }
+        // Legacy configs have no targetType: infer from which field carries a value.
+        return jsonValue(selectedAction.params.get("channel")).trim().isEmpty() ? "packetId" : "channel";
     }
 
     private boolean isActionIntegerField(ModernActionEditorSchema.Field field) {
@@ -5411,10 +5455,10 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 } catch (NumberFormatException ignored) {
                 }
             }
-            ModernTextField packetWindow = fields.get("recording.packetWindowSeconds");
-            if (packetWindow != null) {
+            ModernTextField packetCount = fields.get("recording.packetCount");
+            if (packetCount != null) {
                 try {
-                    PathRecordingManager.setPacketRecordWindowSeconds(Integer.parseInt(packetWindow.getText().trim()));
+                    PathRecordingManager.setPacketRecordCount(Integer.parseInt(packetCount.getText().trim()));
                 } catch (NumberFormatException ignored) {
                 }
             }
@@ -6015,6 +6059,10 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
     private boolean handleParameterControlClick(ParameterHit hit, int mouseX, int mouseY) {
         if (hit == null || selectedAction == null || selectedAction.params == null) return false;
         ModernActionEditorSchema.Field field = hit.field;
+        if (field != null && "__pickPacket".equals(field.key)) {
+            openPacketPicker();
+            return true;
+        }
         if (!isActionParameterEnabled(field)) return true;
         if (field.kind == ModernActionEditorSchema.Kind.TOGGLE) {
             cycleActionParameter(field.key, selectedAction.params.get(field.key));
@@ -6073,7 +6121,10 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             openExpressionEditor(field, -1);
             return true;
         }
-        if (field.kind == ModernActionEditorSchema.Kind.TEXT_EXPRESSION_LIST) return false;
+        if (field.kind == ModernActionEditorSchema.Kind.TEXT_EXPRESSION_LIST) {
+            openExpressionEditor(field, -1);
+            return true;
+        }
         return false;
     }
 
@@ -6582,9 +6633,6 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         status("gui.modern.path.wb.u104");
     }
 
-    private void copyStep() {
-        copySelectedStepsToClipboard();
-    }
 
     private void deleteStep() {
         if (!isEditableSequence() || selectedSequence == null) {
@@ -6866,9 +6914,6 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         status("gui.modern.path.wb.u118");
     }
 
-    private void copyAction() {
-        copySelectedActionsToClipboard();
-    }
 
     private void deleteAction() {
         if (!canEditStep() || selectedStep == null) {
@@ -7057,13 +7102,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         setMenuAnchor(mouseX, mouseY);
     }
 
-    private void openSequenceMenu(int mouseX, int mouseY) {
-        openOverflowMenu(PathWorkbenchToolCatalog.Zone.NAVIGATION, mouseX, mouseY);
-    }
 
-    private void openActionMenu(int mouseX, int mouseY) {
-        openOverflowMenu(PathWorkbenchToolCatalog.Zone.ACTION, mouseX, mouseY);
-    }
 
     private void beginModal(ModalMode mode, String title, String message) {
         closeMenu();
@@ -8300,6 +8339,34 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         return isEditableSequence() && selectedStep != null;
     }
 
+    /** True when a step is selected and editable — used by the packet workbench bridge. */
+    public boolean hasEditableStepSelection() {
+        return canEditStep();
+    }
+
+    /**
+     * Appends a send_packet action built from {@code params} to the end of the
+     * currently-selected step. Returns false when no editable step is selected.
+     */
+    public boolean appendSendPacketAction(com.google.gson.JsonObject params) {
+        if (!canEditStep()) {
+            return false;
+        }
+        pushHistory("insert-send-packet");
+        selectedStep.addAction(new ActionData("send_packet", params == null ? new com.google.gson.JsonObject() : params));
+        selectAction(selectedStep.getActions().size() - 1);
+        dirty = true;
+        closeAuxiliary();
+        return true;
+    }
+
+    /** Navigates to the packet browser so a packet can be picked for a send_packet action. */
+    public void openPacketPicker() {
+        if (routeRequest != null) {
+            routeRequest.accept("packet_viewer");
+        }
+    }
+
     private boolean isProtectedCategory(String category) {
         return defaultCategory().equals(category);
     }
@@ -8334,9 +8401,6 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                         : safe(subCategory).trim().toLowerCase(Locale.ROOT));
     }
 
-    private String lower(String value) {
-        return safe(value).trim().toLowerCase(Locale.ROOT);
-    }
 
     private String query(String key) {
         ModernTextField field = fields.get(key);
@@ -8888,23 +8952,44 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                     ModernUiRenderer.SHELL, ModernUiRenderer.BORDER_SUBTLE);
             ModernUiRenderer.drawText(font, "gui.modern.path.wb.u228", actionList.x + 9, actionList.y + 7,
                     ModernUiRenderer.TEXT, Math.max(40, actionList.width - 18));
-            ModernUiRenderer.beginClip(actionList);
-            int actionY = actionList.y + 24;
-            int actionVisible = Math.max(1, (actionList.height - 28) / 22);
-            for (int i = 0; i < template.getActions().size() && i < actionVisible; i++) {
-                ActionData action = template.getActions().get(i);
-                ModernUiRenderer.drawText(font, (i + 1) + ". " + safe(action == null ? "" : action.type),
-                        actionList.x + 9, actionY, ModernUiRenderer.ACCENT, Math.max(40, actionList.width - 18));
-                drawAnnotatedText(font, safeActionDescription(action), actionList.x + 9, actionY + 11,
-                        ModernUiRenderer.MUTED_TEXT, Math.max(40, actionList.width - 18));
+            if (templateActionScrollOwner != selectedActionTemplateIndex) {
+                templateActionScrollOwner = selectedActionTemplateIndex;
+                templateActionScroll = 0;
+            }
+            templateActionViewport = new ModernMainLayout.Rect(actionList.x + 1, actionList.y + 21,
+                    Math.max(1, actionList.width - 2), Math.max(1, actionList.height - 25));
+            int actionCount = template.getActions().size();
+            int actionContentHeight = actionCount * 22 + 4;
+            templateActionMaxScroll = Math.max(0, actionContentHeight - templateActionViewport.height);
+            templateActionScroll = clamp(templateActionScroll, 0, templateActionMaxScroll);
+            int actionTextWidth = Math.max(40, actionList.width - 18
+                    - (templateActionMaxScroll > 0 ? ModernHoverScrollbar.GUTTER - 8 : 0));
+            ModernUiRenderer.beginClip(templateActionViewport);
+            int actionY = actionList.y + 24 - templateActionScroll;
+            for (int i = 0; i < actionCount; i++) {
+                if (actionY + 22 >= templateActionViewport.y && actionY <= templateActionViewport.bottom()) {
+                    ActionData action = template.getActions().get(i);
+                    ModernUiRenderer.drawText(font, (i + 1) + ". " + safe(action == null ? "" : action.type),
+                            actionList.x + 9, actionY, ModernUiRenderer.ACCENT, actionTextWidth);
+                    drawAnnotatedText(font, safeActionDescription(action), actionList.x + 9, actionY + 11,
+                            ModernUiRenderer.MUTED_TEXT, actionTextWidth);
+                }
                 actionY += 22;
             }
-            if (template.getActions().size() > actionVisible) {
-                ModernUiRenderer.drawText(font, tr("gui.modern.path.wb.fmt.more_actions", String.valueOf(template.getActions().size() - actionVisible)),
-                        actionList.x + 9, actionList.bottom() - 15, ModernUiRenderer.MUTED_TEXT,
-                        Math.max(40, actionList.width - 18));
-            }
             ModernUiRenderer.endClip();
+            if (templateActionMaxScroll > 0) {
+                templateActionScrollbar.draw(templateActionViewport, templateActionScroll, templateActionMaxScroll,
+                        templateActionViewport.height, actionContentHeight, mouseX, mouseY,
+                        value -> templateActionScroll = clamp(value, 0, templateActionMaxScroll));
+            } else {
+                templateActionScrollbar.endDrag();
+                templateActionScrollbar.idle();
+            }
+        } else {
+            templateActionViewport = null;
+            templateActionMaxScroll = 0;
+            templateActionScrollbar.endDrag();
+            templateActionScrollbar.idle();
         }
         ModernSplitPane.drawVerticalDivider(templateCategoryDividerBounds, mouseX, mouseY,
                 draggingTemplateCategoryDivider);
@@ -9216,10 +9301,6 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         }
     }
 
-    private ModernMainLayout.Rect templateNameBounds;
-    private ModernMainLayout.Rect templateSequenceBounds;
-    private ModernMainLayout.Rect templateDefaultsBounds;
-    private ModernMainLayout.Rect templateNoteBounds;
     private ModernMainLayout.Rect templateAddBounds;
     private ModernMainLayout.Rect templateDeleteBounds;
     private ModernMainLayout.Rect templateInsertBounds;
@@ -9296,13 +9377,13 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 ModernUiRenderer.TEXT, recordingCategoryBounds.width);
         ModernUiRenderer.drawText(font, "gui.modern.path.wb.u235", recordingRadiusBounds.x, labelY,
                 ModernUiRenderer.TEXT, recordingRadiusBounds.width);
-        ModernUiRenderer.drawText(font, "gui.modern.path.record.packet_window_seconds", recordingPacketWindowBounds.x, labelY,
+        ModernUiRenderer.drawText(font, "gui.modern.path.record.packet_count", recordingPacketWindowBounds.x, labelY,
                 ModernUiRenderer.TEXT, recordingPacketWindowBounds.width);
         drawLabeledField(font, "recording.name", recordingNameBounds, "gui.modern.path.wb.u233", true, mouseX, mouseY);
         drawRecordingCategoryField(font, mouseX, mouseY);
         drawLabeledField(font, "recording.radius", recordingRadiusBounds, "gui.modern.path.wb.u235", true, mouseX, mouseY);
-        drawLabeledField(font, "recording.packetWindowSeconds", recordingPacketWindowBounds,
-                "gui.modern.path.record.packet_window_seconds", true, mouseX, mouseY);
+        drawLabeledField(font, "recording.packetCount", recordingPacketWindowBounds,
+                "gui.modern.path.record.packet_count", true, mouseX, mouseY);
         boolean recording = PathRecordingManager.isRecording();
         String state = recording ? (PathRecordingManager.isPaused() ? "gui.modern.path.wb.u236" : "gui.modern.path.wb.u237")
                 : "gui.modern.path.wb.u238";
@@ -9750,6 +9831,11 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         if (tool == PathWorkbenchToolCatalog.ToolId.RECORDING_RUN_PAUSE && PathRecordingPlayback.isPaused()) {
             return "gui.modern.path.record.resume_run";
         }
+        if (tool == PathWorkbenchToolCatalog.ToolId.RECORDING_PACKET_CAPTURE) {
+            return PathRecordingManager.recordPacketCapture
+                    ? "gui.modern.path.record.packet_capture_on"
+                    : "gui.modern.path.record.packet_capture_off";
+        }
         return tool.label;
     }
 
@@ -9794,6 +9880,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             case RECORDING_ACTION_DELETE: return canEditStep() && selectedAction != null;
             case RECORDING_ACTION_UP: return canEditStep() && canMoveSelectedActions(-1);
             case RECORDING_ACTION_DOWN: return canEditStep() && canMoveSelectedActions(1);
+            case RECORDING_PACKET_CAPTURE: return !PathRecordingManager.isRecording();
             default: return false;
         }
     }
@@ -9836,6 +9923,9 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
             case RECORDING_UNDO: undo(); break;
             case RECORDING_REDO: redo(); break;
             case RECORDING_CLEAR: clearRecordingDraft(); break;
+            case RECORDING_PACKET_CAPTURE:
+                PathRecordingManager.recordPacketCapture = !PathRecordingManager.recordPacketCapture;
+                break;
             default: break;
         }
     }
@@ -10053,13 +10143,9 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                     target.params.add(RecordingPacketSupport.PACKETS_KEY,
                             sourceCopy.get(RecordingPacketSupport.PACKETS_KEY));
                 }
-                if (source.params.has(RecordingPacketSupport.WINDOW_SECONDS_KEY)) {
-                    target.params.add(RecordingPacketSupport.WINDOW_SECONDS_KEY,
-                            sourceCopy.get(RecordingPacketSupport.WINDOW_SECONDS_KEY));
-                }
-                if (source.params.has(RecordingPacketSupport.RANGE_KEY)) {
-                    target.params.add(RecordingPacketSupport.RANGE_KEY,
-                            sourceCopy.get(RecordingPacketSupport.RANGE_KEY));
+                if (source.params.has(RecordingPacketSupport.COUNT_KEY)) {
+                    target.params.add(RecordingPacketSupport.COUNT_KEY,
+                            sourceCopy.get(RecordingPacketSupport.COUNT_KEY));
                 }
                 return;
             }
@@ -10948,8 +11034,8 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         recordingSaveSubCategory = selectedSubCategory;
         closeRecordingCategoryPicker();
         setFieldTextIfUnchanged("recording.radius", String.valueOf(Math.round(PathRecordingManager.getInfluenceRadius())));
-        setFieldTextIfUnchanged("recording.packetWindowSeconds",
-                String.valueOf(PathRecordingManager.getPacketRecordWindowSeconds()));
+        setFieldTextIfUnchanged("recording.packetCount",
+                String.valueOf(PathRecordingManager.getPacketRecordCount()));
         recordingPreviousSequenceName = selectedSequence == null ? "" : selectedSequence.getName();
         recordingPreviousStepIndex = selectedStepIndex;
         recordingPreviousActionIndex = selectedActionIndex;
@@ -11028,20 +11114,6 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         logDetailScroll = 0;
     }
 
-    private void bindTemplateFields() {
-        if (selectedTemplateIndex < 0 || selectedTemplateIndex >= templateModels.size()) {
-            setFieldTextIfUnchanged("template.name", "");
-            setFieldTextIfUnchanged("template.sequence", "");
-            setFieldTextIfUnchanged("template.defaults", "");
-            setFieldTextIfUnchanged("template.note", "");
-            return;
-        }
-        LegacyActionTemplateManager.TemplateEditModel model = templateModels.get(selectedTemplateIndex);
-        setFieldTextIfUnchanged("template.name", model.name);
-        setFieldTextIfUnchanged("template.sequence", model.sequenceName);
-        setFieldTextIfUnchanged("template.defaults", model.defaultsText);
-        setFieldTextIfUnchanged("template.note", model.note);
-    }
 
     private boolean handleAuxiliaryClick(int mouseX, int mouseY, int mouseButton) {
         if (auxiliaryView == AuxiliaryView.ACTION_EDITOR) {
@@ -11091,6 +11163,9 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 return true;
             }
             if (beginTemplateScrollbarDrag(mouseX, mouseY)) {
+                return true;
+            }
+            if (templateActionScrollbar.beginDrag(mouseX, mouseY)) {
                 return true;
             }
             for (RowHit hit : templateCategoryHits) {
@@ -11659,6 +11734,11 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 return true;
             }
         }
+        if (auxiliaryView == AuxiliaryView.TEMPLATES && templateActionViewport != null
+                && templateActionMaxScroll > 0 && templateActionViewport.contains(mouseX, mouseY)) {
+            templateActionScroll = clamp(templateActionScroll + (wheel > 0 ? -22 : 22), 0, templateActionMaxScroll);
+            return true;
+        }
         if (auxiliaryView == AuxiliaryView.TEMPLATES
                 && ((templateCategoryBounds != null && templateCategoryBounds.contains(mouseX, mouseY))
                         || (templateListBounds != null && templateListBounds.contains(mouseX, mouseY)))) {
@@ -11938,25 +12018,7 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         return copied;
     }
 
-    private void addTemplateModel() {
-        LegacyActionTemplateManager.TemplateEditModel model = new LegacyActionTemplateManager.TemplateEditModel();
-        model.name = uniqueTemplateName("gui.modern.path.wb.u298");
-        model.sequenceName = selectedSequence == null ? "" : safe(selectedSequence.getName());
-        templateModels.add(model);
-        selectedTemplateIndex = templateModels.size() - 1;
-        templateDirty = true;
-        bindTemplateFields();
-        status("gui.modern.path.wb.u299");
-    }
 
-    private String uniqueTemplateName(String base) {
-        String candidate = base;
-        int suffix = 2;
-        while (templateNameExists(candidate)) {
-            candidate = base + " " + suffix++;
-        }
-        return candidate;
-    }
 
     private boolean templateNameExists(String name) {
         for (LegacyActionTemplateManager.TemplateEditModel model : templateModels) {
@@ -11967,48 +12029,8 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         return false;
     }
 
-    private void deleteTemplateModel() {
-        if (selectedTemplateIndex < 0 || selectedTemplateIndex >= templateModels.size()) {
-            return;
-        }
-        templateModels.remove(selectedTemplateIndex);
-        selectedTemplateIndex = templateModels.isEmpty() ? -1
-                : Math.min(selectedTemplateIndex, templateModels.size() - 1);
-        templateDirty = true;
-        bindTemplateFields();
-        status("gui.modern.path.wb.u300");
-    }
 
-    private void saveTemplates() {
-        syncAuxiliaryFields();
-        LegacyActionTemplateManager.saveTemplateModels(templateModels);
-        templateDirty = false;
-        status("gui.modern.path.wb.u013");
-    }
 
-    private void insertSelectedTemplate() {
-        if (!canEditStep() || selectedTemplateIndex < 0 || selectedTemplateIndex >= templateModels.size()) {
-            return;
-        }
-        syncAuxiliaryFields();
-        LegacyActionTemplateManager.TemplateEditModel model = templateModels.get(selectedTemplateIndex);
-        if (safe(model.name).trim().isEmpty()) {
-            status("gui.modern.path.wb.u301");
-            return;
-        }
-        pushHistory("insert-template-action");
-        JsonObject params = new JsonObject();
-        params.addProperty("templateName", model.name.trim());
-        params.addProperty("paramsText", "");
-        ActionData action = new ActionData("run_template", params);
-        selectedStep.getActions().add(action);
-        selectedActionIndex = selectedStep.getActions().size() - 1;
-        selectedAction = action;
-        dirty = true;
-        closeAuxiliary();
-        bindEditorFields();
-        status("gui.modern.path.wb.u302");
-    }
 
 
 
@@ -12047,6 +12069,14 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         sequence.setCategory(category);
         sequence.setSubCategory(subCategory);
         sequence.setCustom(true);
+        // Packet payloads served their purpose (review/replace); drop them so
+        // the saved sequence doesn't retain hex trees.
+        for (PathStep step : sequence.getSteps()) {
+            if (step == null) continue;
+            for (ActionData action : step.getActions()) {
+                if (action != null) RecordingPacketSupport.stripRecordingKeys(action.params);
+            }
+        }
         sequences.add(0, sequence);
         addCategoryLocal(category);
         addSubCategoryLocal(category, subCategory);
@@ -12063,6 +12093,8 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
         recordingDraftRevision = -1L;
         recordingDraftManuallyEdited = false;
         importedRecordingActions.clear();
+        recordingUndoHistory.clear();
+        recordingRedoHistory.clear();
         List<Issue> issues = PathConfigValidator.validateSequences(sequences);
         if (countErrors(issues) > 0) {
             validationIssues = new ArrayList<>(issues);
@@ -12305,19 +12337,6 @@ public final class ModernPathWorkbenchTab implements ModernSettingsTab {
                 ModernUiRenderer.MUTED_TEXT, Math.max(50, paletteBounds.width - 24));
     }
 
-    private List<String> filteredActionTypes() {
-        String query = query("palette.search");
-        if (query.isEmpty()) {
-            return ACTION_TYPES;
-        }
-        List<String> result = new ArrayList<>();
-        for (String type : ACTION_TYPES) {
-            if (contains(type, query) || contains(prettyType(type), query)) {
-                result.add(type);
-            }
-        }
-        return result;
-    }
 
     private void drawPaletteScrollbar(ModernMainLayout.Rect list, int total, int visible, int mouseX, int mouseY) {
         if (list == null || paletteMaxScroll <= 0 || list.height <= 0) {

@@ -93,14 +93,42 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
         blockBreakHelper.tick(isInputForcedDown(Input.CLICK_LEFT));
         blockPlaceHelper.tick(isInputForcedDown(Input.CLICK_RIGHT));
 
-        if (inControl()) {
-            if (ctx.player().movementInput.getClass() != PlayerMovementInput.class) {
-                ctx.player().movementInput = new PlayerMovementInput(this);
+        net.minecraft.client.entity.EntityPlayerSP p = ctx.player();
+        if (p == null || p.movementInput == null) {
+            mythos$dbg("onTick: player/movementInput null, skip (player=%s)", p);
+            return;
+        }
+        // Only the baritone that owns this player may touch its movementInput.
+        // The primary baritone's ctx.player() is the SHARED mc.player — during
+        // a live-viewport render pass that field is briefly swapped to a
+        // background bot, and the primary's onTick would then see that bot's
+        // PlayerMovementInput, decide "not in control" (primary is never in
+        // control), and tear it back to MovementInputFromOptions mid-path —
+        // the "background bot stops chasing" ping-pong. Gate by ownership:
+        // session baritones already resolve ctx.player() to their own pinned
+        // player so this check only ever filters the primary.
+        if (baritone == BaritoneAPI.getProvider().getPrimaryBaritone()) {
+            net.minecraft.client.entity.EntityPlayerSP fg =
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.foregroundPlayer();
+            if (fg != null && p != fg) {
+                // mc.player is a swapped-in background bot right now — not ours.
+                return;
+            }
+        }
+
+        boolean control = inControl();
+        boolean ours = p.movementInput.getClass() == PlayerMovementInput.class;
+        if (control) {
+            if (!ours) {
+                mythos$dbg("movementInput -> PlayerMovementInput (player=%s old=%s)",
+                        p.getName(), p.movementInput.getClass().getSimpleName());
+                p.movementInput = new PlayerMovementInput(this);
             }
         } else {
-            if (ctx.player().movementInput.getClass() == PlayerMovementInput.class) { // allow other movement inputs
-                                                                                      // that aren't this one
-                ctx.player().movementInput = new MovementInputFromOptions(ctx.minecraft().gameSettings);
+            if (ours) { // allow other movement inputs that aren't this one
+                mythos$dbg("movementInput -> MovementInputFromOptions (player=%s)",
+                        p.getName());
+                p.movementInput = new MovementInputFromOptions(ctx.minecraft().gameSettings);
             }
         }
         // only set it if it was previously incorrect
@@ -108,6 +136,13 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
         // tap W sprint lol
     }
 
+    /**
+     * True while this baritone owns the player's movementInput. A session
+     * (bot) baritone used to be "always in control" so background pathing
+     * kept working — but once that bot is mounted its player IS the live
+     * mc.player and PlayerMovementInput eats the real keyboard. Bots only
+     * stay in control while their player is NOT the mounted one.
+     */
     private boolean inControl() {
         for (Input input : new Input[] { Input.MOVE_FORWARD, Input.MOVE_BACK, Input.MOVE_LEFT, Input.MOVE_RIGHT,
                 Input.SNEAK, Input.JUMP }) {
@@ -115,9 +150,42 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
                 return true;
             }
         }
-        // if we are not primary (a bot) we should set the movementinput even when idle
-        // (not pathing)
-        return baritone.getPathingBehavior().isPathing() || baritone != BaritoneAPI.getProvider().getPrimaryBaritone();
+        if (baritone.getPathingBehavior().isPathing()) {
+            return true;
+        }
+        net.minecraft.client.entity.EntityPlayerSP mine = ctx.player();
+        // Session baritone: when actively pathing / forcing inputs (checked
+        // above) it owns movementInput even while mounted — the mounted bot
+        // keeps autopiloting. When idle, a mounted bot hands movementInput
+        // back to the real keyboard so the human can steer it manually; a
+        // background bot keeps PlayerMovementInput ready for the next path.
+        if (baritone != BaritoneAPI.getProvider().getPrimaryBaritone()) {
+            if (mine == null) return false;
+            // A mounted bot keeps autopiloting — its PlayerMovementInput stays
+            // installed so baritone drives it in first person; the human only
+            // steers when the bot is idle (pathing already returned above).
+            net.minecraft.client.entity.EntityPlayerSP fg =
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.foregroundPlayer();
+            return fg == null || mine != fg;
+        }
+        return false;
+    }
+
+    private static java.lang.reflect.Method nexusLogBaritoneM;
+    private static boolean nexusLogTried;
+
+    private static void mythos$dbg(String fmt, Object... a) {
+        try {
+            if (!nexusLogTried) {
+                nexusLogTried = true;
+                nexusLogBaritoneM = Class.forName("com.mythos.nexus.core.NexusLog")
+                        .getMethod("baritone", String.class, Object[].class);
+            }
+            if (nexusLogBaritoneM != null)
+                nexusLogBaritoneM.invoke(null, String.format(fmt, a), new Object[0]);
+        } catch (Throwable ignored) {
+            // Nexus absent — debug logging is optional
+        }
     }
 
     public BlockBreakHelper getBlockBreakHelper() {
@@ -125,7 +193,8 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
     }
 
     float getPlayerYaw() {
-        return ctx.player().rotationYaw;
+        net.minecraft.client.entity.EntityPlayerSP p = ctx.player();
+        return p != null ? p.rotationYaw : 0.0F;
     }
 
     float getMovementYaw() {

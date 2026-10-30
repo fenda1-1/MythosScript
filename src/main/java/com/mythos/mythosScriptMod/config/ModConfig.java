@@ -6,6 +6,13 @@ import com.mythos.mythosScriptMod.handlers.BlockReplacementHandler;
 import com.mythos.mythosScriptMod.path.PathSequenceManager;
 import com.mythos.mythosScriptMod.utils.CapturedIdRuleManager;
 import com.mythos.mythosScriptMod.PerformanceMonitor;
+import com.mythos.mythosScriptMod.otherfeatures.handler.block.BlockFeatureManager;
+import com.mythos.mythosScriptMod.otherfeatures.handler.item.ItemFeatureManager;
+import com.mythos.mythosScriptMod.otherfeatures.handler.misc.MiscFeatureManager;
+import com.mythos.mythosScriptMod.otherfeatures.handler.movement.MovementFeatureManager;
+import com.mythos.mythosScriptMod.otherfeatures.handler.movement.SpeedHandler;
+import com.mythos.mythosScriptMod.otherfeatures.handler.render.RenderFeatureManager;
+import com.mythos.mythosScriptMod.otherfeatures.handler.world.WorldFeatureManager;
 
 import net.minecraft.client.Minecraft;
 import com.mythos.mythosScriptMod.gui.DetachedSwingWindowManager;
@@ -52,23 +59,6 @@ public class ModConfig {
         return debugFlags.getOrDefault(module, false);
     }
 
-    public static void runWithInternalChatSuppressed(Runnable action) {
-        if (action == null) {
-            return;
-        }
-        int depth = INTERNAL_CHAT_SUPPRESSION_DEPTH.get();
-        INTERNAL_CHAT_SUPPRESSION_DEPTH.set(depth + 1);
-        try {
-            action.run();
-        } finally {
-            int newDepth = INTERNAL_CHAT_SUPPRESSION_DEPTH.get() - 1;
-            if (newDepth <= 0) {
-                INTERNAL_CHAT_SUPPRESSION_DEPTH.remove();
-            } else {
-                INTERNAL_CHAT_SUPPRESSION_DEPTH.set(newDepth);
-            }
-        }
-    }
 
     public static boolean isInternalChatSuppressed() {
         return INTERNAL_CHAT_SUPPRESSION_DEPTH.get() > 0;
@@ -92,15 +82,6 @@ public class ModConfig {
         }
     }
 
-    /**
-     * 强制向游戏内调试终端打印调试信息，无视任何开关。
-     * 
-     * @param module  调试信息所属的模块
-     * @param message 要打印的消息
-     */
-    public static void debugPrintForce(DebugModule module, String message) {
-        DebugLogManager.append(module, DebugLogManager.Level.INFO, safeDebugMessage(message), true);
-    }
 
     /**
      * 向日志文件打印调试信息，不输出到聊天框。
@@ -115,15 +96,38 @@ public class ModConfig {
         }
     }
 
+
     /**
-     * 强制向日志文件打印调试信息，无视任何开关。
-     *
-     * @param module  调试信息所属的模块
-     * @param message 要打印的消息
+     * 按会话重载「非序列」配置。与 {@link #loadAllConfigs()} 的区别：序列相关
+     * （动作/路径序列、捕获 ID 规则）是跨会话共享的，不随会话切换重载；其余
+     * handler 与功能模块的配置各会话一份，切会话时整份换掉。
      */
-    public static void debugLogForce(DebugModule module, String message) {
-        DebugLogManager.append(module, DebugLogManager.Level.DEBUG, safeDebugMessage(message), true);
-        mythosScriptMod.LOGGER.info("[FORCE DEBUG:{}|{}] {}", module.name(), module.getDisplayName(), message);
+    public static void loadSessionConfigs() {
+        AutoEatHandler.loadAutoEatConfig();
+        AutoFishingHandler.loadConfig();
+        AutoEscapeHandler.loadConfig();
+        AutoFollowHandler.loadFollowConfig();
+        AutoPickupHandler.loadConfig();
+        AutoUseItemHandler.loadConfig();
+        BlockReplacementHandler.loadConfig();
+        ConditionalExecutionHandler.loadConfig();
+        DungeonWarehouseHandler.loadConfig();
+        WarehouseManager.loadWarehouses();
+        FlyHandler.loadConfig();
+        ItemFilterHandler.loadFilterConfig();
+        SpeedHandler.loadConfig();
+        BlockFeatureManager.loadConfig();
+        ItemFeatureManager.loadConfig();
+        MiscFeatureManager.loadConfig();
+        MovementFeatureManager.loadConfig();
+        RenderFeatureManager.loadConfig();
+        WorldFeatureManager.loadConfig();
+        BaritoneSettingsConfig.load();
+        BlinkPathingConfig.load();
+        FlightPathingConfig.load();
+        ChatOptimizationConfig.load();
+        HumanLikeMovementConfig.load();
+        KillAuraHandler.reloadConfigValues();
     }
 
     /**

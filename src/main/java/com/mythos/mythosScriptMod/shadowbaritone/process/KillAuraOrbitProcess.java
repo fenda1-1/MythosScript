@@ -1056,7 +1056,7 @@ public final class KillAuraOrbitProcess extends BaritoneProcessHelper {
         if (target == null || !isBaseStandableOrbitFeet(standPos, maxFeetY)) {
             return false;
         }
-        return !KillAuraHandler.requireLineOfSight || hasLineOfSightFromStandPosCached(standPos, target);
+        return !KillAuraHandler.cfg().requireLineOfSight || hasLineOfSightFromStandPosCached(standPos, target);
     }
 
     private boolean isBaseStandableOrbitFeet(BetterBlockPos standPos, int maxFeetY) {

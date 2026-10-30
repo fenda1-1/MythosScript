@@ -102,9 +102,6 @@ public final class GuiInspectionManager {
             return elements;
         }
 
-        public String getSignature() {
-            return signature;
-        }
     }
 
     public static boolean isCaptureEnabled() {

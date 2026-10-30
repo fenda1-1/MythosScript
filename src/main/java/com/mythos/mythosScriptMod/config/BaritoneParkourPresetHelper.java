@@ -25,18 +25,5 @@ public final class BaritoneParkourPresetHelper {
         return values;
     }
 
-    public static void applyStablePresetToEditingValues(Map<String, String> editingValues) {
-        if (editingValues == null) {
-            return;
-        }
-        editingValues.putAll(buildStablePresetValues());
-    }
 
-    public static void applyStablePresetToRuntimeSettings() {
-        Settings settings = BaritoneAPI.getSettings();
-        for (Map.Entry<String, String> entry : buildStablePresetValues().entrySet()) {
-            SettingsUtil.parseAndApply(settings, entry.getKey().toLowerCase(), entry.getValue());
-        }
-        SettingsUtil.save(settings);
-    }
 }

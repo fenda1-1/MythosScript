@@ -58,7 +58,7 @@ public final class HumanLikeMovementController {
     }
 
     public boolean isEnabled() {
-        return HumanLikeMovementConfig.INSTANCE != null && HumanLikeMovementConfig.INSTANCE.enabled;
+        return HumanLikeMovementConfig.instance() != null && HumanLikeMovementConfig.instance().enabled;
     }
 
     public void reset() {
@@ -95,7 +95,7 @@ public final class HumanLikeMovementController {
             return new MovementState(desiredForward, desiredStrafe, jump, sneak);
         }
 
-        HumanLikeMovementConfig config = HumanLikeMovementConfig.INSTANCE;
+        HumanLikeMovementConfig config = HumanLikeMovementConfig.instance();
         config.normalize();
 
         finalApproachProgress = MathHelper.clamp(finalApproachProgress, 0.0F, 1.0F);
@@ -292,7 +292,7 @@ public final class HumanLikeMovementController {
             return new RotationState(targetYaw, targetPitch);
         }
 
-        HumanLikeMovementConfig config = HumanLikeMovementConfig.INSTANCE;
+        HumanLikeMovementConfig config = HumanLikeMovementConfig.instance();
         config.normalize();
 
         float yawDelta = MathHelper.wrapDegrees(targetYaw - currentYaw);

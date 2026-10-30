@@ -61,7 +61,7 @@ public class MixinMovementInputFromOptions {
             movementInput.moveForward *= 0.3F;
         }
 
-        EntityPlayerSP player = mc.player;
+        EntityPlayerSP player = com.mythos.mythosScriptMod.mixin.SessionFieldAccess.getPlayer(mc);
         if (player != null && isMovementKeyDown(mc.gameSettings.keyBindSprint)
                 && movementInput.moveForward > 0.0F
                 && !movementInput.sneak) {

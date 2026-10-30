@@ -245,7 +245,10 @@ public final class ModernMcpSettingsTab implements ModernSettingsTab {
                 ModernUiRenderer.drawStatusDot(row.right() - 10, row.y + 8, entryColor(entry));
                 text(font, entry.tool, row.x + 8, row.y + 5, row.width - 24, ModernUiRenderer.TEXT);
                 String meta = time.format(new Date(entry.startedAt)) + " · "
-                        + (eventMode ? "#" + entry.sequence : entry.pending() ? tr("pending") : entry.durationMillis() + " ms");
+                        + (eventMode ? "#" + entry.sequence : entry.pending() ? tr("pending")
+                        : entry.durationMillis() + " ms"
+                        + (entry.cpuMillis() >= 0 ? " · cpu " + entry.cpuMillis() + " ms" : "")
+                        + (entry.allocatedBytes >= 0 ? " · +" + entry.allocatedBytes / 1024 + " KB" : ""));
                 text(font, meta, row.x + 8, row.y + 19, row.width - 16, ModernUiRenderer.SUBTLE_TEXT);
             }
             if (visible.isEmpty()) text(font, emptyMessage(), list.x + 7, list.y + 10,

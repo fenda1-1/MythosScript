@@ -46,6 +46,38 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class BlockReplacementHandler {
+
+    // 配置按会话（owner）各存一份：Nexus 的 bot 在各自线程上并发 tick，共用静态字段时
+    // 后台 bot 读到的是当前挂载会话的配置。下面这些原来都是静态字段，现统一经 cfg() 访问。
+    private static final java.util.concurrent.ConcurrentHashMap<String, OwnerConfig> CONFIGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static final class OwnerConfig {
+        public final List<BlockReplacementRule> rules = new CopyOnWriteArrayList<>();
+        private final List<String> categories = new CopyOnWriteArrayList<>();
+    }
+
+    /** 当前线程所属会话的配置；bot 线程取自己的，客户端线程取挂载中的会话。 */
+    public static OwnerConfig cfg() {
+        String owner = com.mythos.mythosScriptMod.system.ProfileManager.currentConfigOwner();
+        OwnerConfig config = CONFIGS.get(owner);
+        return config != null ? config : loadOwnerConfig(owner);
+    }
+
+    // 不能用 computeIfAbsent：读盘过程中会反复调用 cfg()，ConcurrentHashMap 不允许递归更新。
+    private static OwnerConfig loadOwnerConfig(String owner) {
+        synchronized (com.mythos.mythosScriptMod.system.ProfileManager.CONFIG_LOAD_LOCK) {
+            OwnerConfig existing = CONFIGS.get(owner);
+            if (existing != null) {
+                return existing;
+            }
+            OwnerConfig config = new OwnerConfig();
+            CONFIGS.put(owner, config);
+            com.mythos.mythosScriptMod.system.ProfileManager.withConfigOwner(owner, (Runnable) BlockReplacementHandler::loadConfig);
+            return config;
+        }
+    }
+
     public static final BlockReplacementHandler INSTANCE = new BlockReplacementHandler();
 
     private static final Minecraft mc = Minecraft.getMinecraft();
@@ -53,8 +85,6 @@ public class BlockReplacementHandler {
     private static final long CACHE_REFRESH_MS = 1000L;
     private static final double MAX_RENDER_DISTANCE_SQ = 96.0D * 96.0D;
 
-    public static final List<BlockReplacementRule> rules = new CopyOnWriteArrayList<>();
-    private static final List<String> categories = new CopyOnWriteArrayList<>();
     private static final String CATEGORY_DEFAULT = "默认";
 
     private enum SelectionMode {
@@ -93,12 +123,12 @@ public class BlockReplacementHandler {
     }
 
     private static Path getConfigFile() {
-        return ProfileManager.getCurrentProfileDir().resolve("block_replacement_rules.json");
+        return ProfileManager.currentConfigFile("block_replacement_rules.json");
     }
 
     public static synchronized void loadConfig() {
-        rules.clear();
-        categories.clear();
+        cfg().rules.clear();
+        cfg().categories.clear();
         Path configFile = getConfigFile();
         if (!Files.exists(configFile)) {
             ensureCategoriesSynced();
@@ -110,7 +140,7 @@ public class BlockReplacementHandler {
             if (root.has("categories") && root.get("categories").isJsonArray()) {
                 for (com.google.gson.JsonElement element : root.getAsJsonArray("categories")) {
                     if (element != null && element.isJsonPrimitive()) {
-                        categories.add(element.getAsString());
+                        cfg().categories.add(element.getAsString());
                     }
                 }
             }
@@ -128,13 +158,13 @@ public class BlockReplacementHandler {
                         }
                         rule.category = normalizeCategory(rule.category);
                         rule.dirty = true;
-                        rules.add(rule);
+                        cfg().rules.add(rule);
                     }
                 }
             }
         } catch (Exception e) {
             mythosScriptMod.LOGGER.error("无法加载区域方块替换规则", e);
-            rules.clear();
+            cfg().rules.clear();
         }
         ensureCategoriesSynced();
     }
@@ -146,8 +176,8 @@ public class BlockReplacementHandler {
             Files.createDirectories(configFile.getParent());
             try (BufferedWriter writer = Files.newBufferedWriter(configFile, StandardCharsets.UTF_8)) {
                 JsonObject root = new JsonObject();
-                root.add("categories", GSON.toJsonTree(new ArrayList<>(categories)));
-                root.add("rules", GSON.toJsonTree(rules));
+                root.add("categories", GSON.toJsonTree(new ArrayList<>(cfg().categories)));
+                root.add("rules", GSON.toJsonTree(cfg().rules));
                 GSON.toJson(root, writer);
             }
         } catch (Exception e) {
@@ -162,10 +192,10 @@ public class BlockReplacementHandler {
 
     private static void ensureCategoriesSynced() {
         LinkedHashSet<String> normalized = new LinkedHashSet<>();
-        for (String category : categories) {
+        for (String category : cfg().categories) {
             normalized.add(normalizeCategory(category));
         }
-        for (BlockReplacementRule rule : rules) {
+        for (BlockReplacementRule rule : cfg().rules) {
             if (rule == null) {
                 continue;
             }
@@ -175,12 +205,12 @@ public class BlockReplacementHandler {
         if (normalized.isEmpty()) {
             normalized.add(CATEGORY_DEFAULT);
         }
-        categories.clear();
-        categories.addAll(normalized);
+        cfg().categories.clear();
+        cfg().categories.addAll(normalized);
     }
 
     private static boolean containsCategoryIgnoreCase(String category) {
-        for (String existing : categories) {
+        for (String existing : cfg().categories) {
             if (normalizeCategory(existing).equalsIgnoreCase(normalizeCategory(category))) {
                 return true;
             }
@@ -189,9 +219,9 @@ public class BlockReplacementHandler {
     }
 
     private static boolean removeCategoryIgnoreCase(String category) {
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
-                categories.remove(i);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizeCategory(category))) {
+                cfg().categories.remove(i);
                 return true;
             }
         }
@@ -200,7 +230,7 @@ public class BlockReplacementHandler {
 
     public static synchronized List<String> getCategoriesSnapshot() {
         ensureCategoriesSynced();
-        return new ArrayList<>(categories);
+        return new ArrayList<>(cfg().categories);
     }
 
     public static synchronized void replaceCategoryOrder(List<String> orderedCategories) {
@@ -211,11 +241,11 @@ public class BlockReplacementHandler {
                 normalized.add(normalizeCategory(category));
             }
         }
-        for (String category : categories) {
+        for (String category : cfg().categories) {
             normalized.add(normalizeCategory(category));
         }
-        categories.clear();
-        categories.addAll(normalized);
+        cfg().categories.clear();
+        cfg().categories.addAll(normalized);
         saveConfig();
     }
 
@@ -225,7 +255,7 @@ public class BlockReplacementHandler {
         if (containsCategoryIgnoreCase(normalized)) {
             return false;
         }
-        categories.add(normalized);
+        cfg().categories.add(normalized);
         saveConfig();
         return true;
     }
@@ -243,15 +273,15 @@ public class BlockReplacementHandler {
         }
 
         boolean changed = false;
-        for (int i = 0; i < categories.size(); i++) {
-            if (normalizeCategory(categories.get(i)).equalsIgnoreCase(normalizedOld)) {
-                categories.set(i, normalizedNew);
+        for (int i = 0; i < cfg().categories.size(); i++) {
+            if (normalizeCategory(cfg().categories.get(i)).equalsIgnoreCase(normalizedOld)) {
+                cfg().categories.set(i, normalizedNew);
                 changed = true;
                 break;
             }
         }
 
-        for (BlockReplacementRule rule : rules) {
+        for (BlockReplacementRule rule : cfg().rules) {
             if (rule != null && normalizeCategory(rule.category).equalsIgnoreCase(normalizedOld)) {
                 rule.category = normalizedNew;
                 changed = true;
@@ -272,7 +302,7 @@ public class BlockReplacementHandler {
         ensureCategoriesSynced();
 
         boolean changed = removeCategoryIgnoreCase(normalized);
-        for (BlockReplacementRule rule : rules) {
+        for (BlockReplacementRule rule : cfg().rules) {
             if (rule != null && normalizeCategory(rule.category).equalsIgnoreCase(normalized)) {
                 rule.category = CATEGORY_DEFAULT;
                 changed = true;
@@ -299,8 +329,8 @@ public class BlockReplacementHandler {
         selectionReturnScreen = returnScreen;
         regionCorner1SelectedThisSession = false;
         regionCorner2SelectedThisSession = false;
-        if (mc.player != null) {
-            mc.player.sendMessage(new net.minecraft.util.text.TextComponentString(
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new net.minecraft.util.text.TextComponentString(
                     "§b[区域方块替换] §f可视化选择已开启：§a左键选择角1§f，§e右键选择角2§f。"));
         }
         mc.displayGuiScreen(null);
@@ -312,8 +342,8 @@ public class BlockReplacementHandler {
         selectionRule = null;
         selectionEntry = entry;
         selectionReturnScreen = returnScreen;
-        if (mc.player != null) {
-            mc.player.sendMessage(new net.minecraft.util.text.TextComponentString(
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new net.minecraft.util.text.TextComponentString(
                     "§b[区域方块替换] §f请左键或右键点击一个方块，作为§a被替换方块§f。"));
         }
         mc.displayGuiScreen(null);
@@ -325,8 +355,8 @@ public class BlockReplacementHandler {
         selectionRule = null;
         selectionEntry = entry;
         selectionReturnScreen = returnScreen;
-        if (mc.player != null) {
-            mc.player.sendMessage(new net.minecraft.util.text.TextComponentString(
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+            com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new net.minecraft.util.text.TextComponentString(
                     "§b[区域方块替换] §f请左键或右键点击一个方块，作为§a替换后显示方块§f。"));
         }
         mc.displayGuiScreen(null);
@@ -385,7 +415,7 @@ public class BlockReplacementHandler {
     }
 
     private void handleSelectionClick(BlockPos pos, boolean leftClick) {
-        if (mc.world == null || pos == null) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null || pos == null) {
             return;
         }
         switch (selectionMode) {
@@ -396,15 +426,15 @@ public class BlockReplacementHandler {
                 if (leftClick) {
                     selectionRule.setCorner1(pos.getX(), pos.getY(), pos.getZ());
                     regionCorner1SelectedThisSession = true;
-                    if (mc.player != null) {
-                        mc.player.sendMessage(new net.minecraft.util.text.TextComponentString(
+                    if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                        com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new net.minecraft.util.text.TextComponentString(
                                 "§a[区域方块替换] 已设置角1: " + pos.toString()));
                     }
                 } else {
                     selectionRule.setCorner2(pos.getX(), pos.getY(), pos.getZ());
                     regionCorner2SelectedThisSession = true;
-                    if (mc.player != null) {
-                        mc.player.sendMessage(new net.minecraft.util.text.TextComponentString(
+                    if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                        com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new net.minecraft.util.text.TextComponentString(
                                 "§e[区域方块替换] 已设置角2: " + pos.toString()));
                     }
                 }
@@ -415,7 +445,7 @@ public class BlockReplacementHandler {
                 if (selectionEntry == null) {
                     return;
                 }
-                IBlockState state = mc.world.getBlockState(pos);
+                IBlockState state = com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().getBlockState(pos);
                 ResourceLocation name = Block.REGISTRY.getNameForObject(state.getBlock());
                 String blockId = name == null ? "minecraft:air" : name.toString();
                 if (selectionMode == SelectionMode.SOURCE_BLOCK) {
@@ -423,8 +453,8 @@ public class BlockReplacementHandler {
                 } else {
                     selectionEntry.targetBlockId = blockId;
                 }
-                if (mc.player != null) {
-                    mc.player.sendMessage(new net.minecraft.util.text.TextComponentString(
+                if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() != null) {
+                    com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().sendMessage(new net.minecraft.util.text.TextComponentString(
                             "§b[区域方块替换] 已选择方块: §a" + blockId));
                 }
                 finishSelectionIfPossible();
@@ -436,9 +466,9 @@ public class BlockReplacementHandler {
 
     private synchronized RegionCache getOrBuildCache(BlockReplacementRule rule) {
         RegionCache cache = regionCacheMap.get(rule);
-        int currentDimension = mc.world == null ? 0 : mc.world.provider.getDimension();
+        int currentDimension = com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null ? 0 : com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().provider.getDimension();
         long now = System.currentTimeMillis();
-        if (rule == null || !rule.hasValidRegion() || mc.world == null) {
+        if (rule == null || !rule.hasValidRegion() || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null) {
             return new RegionCache();
         }
         if (cache == null || rule.dirty || cache.dimension != currentDimension
@@ -463,7 +493,7 @@ public class BlockReplacementHandler {
             for (int y = rule.getMinY(); y <= rule.getMaxY(); y++) {
                 for (int z = rule.getMinZ(); z <= rule.getMaxZ(); z++) {
                     mutable.setPos(x, y, z);
-                    IBlockState state = mc.world.getBlockState(mutable);
+                    IBlockState state = com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().getBlockState(mutable);
                     Block block = state.getBlock();
                     ResourceLocation name = Block.REGISTRY.getNameForObject(block);
                     String blockId = name == null ? "minecraft:air" : name.toString();
@@ -490,7 +520,7 @@ public class BlockReplacementHandler {
         }
         PerformanceMonitor.PerformanceTimer timer = PerformanceMonitor.startTimer("block_replacement");
         try {
-        if (mc.player == null || mc.world == null) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer() == null || com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null) {
             return;
         }
 
@@ -520,7 +550,7 @@ public class BlockReplacementHandler {
         GlStateManager.disableLighting();
         mc.getTextureManager().bindTexture(TextureMap.LOCATION_BLOCKS_TEXTURE);
 
-        for (BlockReplacementRule rule : rules) {
+        for (BlockReplacementRule rule : cfg().rules) {
             if (rule == null || !rule.enabled || !rule.hasValidRegion() || rule.replacements == null
                     || rule.replacements.isEmpty()) {
                 continue;
@@ -549,12 +579,12 @@ public class BlockReplacementHandler {
                 }
 
                 for (BlockPos pos : positions) {
-                    if (mc.player.getDistanceSqToCenter(pos) > MAX_RENDER_DISTANCE_SQ) {
+                    if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer().getDistanceSqToCenter(pos) > MAX_RENDER_DISTANCE_SQ) {
                         continue;
                     }
-                    dispatcher.renderBlock(targetState, pos, mc.world, buffer);
+                    dispatcher.renderBlock(targetState, pos, com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld(), buffer);
                     if (rule.highlightReplacedBlocks) {
-                        AxisAlignedBB box = mc.world.getBlockState(pos).getSelectedBoundingBox(mc.world, pos)
+                        AxisAlignedBB box = com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().getBlockState(pos).getSelectedBoundingBox(com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld(), pos)
                                 .offset(-viewerX, -viewerY, -viewerZ)
                                 .grow(0.002D);
                         highlightBoxes.add(box);
@@ -591,12 +621,12 @@ public class BlockReplacementHandler {
 
     @SubscribeEvent
     public void onGetCollisionBoxes(GetCollisionBoxesEvent event) {
-        if (mc.world == null || event.getWorld() == null
-                || event.getWorld().provider.getDimension() != mc.world.provider.getDimension()) {
+        if (com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld() == null || event.getWorld() == null
+                || event.getWorld().provider.getDimension() != com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld().provider.getDimension()) {
             return;
         }
 
-        EntityPlayer entity = mc.player;
+        EntityPlayer entity = com.mythos.mythosScriptMod.mcp.NexusSessions.boundPlayer();
         if (entity == null) {
             return;
         }
@@ -610,7 +640,7 @@ public class BlockReplacementHandler {
             return;
         }
 
-        for (BlockReplacementRule rule : rules) {
+        for (BlockReplacementRule rule : cfg().rules) {
             if (rule == null || !rule.enabled || !rule.useSolidCollision || !rule.hasValidRegion()
                     || rule.replacements == null || rule.replacements.isEmpty()) {
                 continue;
@@ -633,7 +663,7 @@ public class BlockReplacementHandler {
                 }
 
                 for (BlockPos pos : positions) {
-                    targetState.addCollisionBoxToList(mc.world, pos, queryBox, event.getCollisionBoxesList(),
+                    targetState.addCollisionBoxToList(com.mythos.mythosScriptMod.mcp.NexusSessions.boundWorld(), pos, queryBox, event.getCollisionBoxesList(),
                             event.getEntity(), false);
                 }
             }

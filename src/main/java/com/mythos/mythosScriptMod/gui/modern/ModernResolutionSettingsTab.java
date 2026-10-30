@@ -146,7 +146,8 @@ public final class ModernResolutionSettingsTab implements ModernSettingsTab {
         displayWidth = Math.max(0, minecraft.displayWidth);
         displayHeight = Math.max(0, minecraft.displayHeight);
         try {
-            guiScale = Math.max(0, new ScaledResolution(minecraft).getScaleFactor());
+            guiScale = Math.max(0, com.mythos.mythosScriptMod.gui.GuiScaleLock
+                    .userScaledResolution(minecraft).getScaleFactor());
         } catch (Throwable ignored) {
             guiScale = 0;
         }

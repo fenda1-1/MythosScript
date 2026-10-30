@@ -1,4 +1,6 @@
 # mythos_script i18n module: keybind_actions
+keybind.action.open_menu.name=快捷菜单
+keybind.action.open_menu.desc=开关 MythosScript 快捷菜单。
 keybind.action.open_command_palette.name=打开命令面板
 keybind.action.open_command_palette.desc=在主菜单中打开可搜索的命令面板。
 keybind.action.close_active_tab.name=关闭当前标签页

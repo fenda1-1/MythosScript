@@ -82,6 +82,7 @@ public final class ModernMemorySettingsTab implements ModernSettingsTab {
     private ModernMainLayout.Rect clearBounds;
     private ModernMainLayout.Rect gcBounds;
     private ModernMainLayout.Rect reloadBounds;
+    private ModernMainLayout.Rect heapDumpBounds;
     private ModernMainLayout.Rect snapshotListBounds;
     private ModernMainLayout.Rect snapshotClipBounds;
     private ModernMainLayout.Rect detailBounds;
@@ -110,6 +111,7 @@ public final class ModernMemorySettingsTab implements ModernSettingsTab {
 
     @Override
     public void ensureInitialized(FontRenderer fontRenderer) {
+        MemoryManager.loadSnapshotsFromDisk();
         if (snapshotNameField != null) {
             return;
         }
@@ -212,6 +214,11 @@ public final class ModernMemorySettingsTab implements ModernSettingsTab {
         if (contains(reloadBounds, mouseX, mouseY)) {
             destructiveConfirmation.clear();
             reloadRenderers();
+            return true;
+        }
+        if (contains(heapDumpBounds, mouseX, mouseY)) {
+            destructiveConfirmation.clear();
+            exportHeapDump();
             return true;
         }
         if (contains(comparisonBackBounds, mouseX, mouseY)) {
@@ -433,24 +440,27 @@ public final class ModernMemorySettingsTab implements ModernSettingsTab {
                     !snapshots.isEmpty(), mouseX, mouseY);
 
             int maintenanceY = controlBounds.y + 59;
-            int maintenanceWidth = Math.max(1, (width - actionGap) / 2);
+            int maintenanceWidth = Math.max(1, (width - actionGap * 2) / 3);
             gcBounds = new ModernMainLayout.Rect(x, maintenanceY, maintenanceWidth, 20);
-            reloadBounds = new ModernMainLayout.Rect(gcBounds.right() + actionGap, maintenanceY,
-                    Math.max(1, x + width - gcBounds.right() - actionGap), 20);
+            reloadBounds = new ModernMainLayout.Rect(gcBounds.right() + actionGap, maintenanceY, maintenanceWidth, 20);
+            heapDumpBounds = new ModernMainLayout.Rect(reloadBounds.right() + actionGap, maintenanceY,
+                    Math.max(1, x + width - reloadBounds.right() - actionGap), 20);
             drawActionButton(fontRenderer, gcBounds, "gui.modern.mem.u014", false, true, mouseX, mouseY);
             drawActionButton(fontRenderer, reloadBounds, "gui.modern.mem.u015", false, true, mouseX, mouseY);
+            drawActionButton(fontRenderer, heapDumpBounds, "gui.modern.mem.u039", false, true, mouseX, mouseY);
             return;
         }
 
         int actionY = controlBounds.y + 34;
         int actionGap = 5;
-        int actionWidth = Math.max(1, (width - actionGap * 4) / 5);
+        int actionWidth = Math.max(1, (width - actionGap * 5) / 6);
         compareBounds = new ModernMainLayout.Rect(x, actionY, actionWidth, 20);
         deleteBounds = new ModernMainLayout.Rect(compareBounds.right() + actionGap, actionY, actionWidth, 20);
         clearBounds = new ModernMainLayout.Rect(deleteBounds.right() + actionGap, actionY, actionWidth, 20);
         gcBounds = new ModernMainLayout.Rect(clearBounds.right() + actionGap, actionY, actionWidth, 20);
-        reloadBounds = new ModernMainLayout.Rect(gcBounds.right() + actionGap, actionY,
-                Math.max(1, x + width - gcBounds.right() - actionGap), 20);
+        reloadBounds = new ModernMainLayout.Rect(gcBounds.right() + actionGap, actionY, actionWidth, 20);
+        heapDumpBounds = new ModernMainLayout.Rect(reloadBounds.right() + actionGap, actionY,
+                Math.max(1, x + width - reloadBounds.right() - actionGap), 20);
         drawActionButton(fontRenderer, compareBounds, "gui.modern.mem.u010", false, selectedSnapshotNames.size() == 2, mouseX,
                 mouseY);
         drawActionButton(fontRenderer, deleteBounds,
@@ -461,6 +471,7 @@ public final class ModernMemorySettingsTab implements ModernSettingsTab {
                 !snapshots.isEmpty(), mouseX, mouseY);
         drawActionButton(fontRenderer, gcBounds, "gui.modern.mem.u014", false, true, mouseX, mouseY);
         drawActionButton(fontRenderer, reloadBounds, "gui.modern.mem.u015", false, true, mouseX, mouseY);
+        drawActionButton(fontRenderer, heapDumpBounds, "gui.modern.mem.u039", false, true, mouseX, mouseY);
     }
 
     private void drawWorkbench(FontRenderer fontRenderer, ModernMainLayout.Rect bodyBounds, int mouseX, int mouseY) {
@@ -602,6 +613,22 @@ public final class ModernMemorySettingsTab implements ModernSettingsTab {
             ModernUiRenderer.drawText(fontRenderer, counts, x, currentY + 28, ModernUiRenderer.MUTED_TEXT,
                     Math.max(24, width));
             currentY += 46;
+            if (selected.size() == 1 && snapshot.modMemoryUsage != null && !snapshot.modMemoryUsage.isEmpty()) {
+                List<Map.Entry<String, Long>> mods = new ArrayList<>(snapshot.modMemoryUsage.entrySet());
+                mods.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
+                for (Map.Entry<String, Long> mod : mods) {
+                    if (currentY + 14 > detailBounds.bottom()) {
+                        break;
+                    }
+                    int objects = snapshot.modObjectCounts == null ? 0
+                            : snapshot.modObjectCounts.getOrDefault(mod.getKey(), 0);
+                    String line = tr("gui.modern.mem.fmt.mod_line", formatBytes(mod.getValue()),
+                            String.valueOf(objects), mod.getKey());
+                    ModernUiRenderer.drawText(fontRenderer, line, x + 6, currentY, ModernUiRenderer.SUBTLE_TEXT,
+                            Math.max(24, width - 6));
+                    currentY += 13;
+                }
+            }
         }
     }
 
@@ -791,6 +818,16 @@ public final class ModernMemorySettingsTab implements ModernSettingsTab {
         }
     }
 
+    private void exportHeapDump() {
+        String path = MemoryManager.dumpHeap();
+        if (path == null) {
+            showStatus("gui.modern.mem.u041");
+            return;
+        }
+        GuiScreen.setClipboardString(path);
+        showStatus(tr("gui.modern.mem.fmt.heap_dump", path));
+    }
+
     private void copyComparisonReport() {
         if (comparisonResult == null) {
             return;
@@ -812,6 +849,8 @@ public final class ModernMemorySettingsTab implements ModernSettingsTab {
                 result.before.chunkCounts, result.after.chunkCounts);
         addComparisonSection(lines, "gui.modern.mem.u036", result.before.renderChunkMemoryUsage,
                 result.after.renderChunkMemoryUsage, result.before.renderChunkCounts, result.after.renderChunkCounts);
+        addComparisonSection(lines, "gui.modern.mem.u040", result.before.modMemoryUsage,
+                result.after.modMemoryUsage, result.before.modObjectCounts, result.after.modObjectCounts);
         return lines;
     }
 
